@@ -1,0 +1,6 @@
+# Supabase CLI 配置（一键部署与手动 supabase functions deploy 都会读这个文件）
+project_id = "zhangqi"
+
+# 识别函数同时负责 AI 识别、账号、订阅与推送：认证由函数自己做，必须关闭平台的 JWT 校验
+[functions.recognize]
+verify_jwt = false

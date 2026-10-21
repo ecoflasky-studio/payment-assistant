@@ -55,6 +55,8 @@ export $(grep -v '^#' .env | xargs) && npm run server   # http://localhost:8787
 4. 仓库 **Settings → Pages → Source 选 GitHub Actions**。
 5. **Actions → 一键部署 → Run workflow**。约 3 分钟，日志最后会显示网站网址和 Mercado Pago 通知网址。
 
+构建产物（`worker/dist/`、`supabase/functions/recognize/index.ts`、`dist/`）都不进版本库，由 `npm run build` 自动生成，全新克隆也能直接构建。
+
 脚本 `scripts/deploy.mjs` 会自动：运行建表脚本（可重复运行、不删数据）→ 设置登录（邮箱 + 密码注册即登录、网站地址）→ 部署识别函数并关闭 Verify JWT → 写入函数密钥 → 开启每天 09:00 到期推送 → 生成 `zq-config.json` 并发布 GitHub Pages。以后改代码推送到 main 会自动重新部署；补填密钥后再点一次 Run workflow 即可。
 
 Mercado Pago 通知（可选，建议）：开发者后台 → Webhooks，网址填日志里显示的 `…/functions/v1/recognize/billing/webhook`，事件选「Planos e assinaturas」。

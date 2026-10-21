@@ -1,24 +1,86 @@
 {
   "format": "zhangqi-zhushou-backup",
   "schemaVersion": 1,
-  "exportedAt": "2026-10-20T18:24:45.988Z",
+  "exportedAt": "2026-10-21T21:14:59.091Z",
   "bills": [
     {
-      "id": "0cb8c319-41a5-4994-9f3f-71ed134ec818",
-      "merchantId": "c5336623-c17b-4abb-a005-c2587c33e69d",
+      "id": "0a489b21-1cd6-4043-9e29-2902de36cea9",
+      "merchantId": "7948e597-1464-47cf-870e-367540b592e8",
       "merchantNameSnapshot": "Loja Exemplo",
-      "orderNumber": "0258",
-      "billDate": "2026-09-12",
-      "dueDate": "2026-10-12",
+      "orderNumber": "0042",
+      "billDate": "2026-09-10",
+      "dueDate": "2026-10-10",
       "dueBeforeBillConfirmed": false,
-      "accountId": "321a38d2-5afb-4eb7-bfa8-2d32df14d614",
+      "accountId": "b279a005-6d45-4e8d-b0a0-70ef92c3f4fe",
       "accountLabelSnapshot": "PIX Itaú 主账户",
       "reminderDays": 3,
       "paidAt": null,
       "notes": "",
       "items": [
         {
-          "id": "5cc8c954-f25e-4f9d-aacd-b42f4e5ca207",
+          "id": "a0c72e1c-fd82-4ebb-99f2-a887f5bb94cc",
+          "quantity": 3,
+          "description": "FN-A78",
+          "unitPriceCents": 10,
+          "subtotalCents": 30,
+          "recognizedSubtotalRaw": null
+        },
+        {
+          "id": "d5ce6c90-b09d-484c-8c44-3bd79df03481",
+          "quantity": 1,
+          "description": "X-1",
+          "unitPriceCents": 20,
+          "subtotalCents": 20,
+          "recognizedSubtotalRaw": null
+        },
+        {
+          "id": "c69497a9-edc2-4e4c-a3d0-1ffc63d77914",
+          "quantity": 7,
+          "description": "CA31 3",
+          "unitPriceCents": 1999,
+          "subtotalCents": 13993,
+          "recognizedSubtotalRaw": null
+        },
+        {
+          "id": "8166aa42-d784-4478-b2a3-2f27d30db8c2",
+          "quantity": 0.5,
+          "description": "meio",
+          "unitPriceCents": 333,
+          "subtotalCents": 167,
+          "recognizedSubtotalRaw": null
+        }
+      ],
+      "amountMode": "items",
+      "kind": "supplier",
+      "category": null,
+      "paymentCode": "",
+      "recurrence": null,
+      "estimated": false,
+      "installment": null,
+      "totalCents": 14210,
+      "ocrReview": null,
+      "createdAt": "2026-10-21T21:14:23.166Z",
+      "updatedAt": "2026-10-21T21:14:58.378Z",
+      "deletedAt": null,
+      "schemaVersion": 1,
+      "payments": []
+    },
+    {
+      "id": "47298d1e-16a7-4f8b-9320-50d5e9c1dd0b",
+      "merchantId": "7948e597-1464-47cf-870e-367540b592e8",
+      "merchantNameSnapshot": "Loja Exemplo",
+      "orderNumber": "0258",
+      "billDate": "2026-09-12",
+      "dueDate": "2026-10-12",
+      "dueBeforeBillConfirmed": false,
+      "accountId": "b279a005-6d45-4e8d-b0a0-70ef92c3f4fe",
+      "accountLabelSnapshot": "PIX Itaú 主账户",
+      "reminderDays": 3,
+      "paidAt": null,
+      "notes": "",
+      "items": [
+        {
+          "id": "0265f6ca-66e5-4c92-ac6f-7fdc561e130b",
           "quantity": 30,
           "description": "FN-A78",
           "unitPriceCents": 800,
@@ -26,7 +88,7 @@
           "recognizedSubtotalRaw": "240"
         },
         {
-          "id": "8f999b94-724e-4688-bd83-6d32da85ad5b",
+          "id": "2e0dc8cc-a871-44ee-9f56-a3333a242016",
           "quantity": 5,
           "description": "FN-A76",
           "unitPriceCents": 800,
@@ -34,7 +96,7 @@
           "recognizedSubtotalRaw": "40"
         },
         {
-          "id": "3c498e4f-276c-4720-ba2f-7047bc8a98ee",
+          "id": "034db7a2-3a93-4427-97ed-14ee9827a5a7",
           "quantity": 5,
           "description": "CA31-3",
           "unitPriceCents": 1500,
@@ -42,7 +104,7 @@
           "recognizedSubtotalRaw": "75"
         },
         {
-          "id": "ef165200-6e64-409b-a3bd-cfd325d63dee",
+          "id": "94f93ab7-9f9f-48e6-9fc7-9c5521e915c5",
           "quantity": 1,
           "description": "CA31-7",
           "unitPriceCents": 1300,
@@ -186,10 +248,10 @@
         ],
         "acknowledged": [
           "billDate:conf:12/09/26",
-          "row:5cc8c954-f25e-4f9d-aacd-b42f4e5ca207:price:8",
-          "row:8f999b94-724e-4688-bd83-6d32da85ad5b:suggest:FN-A76",
-          "row:ef165200-6e64-409b-a3bd-cfd325d63dee:conf:1|CA31-7|13",
-          "row:ef165200-6e64-409b-a3bd-cfd325d63dee:suggest:CA31-7"
+          "row:0265f6ca-66e5-4c92-ac6f-7fdc561e130b:price:8",
+          "row:2e0dc8cc-a871-44ee-9f56-a3333a242016:suggest:FN-A76",
+          "row:94f93ab7-9f9f-48e6-9fc7-9c5521e915c5:conf:1|CA31-7|13",
+          "row:94f93ab7-9f9f-48e6-9fc7-9c5521e915c5:suggest:CA31-7"
         ],
         "edits": [
           {
@@ -198,75 +260,13 @@
             "to": "12/09/2026"
           }
         ],
-        "confirmedAt": "2026-10-20T18:24:44.446Z",
+        "confirmedAt": "2026-10-21T21:14:57.102Z",
         "confirmedBy": "本机用户",
-        "imageId": "335b84c4-6181-42f9-8039-39c732f0f819",
-        "originalImageId": "3ef383c3-58e1-4816-a9c1-f934a3ed5d71"
+        "imageId": "7194f3e2-4e8d-4e68-ae25-79804c6c19c3",
+        "originalImageId": "6e2d751b-c42f-492f-aa6f-25baea08a5e7"
       },
-      "createdAt": "2026-10-20T18:24:44.446Z",
-      "updatedAt": "2026-10-20T18:24:44.446Z",
-      "deletedAt": null,
-      "schemaVersion": 1,
-      "payments": []
-    },
-    {
-      "id": "352b5298-ed58-4008-8ce3-761d76a31892",
-      "merchantId": "c5336623-c17b-4abb-a005-c2587c33e69d",
-      "merchantNameSnapshot": "Loja Exemplo",
-      "orderNumber": "0042",
-      "billDate": "2026-09-10",
-      "dueDate": "2026-10-10",
-      "dueBeforeBillConfirmed": false,
-      "accountId": "321a38d2-5afb-4eb7-bfa8-2d32df14d614",
-      "accountLabelSnapshot": "PIX Itaú 主账户",
-      "reminderDays": 3,
-      "paidAt": null,
-      "notes": "",
-      "items": [
-        {
-          "id": "71451bdf-fd0f-461a-a1a0-18aff9819d85",
-          "quantity": 3,
-          "description": "FN-A78",
-          "unitPriceCents": 10,
-          "subtotalCents": 30,
-          "recognizedSubtotalRaw": null
-        },
-        {
-          "id": "eff34949-80da-4d92-bb28-871caf2afe73",
-          "quantity": 1,
-          "description": "X-1",
-          "unitPriceCents": 20,
-          "subtotalCents": 20,
-          "recognizedSubtotalRaw": null
-        },
-        {
-          "id": "07d049db-156b-458e-9b8d-c1568fc9dbd2",
-          "quantity": 7,
-          "description": "CA31 3",
-          "unitPriceCents": 1999,
-          "subtotalCents": 13993,
-          "recognizedSubtotalRaw": null
-        },
-        {
-          "id": "3da47570-99a0-435c-8911-9a1ae1885f91",
-          "quantity": 0.5,
-          "description": "meio",
-          "unitPriceCents": 333,
-          "subtotalCents": 167,
-          "recognizedSubtotalRaw": null
-        }
-      ],
-      "amountMode": "items",
-      "kind": "supplier",
-      "category": null,
-      "paymentCode": "",
-      "recurrence": null,
-      "estimated": false,
-      "installment": null,
-      "totalCents": 14210,
-      "ocrReview": null,
-      "createdAt": "2026-10-20T18:24:11.011Z",
-      "updatedAt": "2026-10-20T18:24:45.475Z",
+      "createdAt": "2026-10-21T21:14:57.102Z",
+      "updatedAt": "2026-10-21T21:14:57.102Z",
       "deletedAt": null,
       "schemaVersion": 1,
       "payments": []
@@ -274,12 +274,12 @@
   ],
   "merchants": [
     {
-      "id": "c5336623-c17b-4abb-a005-c2587c33e69d",
+      "id": "7948e597-1464-47cf-870e-367540b592e8",
       "name": "Loja Exemplo",
       "aliases": [
         "LOJA EX"
       ],
-      "defaultAccountId": "321a38d2-5afb-4eb7-bfa8-2d32df14d614",
+      "defaultAccountId": "b279a005-6d45-4e8d-b0a0-70ef92c3f4fe",
       "active": true,
       "type": "supplier",
       "term": null,
@@ -287,21 +287,21 @@
       "recurring": false,
       "repeat": null,
       "color": 0,
-      "createdAt": "2026-10-20T18:24:09.261Z",
-      "updatedAt": "2026-10-20T18:24:09.261Z"
+      "createdAt": "2026-10-21T21:14:21.263Z",
+      "updatedAt": "2026-10-21T21:14:21.263Z"
     }
   ],
   "accounts": [
     {
-      "id": "321a38d2-5afb-4eb7-bfa8-2d32df14d614",
+      "id": "b279a005-6d45-4e8d-b0a0-70ef92c3f4fe",
       "label": "PIX Itaú 主账户",
       "type": "pix",
       "owner": "",
       "bank": "Itaú",
       "optionalPixHint": "12.345.678/0001-90",
       "active": true,
-      "createdAt": "2026-10-20T18:24:08.866Z",
-      "updatedAt": "2026-10-20T18:24:08.866Z"
+      "createdAt": "2026-10-21T21:14:20.849Z",
+      "updatedAt": "2026-10-21T21:14:20.849Z"
     }
   ],
   "settings": {
@@ -315,6 +315,6 @@
     "recognizeEndpoint": "/api/recognize",
     "lastProvider": "server",
     "monthlyBudgetCents": null,
-    "updatedAt": "2026-10-20T18:24:44.507Z"
+    "updatedAt": "2026-10-21T21:14:57.180Z"
   }
 }
