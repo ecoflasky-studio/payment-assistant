@@ -13,6 +13,12 @@ import { GroupedBills, GroupModeSeg, MerchantAvatar, useGroupMode } from '../ui/
 import { colorSlot } from '../lib/colors';
 import type { Bill } from '../lib/types';
 import type { Draft } from '../db/repo';
+import { useCountUp } from '../ui/CountUp';
+
+function CountUpBRL({ cents }: { cents: number }) {
+  const v = useCountUp(cents);
+  return <span aria-label={formatBRL(cents, false)}>{formatBRL(v, false)}</span>;
+}
 
 export function PickImageButton({ capture, children, className }: { capture?: boolean; children: React.ReactNode; className?: string }) {
   const { go, gate, requireFeature } = useStore();
@@ -195,7 +201,7 @@ export function Dashboard() {
               </span>
               <span className="ov-total num">
                 <small>R$</small>
-                {formatBRL(toPayCents, false)}
+                <CountUpBRL cents={toPayCents} />
               </span>
             </div>
             <span className="xs muted num" style={{ textAlign: 'right' }}>
@@ -229,7 +235,7 @@ export function Dashboard() {
           )}
         </section>
 
-        <section className="quick3" aria-label="新增账单">
+        <section className="quick3" data-tour="capture" aria-label="新增账单">
           <PickImageButton capture className="btn qa qa-cam">
             <ICamera />
             拍照识别

@@ -155,6 +155,7 @@ const spToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo'
 try {
   const ctx = await browser.newContext({ viewport: { width: 360, height: 780 }, timezoneId: 'America/Sao_Paulo', locale: 'zh-CN', acceptDownloads: true, permissions: ['notifications', 'camera', 'clipboard-read', 'clipboard-write'], hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
   await ctx.addInitScript(() => {
+    try { localStorage.setItem('zq.tour.done', '1'); } catch {}
     window.__notes = [];
     const orig = ServiceWorkerRegistration.prototype.showNotification;
     ServiceWorkerRegistration.prototype.showNotification = function (t, o) { window.__notes.push(t); return orig.call(this, t, o); };
@@ -832,8 +833,11 @@ try {
   // ===== 账号：邮箱验证码登录 → 账号同步 → AI 识别计额度 → 订阅专业版 =====
   await page.goto(BASE + '#/account');
   await page.fill('#acc-email', 'ana@example.com');
+  // 第一次来默认「注册」
+  assert.equal(await page.getByRole('tab', { name: '注册' }).getAttribute('aria-selected'), 'true');
+  await page.getByText('这台设备会被记住，至少半年不用再登录').waitFor();
   // 邮箱验证码方式（需要 SMTP）
-  await page.getByRole('button', { name: '邮箱验证码' }).click();
+  await page.getByRole('button', { name: '用邮箱验证码登录' }).click();
   await page.getByRole('button', { name: '发送验证码' }).click();
   await page.getByText('验证码已发送到邮箱').waitFor();
   assert.deepEqual(otpSent, ['ana@example.com']);
@@ -841,12 +845,12 @@ try {
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.getByText('验证码不正确或已过期').waitFor();
   // 邮箱 + 密码（不发邮件）：未注册时登录报错 → 注册即登录
-  await page.getByRole('button', { name: '邮箱 + 密码' }).click();
-  await page.getByRole('button', { name: '已经有账号？登录' }).click();
+  await page.getByRole('button', { name: '用密码登录' }).click();
+  await page.getByRole('tab', { name: '登录' }).click();
   await page.fill('#acc-pw', 'segredo123');
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.getByText('邮箱或密码不正确').waitFor();
-  await page.getByRole('button', { name: '还没有账号？注册' }).click();
+  await page.getByRole('tab', { name: '注册' }).click();
   await page.getByRole('button', { name: '注册，免费试用 30 天' }).click();
   await page.getByText('注册成功，已登录 ana@example.com').waitFor({ timeout: 15000 });
   await page.getByText('0 / 5 次').waitFor({ timeout: 15000 });
@@ -919,17 +923,102 @@ try {
   p3.on('pageerror', (e) => errors.push('设备3: ' + e.message));
   await p3.goto(BASE);
   await p3.getByText('新账号免费试用 30 天，含 5 次 AI 识别').waitFor({ timeout: 15000 });
+  await p3.waitForTimeout(1500);
   await p3.screenshot({ path: 'shot-welcome-390.png', fullPage: true });
   await p3.fill('#acc-email', 'cris@example.com');
   await p3.fill('#acc-pw', 'segredo456');
   await p3.getByRole('button', { name: '注册，免费试用 30 天' }).click();
   await p3.getByText(/免费试用还剩 30 天/).waitFor({ timeout: 15000 });
+  // 新手导览：第一次登录后在首页自动播放
+  const tour = p3.locator('.tour');
+  await tour.getByText('欢迎使用账期助手').waitFor({ timeout: 10000 });
+  await tour.getByRole('button', { name: '开始' }).click();
+  await tour.getByRole('heading', { name: '新增账单' }).waitFor();
+  assert.ok(await p3.locator('.tour-hole').isVisible(), '应高亮目标按钮');
+  await p3.waitForTimeout(1500);
+  await p3.screenshot({ path: 'shot-tour-390.png' });
+  for (const t of ['拍照识别', '账单', '每月流水', '设置']) {
+    await tour.getByRole('button', { name: '下一步' }).click();
+    await tour.getByRole('heading', { name: t, exact: true }).waitFor();
+  }
+  await tour.getByRole('button', { name: '下一步' }).click();
+  await tour.getByText('准备好了').waitFor();
+  await tour.getByRole('button', { name: '开始使用' }).click();
+  await tour.waitFor({ state: 'detached' });
+  assert.equal(await p3.evaluate(() => localStorage.getItem('zq.tour.done')), '1');
+  // 记住设备：刷新后仍是登录状态，导览不再出现
+  await p3.reload();
+  await p3.getByText(/免费试用还剩 30 天/).waitFor({ timeout: 15000 });
+  await p3.waitForTimeout(1000);
+  assert.equal(await tour.count(), 0, '看过的导览不应再自动出现');
+  // 使用教程
+  await p3.goto(BASE + '#/settings');
+  await p3.getByRole('button', { name: /使用教程/ }).click();
+  await p3.getByRole('heading', { name: '使用教程', level: 2 }).waitFor();
+  await p3.locator('.helpsec summary', { hasText: '拍照识别技巧' }).click();
+  await p3.getByText(/单据铺平、四边都拍进去/).waitFor();
+  await p3.locator('.helpsec summary', { hasText: '安装到主屏幕' }).click();
+  await p3.getByText(/点底部「分享」→「添加到主屏幕」/).waitFor();
+  await p3.screenshot({ path: 'shot-help-390.png', fullPage: true });
+  await p3.getByRole('button', { name: '重新播放导览' }).click();
+  await tour.getByText('欢迎使用账期助手').waitFor({ timeout: 5000 });
+  await p3.keyboard.press('Escape');
+  await tour.waitFor({ state: 'detached' });
+  // 面容 / 指纹解锁：用 Chrome 虚拟验证器模拟手机的平台验证器
+  const cdp = await ctx3.newCDPSession(p3);
+  await cdp.send('WebAuthn.enable');
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  await p3.goto(BASE + '#/account');
+  await p3.getByText('已记住这台设备').waitFor({ timeout: 15000 });
+  const sw = p3.getByRole('switch', { name: /打开应用时用.*解锁/ });
+  await sw.waitFor();
+  await sw.click();
+  await p3.getByText(/已开启：以后打开应用用.*解锁/).waitFor();
+  const creds = await cdp.send('WebAuthn.getCredentials', { authenticatorId });
+  assert.equal(creds.credentials.length, 1, '应在本机验证器里创建一个凭证');
+  // 本人验证不通过 → 停在锁屏
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
+  await p3.getByRole('button', { name: '立即锁定' }).click();
+  const lockDlg = p3.getByRole('dialog', { name: '应用已锁定' });
+  await lockDlg.waitFor();
+  await lockDlg.getByRole('alert').waitFor({ timeout: 10000 });
+  await p3.waitForTimeout(1500);
+  await p3.screenshot({ path: 'shot-lock-390.png' });
+  // 验证通过 → 解锁
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: true });
+  await lockDlg.getByRole('button', { name: /^用.*解锁$/ }).first().click();
+  await lockDlg.waitFor({ state: 'detached', timeout: 10000 });
+  await p3.getByText('已记住这台设备').waitFor();
+  // 重新打开应用：直接要求刷脸 / 指纹（自动弹出），不需要重新登录
+  await p3.reload();
+  await p3.getByText('已记住这台设备').waitFor({ timeout: 15000 });
+  assert.equal(await p3.getByRole('dialog', { name: '应用已锁定' }).count(), 0);
+  // 锁屏上可改用密码
+  await p3.getByRole('button', { name: '立即锁定' }).click();
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
+  await lockDlg.getByRole('button', { name: /用密码解锁/ }).click();
+  await p3.fill('#lock-pw', 'segredo456');
+  await p3.keyboard.press('Enter');
+  await lockDlg.waitFor({ state: 'detached', timeout: 10000 });
   await p3.goto(BASE + '#/settings');
   await p3.getByText('AI 识别与隐私').waitFor();
   assert.equal(await p3.locator('#s-fn').count(), 0, '普通用户不应看到识别函数名');
   assert.equal(await p3.getByText('开启 AI 识别：Supabase + Gemini').count(), 0);
+  // 退出登录 → 回到登录页，记住上次的邮箱、默认「登录」
+  await p3.goto(BASE + '#/account');
+  await p3.getByRole('button', { name: '退出登录' }).click();
+  await p3.getByRole('dialog').getByRole('button', { name: '退出' }).click();
+  await p3.getByText('新账号免费试用 30 天，含 5 次 AI 识别').waitFor({ timeout: 10000 });
+  assert.equal(await p3.inputValue('#acc-email'), 'cris@example.com');
+  assert.equal(await p3.getByRole('tab', { name: '登录' }).getAttribute('aria-selected'), 'true');
+  await p3.fill('#acc-pw', 'segredo456');
+  await p3.getByRole('button', { name: '登录', exact: true }).click();
+  await p3.getByText('已记住这台设备').waitFor({ timeout: 15000 });
+  assert.equal(await p3.getByRole('dialog', { name: '应用已锁定' }).count(), 0, '退出登录应清除本机解锁设置');
+  assert.equal(await p3.getByRole('switch', { name: /打开应用时用.*解锁/ }).isChecked(), false);
   await ctx3.close();
   ok('B24', '公开部署：打开网页即是介绍与注册（不需要任何配置），注册后开始 30 天试用；普通用户看不到部署相关的技术设置');
+  ok('B25', '登录页：登录/注册分页、记住上次邮箱；新手导览首次自动播放、可在使用教程重播；刷新不需重新登录；面容 / 指纹解锁（虚拟验证器）：验证不通过停在锁屏、通过即解锁、可改用密码；退出登录清除解锁设置');
 
   // 桌面
   const d = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: 'America/Sao_Paulo' });

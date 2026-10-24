@@ -973,3 +973,140 @@ textarea.input { min-height: 90px; resize: vertical; font-family: var(--mono); f
 .welcome .perks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .welcome .perks li { display: flex; gap: 8px; align-items: baseline; }
 .welcome .perks li svg { color: var(--brand); flex-shrink: 0; }
+
+/* ===== 第十轮：锁屏、开关、登录页、教程、引导、动画 ===== */
+.okdot { width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--paid) 16%, transparent); color: var(--paid); display: grid; place-items: center; flex-shrink: 0; margin-top: 1px; }
+.switchrow { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); cursor: pointer; }
+.switch { appearance: none; -webkit-appearance: none; width: 46px; height: 28px; border-radius: 99px; background: var(--line); position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.2s; margin: 0; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform 0.22s cubic-bezier(.3,1.4,.5,1); }
+.switch:checked { background: var(--brand); }
+.switch:checked::after { transform: translateX(18px); }
+.switch:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* 锁屏 */
+.lockscreen { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--brand) 38%, var(--bar)) 0%, var(--bar) 60%); color: var(--bar-ink); animation: fadeIn 0.25s ease-out; }
+.lock-card { width: min(360px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.lock-card h1 { margin: 6px 0 0; font-size: 1.35rem; }
+.lock-card .muted { color: var(--bar-muted); }
+.lock-card .err { background: rgba(255,255,255,.12); padding: 6px 10px; border-radius: 8px; color: #ffd2d8; }
+.lock-card .field label { color: var(--bar-muted); text-align: left; }
+.lock-card .btn-ghost, .lock-card .linkbtn { color: var(--bar-ink); }
+.lock-card .btn-primary { background: #fff; color: var(--bar); border-color: #fff; }
+.lock-face { width: 104px; height: 104px; border-radius: 30px; display: grid; place-items: center; background: rgba(255,255,255,.1); border: 1.5px solid rgba(255,255,255,.22); position: relative; overflow: hidden; animation: breathe 2.6s ease-in-out infinite; }
+.lock-face.scanning::after { content: ''; position: absolute; left: 10%; right: 10%; height: 3px; border-radius: 3px; background: linear-gradient(90deg, transparent, #fff, transparent); box-shadow: 0 0 12px #fff; animation: scanline 1.1s ease-in-out infinite alternate; }
+.lock-face.ok { background: var(--paid); border-color: var(--paid); animation: popIn 0.35s cubic-bezier(.3,1.6,.5,1); }
+@keyframes breathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,.18); } 50% { transform: scale(1.03); box-shadow: 0 0 0 12px rgba(255,255,255,0); } }
+@keyframes scanline { from { top: 14%; } to { top: 84%; } }
+@keyframes popIn { 0% { transform: scale(.6); opacity: .4; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 第 10 轮：登录页 ---------- */
+.authpage { min-height: 100dvh; display: grid; grid-template-columns: 1fr; background: var(--ground); }
+.authhero { position: relative; overflow: hidden; color: var(--bar-ink); padding: 28px 20px 26px; background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--brand) 45%, var(--bar)) 0%, var(--bar) 65%); display: flex; flex-direction: column; gap: 10px; }
+.authhero::after { content: ''; position: absolute; width: 260px; height: 260px; right: -90px; top: -110px; border-radius: 50%; background: rgba(255,255,255,.07); pointer-events: none; }
+.authbrand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.05rem; animation: fadeIn .4s ease-out backwards; }
+.authhero h1 { margin: 6px 0 0; font-size: 1.65rem; line-height: 1.25; animation: fadeUp .45s .05s ease-out backwards; }
+.authhero p { margin: 0; color: var(--bar-muted); font-size: .92rem; animation: fadeUp .45s .12s ease-out backwards; }
+.authpanel { width: 100%; max-width: 440px; margin: 0 auto; padding: 0 16px 32px; display: flex; flex-direction: column; gap: 14px; }
+.authcard { margin-top: -18px; position: relative; z-index: 1; box-shadow: var(--shadow-up); animation: fadeUp .4s .1s ease-out backwards; }
+.authpanel .perks { list-style: none; margin: 0; padding: 0 4px; display: flex; flex-direction: column; gap: 6px; color: var(--ink-2); }
+.authpanel .perks li { display: flex; gap: 8px; align-items: baseline; animation: fadeUp .35s ease-out backwards; }
+.authpanel .perks li svg { color: var(--brand); flex-shrink: 0; }
+.pricemini summary { min-height: 36px; font-size: .9rem; }
+.authtitle { margin: 0; font-size: 1.15rem; }
+.authtabs { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+.authtabs button { position: relative; z-index: 1; min-height: 40px; border: 0; background: none; font: inherit; font-weight: 800; color: var(--muted); cursor: pointer; border-radius: 9px; transition: color .2s; }
+.authtabs button[aria-selected='true'] { color: var(--brand); }
+.authtabs-ink { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 9px; background: var(--card); box-shadow: var(--shadow); transition: transform .25s cubic-bezier(.3,.7,.3,1); }
+.authtabs-ink[data-pos='signup'] { transform: translateX(100%); }
+.rememberline { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; }
+.rememberline svg { color: var(--paid); }
+.loginform .datefield { display: flex; gap: 6px; }
+.loginform .datefield .input { flex: 1; }
+
+/* 登录页插画：单据扫描 → 账单 → 已付 */
+.heroart { position: relative; height: 150px; margin-top: 8px; }
+.ha-doc { position: absolute; left: 4px; top: 6px; width: 104px; height: 134px; border-radius: 10px; background: rgba(255,255,255,.95); padding: 14px 12px; display: flex; flex-direction: column; gap: 9px; overflow: hidden; transform: rotate(-5deg); box-shadow: 0 10px 30px rgba(0,0,0,.25); animation: floatY 5s ease-in-out infinite; }
+.ha-doc i { display: block; height: 6px; width: 100%; border-radius: 3px; background: #d9d6ea; }
+.ha-scan { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, #7c72ff, transparent); box-shadow: 0 0 12px #7c72ff; animation: scanDoc 2.4s ease-in-out infinite alternate; }
+.ha-bill { position: absolute; left: 88px; right: 0; top: 34px; max-width: 280px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--card); color: var(--ink); box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: .85rem; animation: slideInR .6s .35s cubic-bezier(.3,.7,.3,1) backwards, floatY 6s 1s ease-in-out infinite; }
+.ha-bill small { display: block; color: var(--soon); font-weight: 700; font-size: .72rem; }
+.ha-av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); font-weight: 800; flex-shrink: 0; }
+.ha-paid { position: absolute; left: 150px; top: 98px; display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 99px; background: var(--paid); color: #fff; font-weight: 800; font-size: .78rem; box-shadow: 0 6px 18px rgba(0,0,0,.2); animation: stampIn .5s 1.1s cubic-bezier(.2,1.6,.4,1) backwards; }
+@keyframes floatY { 0%, 100% { translate: 0 0; } 50% { translate: 0 -6px; } }
+@keyframes scanDoc { from { top: 8%; } to { top: 90%; } }
+@keyframes slideInR { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes stampIn { from { opacity: 0; transform: scale(1.8) rotate(-12deg); } to { opacity: 1; transform: none; } }
+
+@media (min-width: 900px) {
+  .authpage { grid-template-columns: minmax(0, 1.1fr) minmax(420px, 1fr); }
+  .authhero { padding: 48px 56px; justify-content: center; gap: 14px; }
+  .authhero h1 { font-size: 2.3rem; }
+  .authhero p { font-size: 1rem; }
+  .heroart { height: 210px; margin-top: 24px; max-width: 460px; }
+  .ha-doc { width: 140px; height: 180px; gap: 12px; padding: 18px 16px; }
+  .ha-bill { left: 120px; top: 50px; }
+  .ha-paid { left: 220px; top: 140px; }
+  .authpanel { justify-content: center; padding: 40px 32px; }
+  .authcard { margin-top: 0; }
+}
+
+/* ---------- 使用教程 ---------- */
+.helpdoc { gap: 8px; }
+.helpsec { border: 1px solid var(--line); border-radius: 12px; background: var(--card); animation: fadeUp .3s ease-out backwards; }
+.helpsec > summary { list-style: none; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px; cursor: pointer; }
+.helpsec > summary::-webkit-details-marker { display: none; }
+.helpsec > summary::after { content: '›'; font-size: 1.3rem; color: var(--muted); transition: transform .2s; }
+.helpsec[open] > summary::after { transform: rotate(90deg); }
+.helpsec[open] { border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); }
+.helpicon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); flex-shrink: 0; }
+.helpicon svg { width: 18px; height: 18px; }
+.helpbody { padding: 0 14px 14px 54px; color: var(--ink-2); animation: fadeIn .25s ease-out; }
+.helpbody .steps { margin-top: 0; }
+.faq { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.faq dt { font-weight: 800; color: var(--ink); margin-top: 6px; }
+.faq dd { margin: 0; }
+@media (max-width: 420px) { .helpbody { padding-left: 14px; } }
+
+/* ---------- 新手导览 ---------- */
+.tour { position: fixed; inset: 0; z-index: 300; }
+.tour-dim { position: absolute; inset: 0; background: rgba(12, 10, 40, .55); animation: fadeIn .2s ease-out; }
+.tour-hole { position: absolute; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(12, 10, 40, .55), 0 0 0 3px var(--focus); transition: top .3s cubic-bezier(.3,.7,.3,1), left .3s cubic-bezier(.3,.7,.3,1), width .3s, height .3s; pointer-events: none; }
+.tour-hole::after { content: ''; position: absolute; inset: -3px; border-radius: 16px; border: 2px solid var(--focus); animation: ring 1.6s ease-out infinite; }
+.tour-bubble { position: absolute; width: min(320px, calc(100vw - 24px)); background: var(--card); color: var(--ink); border-radius: 14px; padding: 14px 16px 12px; box-shadow: var(--shadow-up); animation: fadeUp .25s ease-out; }
+.tour-bubble.above { animation-name: fadeDown; }
+.tour-bubble h3 { margin: 4px 0 4px; font-size: 1.05rem; }
+.tour-bubble p { margin: 0 0 10px; color: var(--ink-2); }
+.tour-dots { display: flex; gap: 5px; }
+.tour-dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--line-strong); transition: width .2s, background .2s; }
+.tour-dots i.on { width: 18px; background: var(--brand); }
+@keyframes ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.08); } }
+@keyframes fadeDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 撒花 ---------- */
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 400; overflow: hidden; }
+.confetti i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; animation: confettiFall 1.5s cubic-bezier(.25,.6,.4,1) forwards; }
+.confetti i:nth-child(3n) { width: 6px; height: 6px; border-radius: 50%; }
+@keyframes confettiFall { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(var(--dx), 92vh) rotate(var(--rot)); opacity: 0; } }
+
+/* ---------- 页面与功能小动画 ---------- */
+/* 切换页面：卡片依次浮现（只用 backwards，结束后不留 transform，不影响页面里的固定定位元素） */
+.page { display: flex; flex-direction: column; gap: 16px; }
+.page > * { animation: fadeUp .3s ease-out backwards; }
+.page > :nth-child(2) { animation-delay: .04s; }
+.page > :nth-child(3) { animation-delay: .08s; }
+.page > :nth-child(4) { animation-delay: .12s; }
+.page > :nth-child(n+5) { animation-delay: .16s; }
+/* 底栏当前图标轻轻一跳 */
+.tab[aria-current='page'] svg { animation: tabBounce .35s cubic-bezier(.3,1.6,.5,1); }
+.navbtn[aria-current='page'] svg { animation: tabBounce .35s cubic-bezier(.3,1.6,.5,1); }
+@keyframes tabBounce { 0% { transform: scale(.8); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+/* 标记已付：勾号弹一下 */
+.brow.leaving .brow-pay svg { animation: checkPop .3s cubic-bezier(.2,1.6,.4,1); }
+@keyframes checkPop { 0% { transform: scale(.4); } 100% { transform: scale(1); } }
+/* 识别中：图片上扫描线 */
+.scanprev { position: relative; align-self: center; width: min(220px, 70%); border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--card-2); }
+.scanprev img { display: block; width: 100%; max-height: 220px; object-fit: cover; object-position: top; opacity: .9; }
+.scanbeam { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--focus), transparent); box-shadow: 0 0 14px var(--focus); animation: scanDoc 1.6s ease-in-out infinite alternate; }
+.scanprev::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--focus) 12%, transparent) 100%); }

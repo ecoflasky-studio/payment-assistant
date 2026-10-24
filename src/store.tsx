@@ -7,7 +7,9 @@ import { todayISO } from './lib/dates';
 import { makeSampleData, isSampleId } from './sample';
 import { syncOnce, SyncError, EMPTY_STATE, META_CONFIG, META_STATE, configProblem, type SyncConfig, type SyncState, type SyncResult } from './sync/engine';
 import { loadPublicConfig, type PublicConfig } from './cloud/config';
-import { needsRefresh, refreshSession, signOutRemote, AuthError, type Session } from './cloud/auth';
+import { needsRefresh, refreshSession, signOutRemote, type Session } from './cloud/auth';
+import { ensureFresh, requestPersistentStorage } from './cloud/session';
+import { META_BIOMETRIC, RELOCK_MS, type BiometricConfig } from './cloud/biometric';
 import { getAccount, type AccountInfo } from './cloud/api';
 import { entitlement, type Entitlement } from '../shared/plans.mjs';
 import type { SupaTarget } from './lib/ocr/providers';
@@ -53,6 +55,7 @@ export type Route =
   | { name: 'settings' }
   | { name: 'data' }
   | { name: 'account' }
+  | { name: 'help' }
   | { name: 'flow'; month?: string };
 
 export function parseHash(h: string): Route {
@@ -78,6 +81,8 @@ export function parseHash(h: string): Route {
       return { name: 'data' };
     case 'account':
       return { name: 'account' };
+    case 'help':
+      return { name: 'help' };
     case 'flow':
       return { name: 'flow', month: /^\d{4}-\d{2}$/.test(p[1] ?? '') ? p[1] : undefined };
     default:
@@ -143,6 +148,13 @@ interface Store {
   requireFeature(f: Feature): boolean;
   paywall: Feature | null;
   closePaywall(): void;
+  /** 面容 ID / 指纹解锁（本机） */
+  lock: { cfg: BiometricConfig | null; locked: boolean };
+  setBiometric(cfg: BiometricConfig | null): Promise<void>;
+  lockNow(): void;
+  unlockApp(): void;
+  /** 锁屏时用密码重新验证：换上新会话，不重置同步 */
+  replaceSession(s: Session): Promise<void>;
 }
 
 const Ctx = createContext<Store>(null as any);
@@ -177,6 +189,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [publicConfig, setPublicConfig] = useState<PublicConfig | null>(null);
   const [auth, setAuth] = useState<AuthInfo>({ session: null, account: null, error: null });
+  const [lock, setLock] = useState<{ cfg: BiometricConfig | null; locked: boolean }>({ cfg: null, locked: false });
   const sessionRef = useRef<Session | null>(null);
   const refreshing = useRef<Promise<Session | null> | null>(null);
 
@@ -217,6 +230,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           sessionRef.current = sess;
           const cached = await repo.getMeta<AccountInfo>(META_ACCOUNT);
           setAuth({ session: sess, account: cached && cached.email === sess.user.email ? cached : null, error: null });
+          const bio = await repo.getMeta<BiometricConfig>(META_BIOMETRIC);
+          if (bio && bio.userId === sess.user.id) setLock({ cfg: bio, locked: true });
         }
         const cfg = await repo.getMeta<SyncConfig>(META_CONFIG);
         if (cfg && !configProblem(cfg)) {
@@ -321,6 +336,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [repo, guard, reload]);
 
+  // 别的标签页续期或退出时同步过来
+  const authChannel = useMemo(() => (typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('zq-auth') : null), []);
+  const sessionStore = useMemo(
+    () => ({
+      load: () => repo.getMeta<Session>(META_SESSION).then((x) => x ?? null),
+      save: async (n: Session | null) => {
+        await repo.setMeta(META_SESSION, n);
+        authChannel?.postMessage({ type: 'session', at: Date.now() });
+      },
+    }),
+    [repo, authChannel],
+  );
+  const adoptSession = useCallback((n: Session | null, error: string | null = null) => {
+    const prev = sessionRef.current;
+    sessionRef.current = n;
+    setAuth((a) => (n ? { ...a, session: n, account: a.account && prev?.user.id === n.user.id ? a.account : null, error: null } : { session: null, account: null, error }));
+  }, []);
+
   const getToken = useCallback(async (): Promise<string | null> => {
     const s = sessionRef.current;
     if (!s) return null;
@@ -328,27 +361,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!refreshing.current) {
       refreshing.current = (async () => {
         try {
-          const n = await refreshSession(s);
-          sessionRef.current = n;
-          await repo.setMeta(META_SESSION, n);
-          setAuth((a) => ({ ...a, session: n }));
-          return n;
-        } catch (e) {
-          // 网络问题：先用旧令牌；令牌失效：退出登录状态（本机数据保留）
-          if (e instanceof AuthError && e.code === 'session_expired') {
-            sessionRef.current = null;
-            await repo.setMeta(META_SESSION, null);
-            setAuth({ session: null, account: null, error: '登录已过期，请重新登录' });
-            return null;
+          const r = await ensureFresh(s, sessionStore, refreshSession);
+          if (r.session) {
+            if (r.changed) adoptSession(r.session);
+            return r.session;
           }
-          return s;
+          // 令牌确实失效（或在别的标签页退出了）：回到登录页，本机数据保留
+          await repo.setMeta(META_SESSION, null);
+          adoptSession(null, r.expired ? '登录已过期，请重新登录' : null);
+          return null;
         } finally {
           refreshing.current = null;
         }
       })();
     }
     return (await refreshing.current)?.accessToken ?? null;
-  }, [repo]);
+  }, [repo, sessionStore, adoptSession]);
+
+  useEffect(() => {
+    if (!authChannel) return;
+    const on = async () => {
+      const latest = (await repo.getMeta<Session>(META_SESSION)) ?? null;
+      const cur = sessionRef.current;
+      if (latest?.refreshToken !== cur?.refreshToken) adoptSession(latest);
+    };
+    authChannel.addEventListener('message', on);
+    return () => authChannel.removeEventListener('message', on);
+  }, [authChannel, repo, adoptSession]);
+
+  // 回到前台：快过期就提前续期，长期不关的标签页也能一直保持登录
+  useEffect(() => {
+    const on = () => {
+      const s = sessionRef.current;
+      if (document.visibilityState === 'visible' && s && s.expiresAt - Date.now() < 10 * 60_000) void getToken();
+    };
+    document.addEventListener('visibilitychange', on);
+    const t = setInterval(on, 5 * 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', on);
+      clearInterval(t);
+    };
+  }, [getToken]);
 
   const syncNow = useCallback(
     async (opts: { mode?: 'both' | 'pull' | 'push'; force?: boolean } = {}): Promise<SyncResult | null> => {
@@ -476,24 +529,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     async (session: Session) => {
       sessionRef.current = session;
-      await repo.setMeta(META_SESSION, session);
+      await sessionStore.save(session);
       setAuth({ session, account: null, error: null });
+      void requestPersistentStorage();
       // 同步改为账号模式：本机数据全部上传到账号，再下载账号里已有的数据
       await saveSyncConfig({ url: session.url, key: session.key, space: '', secret: '', auto: true, account: true }, { resetState: true });
       await syncNow({ mode: 'both', force: true });
     },
-    [repo, saveSyncConfig, syncNow],
+    [repo, saveSyncConfig, syncNow, sessionStore],
   );
 
   const signOut = useCallback(async () => {
     const s = sessionRef.current;
     sessionRef.current = null;
-    await repo.setMeta(META_SESSION, null);
+    await sessionStore.save(null);
+    await repo.setMeta(META_BIOMETRIC, null);
+    setLock({ cfg: null, locked: false });
     await repo.setMeta(META_ACCOUNT, null);
     setAuth({ session: null, account: null, error: null });
     if (syncCfg.current?.account) await saveSyncConfig(null);
     if (s) void signOutRemote(s);
-  }, [repo, saveSyncConfig]);
+  }, [repo, saveSyncConfig, sessionStore]);
 
   // 登录后加载账号信息（套餐、用量）
   useEffect(() => {
@@ -524,6 +580,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const closePaywall = useCallback(() => setPaywall(null), []);
 
-  const value: Store = { ready, fatal, repo, bills, merchants, accounts, settings, today, route, go, back, reload, saveSettings, guard, storageError, hasSample, clearSample, sync, syncNow, saveSyncConfig, publicConfig, cloud, auth, getToken, signIn, signOut, refreshAccount, ent, gate, requireFeature, paywall, closePaywall };
+  // 离开应用超过 5 分钟再回来：重新锁定
+  const hiddenAt = useRef<number | null>(null);
+  useEffect(() => {
+    const on = () => {
+      if (document.visibilityState === 'hidden') hiddenAt.current = Date.now();
+      else if (hiddenAt.current && Date.now() - hiddenAt.current > RELOCK_MS) setLock((l) => (l.cfg ? { ...l, locked: true } : l));
+    };
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
+  const setBiometric = useCallback(
+    async (cfg: BiometricConfig | null) => {
+      await repo.setMeta(META_BIOMETRIC, cfg);
+      setLock({ cfg, locked: false });
+    },
+    [repo],
+  );
+  const lockNow = useCallback(() => setLock((l) => (l.cfg ? { ...l, locked: true } : l)), []);
+  const unlockApp = useCallback(() => setLock((l) => ({ ...l, locked: false })), []);
+  const replaceSession = useCallback(
+    async (n: Session) => {
+      await sessionStore.save(n);
+      adoptSession(n);
+      setLock((l) => ({ ...l, locked: false }));
+    },
+    [sessionStore, adoptSession],
+  );
+
+  const value: Store = { ready, fatal, repo, bills, merchants, accounts, settings, today, route, go, back, reload, saveSettings, guard, storageError, hasSample, clearSample, sync, syncNow, saveSyncConfig, publicConfig, cloud, auth, getToken, signIn, signOut, refreshAccount, ent, gate, requireFeature, paywall, closePaywall, lock, setBiometric, lockNow, unlockApp, replaceSession };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

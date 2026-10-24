@@ -43,3 +43,8 @@ export const ISun = P('M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 
 export const IMoon = P('M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z');
 export const IChart = P('M3 21h18M6 17V10M11 17V5M16 17v-4M21 17V8');
 export const IScan = P('M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8');
+/** 面容 ID 样式：取景角 + 笑脸 */
+export const IFace = P('M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M9 9v1M15 9v1M12 9v4h-1M9 16c1.7 1.3 4.3 1.3 6 0');
+export const ILock = P('M5 11h14v10H5zM8 11V7a4 4 0 1 1 8 0v4');
+export const IHelp = P('M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01');
+export const IPhone = P('M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2');

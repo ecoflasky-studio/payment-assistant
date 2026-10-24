@@ -9,7 +9,11 @@ import { Masters } from './pages/Masters';
 import { SettingsPage } from './pages/Settings';
 import { DataPage } from './pages/DataPage';
 import { AccountPage, PaywallModal, ReadOnlyPage, Welcome } from './pages/Account';
+import { LockScreen } from './pages/Lock';
+import { Logo } from './ui/Logo';
 import { FlowPage } from './pages/Flow';
+import { HelpPage } from './pages/Help';
+import { Tour, shouldAutoStart, tourDone } from './ui/Tour';
 import { useReminders } from './reminders';
 import { IHome, IList, IPlus, IStore, ISettings, ICamera, IEdit, IImage, IBolt, ICloud } from './ui/icons';
 import { syncLabel } from './pages/SyncSettings';
@@ -29,11 +33,12 @@ const TITLES: Record<Route['name'], string> = {
   settings: '提醒与设置',
   data: '数据管理',
   account: '账号与套餐',
+  help: '使用教程',
   flow: '每月流水',
 };
 
 function Shell() {
-  const { ready, fatal, route, go, back, storageError, sync, syncNow, gate, auth, requireFeature } = useStore();
+  const { ready, fatal, route, go, back, storageError, sync, syncNow, gate, auth, requireFeature, lock } = useStore();
   const openAdd = () => requireFeature('edit') && setAddOpen(true);
   const rem = useReminders();
   const [, setTheme, theme] = useTheme();
@@ -75,6 +80,7 @@ function Shell() {
 
   // 公开部署：未登录先看到介绍与注册登录
   if (ready && !fatal && gate.saas && !auth.session) return <Welcome />;
+  if (ready && !fatal && gate.saas && auth.session && lock.locked) return <LockScreen />;
 
   if (fatal) {
     return (
@@ -101,7 +107,7 @@ function Shell() {
   ];
   // 电脑侧栏多一个「资料」；手机上从「设置」进入
   const sideNav: typeof nav = [...nav.slice(0, 3), { r: { name: 'masters' }, label: '资料', icon: <IStore /> }, nav[3]];
-  const isCur = (r: Route) => r.name === route.name || (r.name === 'settings' && (route.name === 'data' || route.name === 'account'));
+  const isCur = (r: Route) => r.name === route.name || (r.name === 'settings' && (route.name === 'data' || route.name === 'account' || route.name === 'help'));
   const isCurTab = (r: Route) => isCur(r) || (r.name === 'settings' && route.name === 'masters');
 
   return (
@@ -110,12 +116,12 @@ function Shell() {
         <div className="brandmark">
           <Logo /> 账期助手
         </div>
-        <button className="btn btn-primary newbtn" onClick={openAdd}>
+        <button className="btn btn-primary newbtn" data-tour="add" onClick={openAdd}>
           <IPlus />
           新增账单
         </button>
         {sideNav.map((n) => (
-          <button key={n.r.name} className="navbtn" aria-current={isCur(n.r) ? 'page' : undefined} onClick={() => go(n.r)}>
+          <button key={n.r.name} className="navbtn" data-tour={n.r.name} aria-current={isCur(n.r) ? 'page' : undefined} onClick={() => go(n.r)}>
             {n.icon}
             {n.label}
             {n.badge ? <span className="badge">{n.badge}</span> : null}
@@ -170,32 +176,35 @@ function Shell() {
               <p>正在打开本地数据…</p>
             </div>
           ) : (
-            <Page route={route} rem={rem} />
+            <div className="page" key={route.name}>
+              <Page route={route} rem={rem} />
+            </div>
           )}
         </main>
       </div>
       <nav className="tabbar" aria-label="主导航">
         {nav.slice(0, 2).map((n) => (
-          <button key={n.r.name} className="tab" aria-current={isCurTab(n.r) ? 'page' : undefined} onClick={() => go(n.r)}>
+          <button key={n.r.name} className="tab" data-tour={n.r.name} aria-current={isCurTab(n.r) ? 'page' : undefined} onClick={() => go(n.r)}>
             {n.icon}
             {n.label}
             {n.badge ? <span className="badge">{n.badge}</span> : null}
           </button>
         ))}
-        <button className="tab tab-add" onClick={openAdd} aria-label="新增账单">
+        <button className="tab tab-add" data-tour="add" onClick={openAdd} aria-label="新增账单">
           <span className="plus">
             <IPlus />
           </span>
           <span>新增</span>
         </button>
         {nav.slice(2).map((n) => (
-          <button key={n.r.name} className="tab" aria-current={isCurTab(n.r) ? 'page' : undefined} onClick={() => go(n.r)}>
+          <button key={n.r.name} className="tab" data-tour={n.r.name} aria-current={isCurTab(n.r) ? 'page' : undefined} onClick={() => go(n.r)}>
             {n.icon}
             {n.label}
           </button>
         ))}
       </nav>
       <PaywallModal />
+      <Tour autoStart={ready && shouldAutoStart({ saas: gate.saas, signedIn: !!auth.session, locked: lock.locked, route: route.name, done: tourDone() })} />
       {addOpen && (
         <Modal title="新增账单" onClose={() => setAddOpen(false)}>
           <div className="stack" onClick={() => setTimeout(() => setAddOpen(false), 0)}>
@@ -251,21 +260,13 @@ function Page({ route, rem }: { route: Route; rem: ReturnType<typeof useReminder
       return <DataPage />;
     case 'account':
       return <AccountPage />;
+    case 'help':
+      return <HelpPage />;
     case 'flow':
       return <FlowPage month={route.month} />;
   }
 }
 
-function Logo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" rx="8" fill="#ffffff" fillOpacity="0.14" />
-      <path d="M9 8h14v17l-2.3-1.5L18.3 25 16 23.5 13.7 25l-2.4-1.5L9 25z" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M12.5 13h7M12.5 17h4.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="23" cy="9" r="3.2" fill="#ff5d73" />
-    </svg>
-  );
-}
 
 class Boundary extends Component<{ children: ReactNode }, { err: Error | null }> {
   state = { err: null as Error | null };

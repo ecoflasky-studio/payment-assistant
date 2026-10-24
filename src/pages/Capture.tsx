@@ -575,6 +575,12 @@ export function CapturePage() {
 
           {progress && (
             <div className="card stack" aria-live="polite">
+              {(thumbs[variant] || thumbs.color) && (
+                <div className="scanprev" aria-hidden="true">
+                  <img src={thumbs[variant] || thumbs.color} alt="" />
+                  <span className="scanbeam" />
+                </div>
+              )}
               <span className="row">
                 <span className="spin" />
                 {progress}

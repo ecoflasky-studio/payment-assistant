@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 
 interface Toast {
   id: number;
@@ -16,6 +16,8 @@ interface ConfirmOpts {
 }
 
 interface Feedback {
+  /** 撒花（注册、订阅成功等）；系统设置「减少动态效果」时不播放 */
+  celebrate(): void;
   toast(text: string, opts?: { bad?: boolean; action?: Toast['action'] }): void;
   confirm(opts: ConfirmOpts): Promise<boolean>;
 }
@@ -36,9 +38,21 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
   const confirm = useCallback<Feedback['confirm']>((opts) => new Promise((resolve) => setDlg({ ...opts, resolve })), []);
 
+  const [burst, setBurst] = useState(0);
+  const celebrate = useCallback(() => {
+    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    setBurst((b) => b + 1);
+  }, []);
+  useEffect(() => {
+    if (!burst) return;
+    const t = setTimeout(() => setBurst(0), 1800);
+    return () => clearTimeout(t);
+  }, [burst]);
+
   return (
-    <Ctx.Provider value={{ toast, confirm }}>
+    <Ctx.Provider value={{ toast, confirm, celebrate }}>
       {children}
+      {burst > 0 && <Confetti key={burst} />}
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast${t.bad ? ' bad' : ''}`}>
@@ -144,6 +158,30 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
         <h2>{title}</h2>
         {children}
       </div>
+    </div>
+  );
+}
+
+const CONFETTI_COLORS = ['#7c5cff', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
+/** 纯 CSS 撒花：24 片彩纸从顶部落下，1.6 秒后自动移除 */
+function Confetti() {
+  const pieces = Array.from({ length: 24 }, (_, i) => i);
+  return (
+    <div className="confetti" aria-hidden="true">
+      {pieces.map((i) => (
+        <i
+          key={i}
+          style={
+            {
+              left: `${(i * 41) % 100}%`,
+              background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+              animationDelay: `${(i % 6) * 0.05}s`,
+              '--dx': `${((i * 37) % 120) - 60}px`,
+              '--rot': `${(i * 77) % 720}deg`,
+            } as CSSProperties
+          }
+        />
+      ))}
     </div>
   );
 }

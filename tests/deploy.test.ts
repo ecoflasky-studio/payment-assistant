@@ -60,6 +60,51 @@ describe('一键部署脚本', () => {
     expect((await pg.query(`select value from zq_kv where key = 'fn_url'`)).rows[0]).toEqual({ value: 'https://abcdefghijklmnopqrst.supabase.co/functions/v1/recognize' });
     expect((await pg.query(`select count(*)::int as n from cron.job where jobname = 'zq-daily-push'`)).rows[0]).toEqual({ n: 1 });
   });
+  it('令牌权限不够：登录设置这一步跳过并提示手动操作，其余照常完成', async () => {
+    const pg = new PGlite();
+    await pg.exec(readFileSync('tests/support/pg-auth.sql', 'utf8'));
+    await pg.exec(`create schema cron; create table cron.job(jobid serial, jobname text); create function cron.schedule(n text, s text, c text) returns int language sql as $$ insert into cron.job(jobname) values (n) returning jobid $$; create function cron.unschedule(id int) returns bool language sql as $$ delete from cron.job where jobid = id returning true $$;`);
+    const root = mkdtempSync(path.join(tmpdir(), 'zq-deploy-'));
+    mkdirSync(path.join(root, 'supabase'));
+    cpSync('supabase/setup.sql', path.join(root, 'supabase/setup.sql'));
+    cpSync('supabase/push-cron.sql', path.join(root, 'supabase/push-cron.sql'));
+    const fetchImpl = async (url: string, init: any) => {
+      const p = url.replace('https://api.supabase.com/v1', '');
+      const j = (o: unknown) => new Response(JSON.stringify(o), { status: 200 });
+      if (p.endsWith('/config/auth')) return new Response(JSON.stringify({ message: 'Missing required permission(s): project_admin_write', error: { missing_permissions: ['project_admin_write'] } }), { status: 403 });
+      if (p === '/projects/abcdefghijklmnopqrst') return j({ name: 'zq', status: 'ACTIVE_HEALTHY' });
+      if (p.endsWith('/database/query')) {
+        await pg.exec(JSON.parse(init.body).query.replace(/create extension[^;]*;/g, ''));
+        return j([]);
+      }
+      if (p.includes('/api-keys')) return j([{ name: 'default', type: 'publishable', api_key: 'sb_publishable_xyz' }]);
+      return j({});
+    };
+    const logs: string[] = [];
+    const out = await main({
+      env: { SUPABASE_ACCESS_TOKEN: 'sbp_scoped', SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', GEMINI_API_KEY: 'g', GITHUB_REPOSITORY: 'ecoflasky-studio/payment-assistant' },
+      fetchImpl,
+      run: async () => '',
+      root,
+      log: (m: string) => logs.push(m),
+    });
+    expect(out.warnings).toHaveLength(1);
+    expect(out.warnings[0]).toMatch(/关闭 Confirm email[\s\S]*Site URL 填 https:\/\/ecoflasky-studio\.github\.io\/payment-assistant\//);
+    expect(logs.join('\n')).toMatch(/部署完成（有 1 处要手动补）/);
+    // 其余步骤照常完成
+    expect(out.config.publishableKey).toBe('sb_publishable_xyz');
+    expect(JSON.parse(readFileSync(path.join(root, 'dist/zq-config.json'), 'utf8')).functionName).toBe('recognize');
+  });
+  it('其他步骤权限不够时直接报错，并说明要换全部权限的令牌', async () => {
+    const e = await main({
+      env: { SUPABASE_ACCESS_TOKEN: 'sbp_scoped', SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', GEMINI_API_KEY: 'g' },
+      fetchImpl: async () => new Response(JSON.stringify({ error: { missing_permissions: ['project_admin_read'] } }), { status: 403 }),
+      run: async () => '',
+      root: '.',
+      log: () => {},
+    }).catch((x: unknown) => x);
+    expect((e as Error).message).toMatch(/缺少 project_admin_read.*全部权限/);
+  });
   it('令牌无效给出中文说明', async () => {
     const env = { SUPABASE_ACCESS_TOKEN: 'bad', SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', GEMINI_API_KEY: 'g' };
     const e = await main({ env, fetchImpl: async () => new Response('{}', { status: 401 }), run: async () => '', root: '.', log: () => {} }).catch((x: unknown) => x);

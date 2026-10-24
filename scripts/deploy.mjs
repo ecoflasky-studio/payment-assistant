@@ -61,12 +61,22 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   const fnUrl = `${projectUrl}/functions/v1/${fn}`;
   const site = pagesUrl(env);
 
+  const warnings = [];
   const api = async (method, p, body) => {
     const r = await fetchImpl(`${API}${p}`, { method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await r.text();
     if (!r.ok) {
       if (r.status === 401) throw new DeployError('SUPABASE_ACCESS_TOKEN 无效或已过期：请到 supabase.com/dashboard/account/tokens 重新生成');
       if (r.status === 404 && p === `/projects/${ref}`) throw new DeployError(`找不到项目 ${ref}：请检查 SUPABASE_PROJECT_REF`);
+      if (r.status === 403) {
+        let perms = [];
+        try {
+          perms = JSON.parse(text)?.error?.missing_permissions ?? [];
+        } catch {}
+        const e = new DeployError(`访问令牌权限不够${perms.length ? `（缺少 ${perms.join('、')}）` : ''}：请到 supabase.com/dashboard/account/tokens 重新生成一个「全部权限 / Full access」的令牌，更新仓库密钥 SUPABASE_ACCESS_TOKEN 后重新运行`);
+        e.permission = true;
+        throw e;
+      }
       throw new DeployError(`Supabase 接口 ${method} ${p} 失败（${r.status}）：${text.slice(0, 300)}`);
     }
     return text ? JSON.parse(text) : null;
@@ -84,8 +94,21 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   step(3, '登录设置');
   const auth = { mailer_autoconfirm: true, external_email_enabled: true, password_min_length: 8 };
   if (site) Object.assign(auth, { site_url: site, uri_allow_list: site });
-  await api('PATCH', `/projects/${ref}/config/auth`, auth);
-  ok(`邮箱 + 密码注册即登录（不发确认邮件）${site ? `；网站地址 ${site}` : ''}`);
+  try {
+    await api('PATCH', `/projects/${ref}/config/auth`, auth);
+    ok(`邮箱 + 密码注册即登录（不发确认邮件）${site ? `；网站地址 ${site}` : ''}`);
+  } catch (e) {
+    // 这一步只是改两个开关，令牌权限不够时可以在控制台手动做，不中断整个部署
+    if (!e.permission) throw e;
+    const manual = [
+      '登录设置没改成（令牌权限不够），请在 Supabase 控制台手动设置一次：',
+      '  Authentication → Sign In / Providers → Email：关闭 Confirm email，保存',
+      site ? `  Authentication → URL Configuration → Site URL 填 ${site}` : null,
+      '  （或者换成「全部权限」的访问令牌后重新运行，就会自动设置）',
+    ].filter(Boolean).join('\n');
+    log(`  ! ${manual.replace(/\n/g, '\n  ')}`);
+    warnings.push(manual);
+  }
 
   step(4, `部署识别函数「${fn}」`);
   const base = ['functions', 'deploy', fn, '--project-ref', ref, '--no-verify-jwt'];
@@ -127,10 +150,11 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   await writeFile(path.join(root, 'dist/zq-config.json'), JSON.stringify(cfg, null, 2) + '\n');
   ok('dist/zq-config.json');
 
-  log('\n✅ 部署完成');
+  log(warnings.length ? `\n✅ 部署完成（有 ${warnings.length} 处要手动补）` : '\n✅ 部署完成');
+  warnings.forEach((w) => log(`\n⚠ ${w}`));
   if (site) log(`   网站：${site}`);
   log(`   Mercado Pago 通知网址（可选，在 Mercado Pago 开发者后台 → Webhooks 填写，事件选「Planos e assinaturas」）：\n   ${fnUrl}/billing/webhook`);
-  return { ref, fnUrl, site, config: cfg };
+  return { ref, fnUrl, site, config: cfg, warnings };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

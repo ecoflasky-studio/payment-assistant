@@ -10,7 +10,7 @@ import { listProviders, normalizeFn, supaFnUrl, type ProviderInfo } from '../lib
 import { copyText } from '../lib/platform';
 import workerCode from '../../worker/dist/zhangqi-worker.js?raw';
 import supabaseFnCode from '../../supabase/functions/recognize/index.ts?raw';
-import { IBell, ICal, IDatabase, IShield, ICloud } from '../ui/icons';
+import { IBell, ICal, IDatabase, IHelp, IShield, ICloud } from '../ui/icons';
 import { PLAN_LABEL } from '../cloud/api';
 import type { useReminders } from '../reminders';
 import { SyncSettings } from './SyncSettings';
@@ -98,7 +98,7 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
         <span className="grow stack" style={{ gap: 0 }}>
           <b>{auth.session ? auth.session.user.email : '账号'}</b>
           <span className="small muted">
-            {auth.session ? `${auth.account ? PLAN_LABEL[auth.account.plan] : '已登录'} · 账号同步、AI 额度、关屏推送` : '邮箱验证码登录：多设备同步、AI 识别、关屏推送'}
+            {auth.session ? `${auth.account ? PLAN_LABEL[auth.account.plan] : '已登录'} · 账号同步、AI 额度、关屏推送` : '邮箱登录：多设备同步、AI 识别、关屏推送'}
           </span>
         </span>
         <span aria-hidden="true">›</span>
@@ -311,6 +311,14 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
         <span className="grow stack" style={{ gap: 0 }}>
           <b>数据管理</b>
           <span className="small muted">备份、恢复、存储空间、清空数据</span>
+        </span>
+        <span aria-hidden="true">›</span>
+      </button>
+      <button className="card row linkcard" onClick={() => go({ name: 'help' })}>
+        <IHelp width={22} height={22} />
+        <span className="grow stack" style={{ gap: 0 }}>
+          <b>使用教程</b>
+          <span className="small muted">三步上手、拍照技巧、安装到主屏幕、常见问题</span>
         </span>
         <span aria-hidden="true">›</span>
       </button>

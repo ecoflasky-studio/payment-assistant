@@ -7,7 +7,7 @@
 ```bash
 npm install
 npm run dev            # 前端开发服务器 http://localhost:5173
-npm test               # 130+ 个自动测试（金额、日期、状态、ICS、迁移、备份、OCR 门槛、账期规则、分期、缴费、重复周期、分组、识别服务、Worker、Supabase 同步）
+npm test               # 280+ 个自动测试（金额、日期、状态、ICS、迁移、备份、OCR 门槛、账期规则、分期、缴费、重复周期、分组、识别服务、Worker、Supabase 同步）
 npm run build          # 生产构建 → dist/（PWA，可部署到 GitHub Pages / 任意静态主机）
 npm run build:single   # 单文件构建 → dist-single/index.html（可直接双击打开或内嵌）
 ```
@@ -23,6 +23,35 @@ export $(grep -v '^#' .env | xargs) && npm run server   # http://localhost:8787
 前端与服务分开部署时，在应用「设置 → 云端识别服务地址」填写完整 https 地址，并在服务端设置 `ALLOWED_ORIGINS`。
 
 端到端验收脚本：`npm run build && cd e2e && node run.mjs`（需要 Playwright + Chromium，使用模拟的模型上游；云同步用 PGlite 跑真实建表脚本模拟 Supabase，不产生费用）。
+
+## 第十轮：登录页、记住设备、面容 / 指纹解锁、使用教程与动画
+
+### 登录页
+- 公开部署未登录时打开就是品牌登录页：左（手机为上）是介绍和一段小动画（单据扫描 → 生成账单 → 盖「已付」章），右（手机为下）是登录卡片。
+- 「登录 / 注册」两个分页；**这台设备登录过就默认「登录」并填好上次的邮箱**，第一次来默认「注册」。密码可点「看」显示。
+- 邮箱验证码登录收在一个链接里（需要 SMTP 时才用得上）。
+- 登录页可直接看「使用教程」和「套餐与价格」（弹窗），不用先注册。
+
+### 记住这台设备（至少半年）
+- 登录一次在本机长期有效：Supabase 的 refresh token 默认永不过期，应用在过期前自动续期，关浏览器、重启手机都不用再登录。
+- 修复了「多开标签页会被踢下线」的隐患：refresh token 只能用一次，两个标签页同时续期会被 Supabase 当成令牌被盗而作废整个会话。现在续期用浏览器锁（`navigator.locks`）排队，续期前先读最新会话、失败后再确认一次（`src/cloud/session.ts`，8 项测试）。
+- 网络问题不会退出登录；登录时申请持久存储（`navigator.storage.persist()`），减少系统清理。
+- 需要重新登录的情况：清除了浏览器数据、无痕模式、或在账号页点了「退出登录」。
+
+### 面容 ID / 指纹解锁（手机，可选）
+- 在「账号与套餐 → 设备与安全」打开。用浏览器 WebAuthn 平台验证器（iPhone 面容 ID / 触控 ID、安卓指纹或人脸、Windows Hello、Mac 触控 ID），要求本人验证（检查 UV 位，只按一下不算）。
+- 这是**应用锁**，不是替代账号登录：账号保持登录，打开应用时刷脸 / 指纹即可；离开超过 5 分钟回来会重新验证；锁屏上可改用账号密码解锁。
+- 生物信息只在设备安全芯片里，服务器上不存任何东西；退出登录会清除本机解锁设置。
+- 没有用 Supabase 的 Passkey 登录：它目前是实验功能、只支持 supabase-js，等稳定后可以再做「刷脸直接登录」。
+
+### 使用教程与新手导览
+- 「设置 → 使用教程」：三步上手、拍照识别技巧、商家与账期、付款与对账、提醒与推送、流水与导出、多设备与安全、安装到主屏幕（iPhone / 安卓 / 电脑）、套餐、常见问题。
+- 第一次登录后在首页自动播放导览（高亮「新增 → 拍照识别 → 账单 → 流水 → 设置」），可跳过、键盘 ←/→/Esc；在使用教程里可重新播放。
+
+### 小动画（系统开启「减少动态效果」时全部关闭）
+- 切换页面卡片依次浮现；底栏 / 侧栏当前图标轻弹；首页「还要付」金额滚动到新值。
+- 标记已付时勾号弹一下；识别中在单据缩略图上有扫描线。
+- 注册成功、订阅开通时撒花；锁屏图标呼吸、验证时扫描。
 
 ## 第九轮：账号优先 + 套餐 + 一键部署（管理员只需填密钥，用户只需注册）
 
@@ -43,7 +72,7 @@ export $(grep -v '^#' .env | xargs) && npm run server   # http://localhost:8787
 ### 一键部署（管理员做一次，约 10 分钟，不需要写代码）
 
 1. **准备三个密钥**
-   - Supabase 访问令牌：[supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens) → Generate new token
+   - Supabase 访问令牌：[supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens) → Generate new token，**权限选「全部权限 / Full access」**（部署要改数据库、登录设置、函数、密钥，范围受限的令牌会中途报 `Missing required permission(s)`）
    - Supabase 项目 ref：项目 Project URL `https://xxxx.supabase.co` 里的 `xxxx`（直接填整个 Project URL 也行）
    - Gemini 密钥：[aistudio.google.com/apikey](https://aistudio.google.com/apikey) → Create API key
    - （收费时再加）Mercado Pago：开发者后台 → 你的应用 → 生产凭证 Access Token

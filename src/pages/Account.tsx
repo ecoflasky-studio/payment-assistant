@@ -5,7 +5,11 @@ import { sendCode, verifyCode, isEmail, AuthError, signInPassword, signUpPasswor
 import { startCheckout, cancelSubscription, pushKey, pushSubscribe, pushUnsubscribe, pushTest, PLAN_LABEL, ApiError } from '../cloud/api';
 import { PLANS, TRIAL, type PlanId, type Period } from '../../shared/plans.mjs';
 import { formatBRL } from '../lib/money';
-import { IBell, ICloud, IShield, ICheck } from '../ui/icons';
+import { IBell, ICloud, IShield, ICheck, IFace, ILock, IHelp } from '../ui/icons';
+import { Logo } from '../ui/Logo';
+import { HelpContent } from './Help';
+import { biometricAvailable, biometricLabel, enrollBiometric, BiometricError } from '../cloud/biometric';
+import { REMEMBER_DAYS } from '../cloud/session';
 
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '');
 const brl = (v: number) => formatBRL(Math.round(v * 100));
@@ -39,15 +43,26 @@ function useRunner() {
 
 /* ---------------- 登录 / 注册 ---------------- */
 
+const LAST_EMAIL = 'zq.lastEmail';
+const readLastEmail = () => {
+  try {
+    return localStorage.getItem(LAST_EMAIL) ?? '';
+  } catch {
+    return '';
+  }
+};
+
 export function LoginForm({ compact = false }: { compact?: boolean }) {
   const { cloud, auth, signIn, sync } = useStore();
   const fb = useFeedback();
   const { busy, run } = useRunner();
-  const [email, setEmail] = useState(auth.session?.user.email ?? '');
+  const last = readLastEmail();
+  const [email, setEmail] = useState(auth.session?.user.email ?? last);
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [method, setMethod] = useState<'password' | 'code'>('password');
-  const [mode, setMode] = useState<'signup' | 'login'>('signup');
+  // 这台设备登录过 → 默认「登录」；第一次来 → 默认「注册」
+  const [mode, setMode] = useState<'signup' | 'login'>(last ? 'login' : 'signup');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -59,26 +74,38 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
   }, [cooldown]);
 
   if (!cloud) return null;
+  const remember = (e: string) => {
+    try {
+      localStorage.setItem(LAST_EMAIL, e);
+    } catch {}
+  };
   const doPassword = () =>
     run(mode === 'signup' ? '注册中…' : '登录中…', async () => {
       const s = mode === 'signup' ? await signUpPassword(cloud, email, password) : await signInPassword(cloud, email, password);
+      remember(s.user.email);
       await signIn(s);
       setPassword('');
+      if (mode === 'signup') fb.celebrate();
       fb.toast(mode === 'signup' ? `注册成功，已登录 ${s.user.email}` : `已登录 ${s.user.email}，账单开始同步`);
     });
+  const canSubmit = isEmail(email) && (mode === 'signup' ? password.length >= 8 : !!password);
 
   return (
-    <div className="stack">
+    <div className="stack loginform">
       {auth.error && <div className="banner bad small">{auth.error}</div>}
       {!compact && sync.config && !sync.config.account && <p className="xs muted">登录后会改用账号同步，本机所有账单会上传到账号（示例数据不上传）。</p>}
-      <div className="seg seg-sm" role="group" aria-label="登录方式">
-        <button aria-pressed={method === 'password'} onClick={() => setMethod('password')}>
-          邮箱 + 密码
-        </button>
-        <button aria-pressed={method === 'code'} onClick={() => setMethod('code')}>
-          邮箱验证码
-        </button>
-      </div>
+      {method === 'password' && (
+        <div className="authtabs" role="tablist" aria-label="登录或注册">
+          <button role="tab" aria-selected={mode === 'login'} onClick={() => setMode('login')}>
+            登录
+          </button>
+          <button role="tab" aria-selected={mode === 'signup'} onClick={() => setMode('signup')}>
+            注册
+          </button>
+          <span className="authtabs-ink" data-pos={mode} aria-hidden="true" />
+        </div>
+      )}
+      {method === 'code' && <h2 className="authtitle">邮箱验证码登录</h2>}
       <div className="field">
         <label htmlFor="acc-email">邮箱</label>
         <input id="acc-email" className="input" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
@@ -95,20 +122,23 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && isEmail(email) && password && doPassword()}
-                placeholder="至少 8 位"
+                onKeyDown={(e) => e.key === 'Enter' && canSubmit && doPassword()}
+                placeholder={mode === 'signup' ? '设置密码，至少 8 位' : '你的密码'}
               />
               <button type="button" className="btn datebtn" aria-label={showPw ? '隐藏密码' : '显示密码'} onClick={() => setShowPw((v) => !v)}>
                 {showPw ? '藏' : '看'}
               </button>
             </div>
           </div>
-          <button className="btn btn-primary" disabled={!!busy || !isEmail(email) || (mode === 'signup' ? password.length < 8 : !password)} onClick={doPassword}>
+          <button className="btn btn-primary btn-lg btn-block" disabled={!!busy || !canSubmit} onClick={doPassword}>
             {busy ? <span className="spin" /> : null}
             {mode === 'signup' ? `注册，免费试用 ${TRIAL.days} 天` : '登录'}
           </button>
-          <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'center' }} onClick={() => setMode(mode === 'signup' ? 'login' : 'signup')}>
-            {mode === 'signup' ? '已经有账号？登录' : '还没有账号？注册'}
+          <p className="xs muted rememberline">
+            <IShield width={14} height={14} /> 这台设备会被记住，至少半年不用再登录
+          </p>
+          <button type="button" className="linkbtn small" style={{ alignSelf: 'center' }} onClick={() => setMethod('code')}>
+            用邮箱验证码登录
           </button>
         </>
       ) : (
@@ -145,6 +175,7 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                 onClick={() =>
                   run('登录中…', async () => {
                     const s = await verifyCode(cloud, email, code);
+                    remember(s.user.email);
                     await signIn(s);
                     fb.toast(`已登录 ${s.user.email}，账单开始同步`);
                   })
@@ -155,6 +186,9 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
               </button>
             )}
           </div>
+          <button type="button" className="linkbtn small" style={{ alignSelf: 'center' }} onClick={() => setMethod('password')}>
+            用密码登录
+          </button>
         </>
       )}
     </div>
@@ -332,7 +366,12 @@ export function AccountPage() {
     const q = new URLSearchParams(location.search);
     if (!q.has('mp')) return;
     history.replaceState(null, '', location.pathname + location.hash);
-    void refreshAccount().then((a) => a && fb.toast(a.plan === 't1' || a.plan === 't2' ? `已开通 ${PLAN_LABEL[a.plan]}，感谢支持！` : '正在等待 Mercado Pago 确认付款，几分钟后点「刷新」'));
+    void refreshAccount().then((a) => {
+      if (!a) return;
+      const ok = a.plan === 't1' || a.plan === 't2';
+      if (ok) fb.celebrate();
+      fb.toast(ok ? `已开通 ${PLAN_LABEL[a.plan as PlanId]}，感谢支持！` : '正在等待 Mercado Pago 确认付款，几分钟后点「刷新」');
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!cloud) {
@@ -451,6 +490,7 @@ export function AccountPage() {
         </section>
       )}
 
+      <DeviceSection />
       <PushSection />
     </>
   );
@@ -559,36 +599,166 @@ function PushSection() {
 
 /** 公开部署时，未登录先看到这里（介绍 + 注册登录） */
 export function Welcome() {
+  const [help, setHelp] = useState(false);
+  const [prices, setPrices] = useState(false);
   return (
-    <div className="welcome">
-      <div className="stack" style={{ gap: 6 }}>
-        <h1>账期助手</h1>
-        <p className="small muted">巴西小商家的账期与缴费管家：拍照识别单据，到期前提醒，手机电脑同步。</p>
-      </div>
-      <ul className="perks small">
-        {['拍照或 PDF 识别订单、boleto、水电税费单', '按商家账期自动算到期日，逾期一目了然', '对账单批量导入、每月流水、多设备同步', `新账号免费试用 ${TRIAL.days} 天，含 ${TRIAL.ai} 次 AI 识别`].map((t) => (
-          <li key={t}>
-            <ICheck width={16} height={16} /> {t}
-          </li>
-        ))}
-      </ul>
-      <section className="card stack">
-        <LoginForm compact />
-      </section>
-      <details className="more">
-        <summary>套餐与价格</summary>
-        <div className="stack" style={{ marginTop: 8 }}>
-          {(['t1', 't2'] as PlanId[]).map((p) => (
-            <div key={p} className="li small">
-              <b>{PLANS[p].name}</b>
-              <span className="grow">
-                {' '}
-                {brl(PLANS[p].month)}/月 · {brl(PLANS[p].year)}/年 — 关屏推送、AI 识别 {PLANS[p].ai} 次/月{PLANS[p].export ? '、导出记录' : ''}
-              </span>
-            </div>
-          ))}
+    <div className="authpage">
+      <div className="authhero">
+        <div className="authbrand">
+          <Logo size={34} /> 账期助手
         </div>
-      </details>
+        <h1>
+          账期和缴费，
+          <br />
+          到期前提醒你
+        </h1>
+        <p>拍照识别单据 · 自动算到期日 · 手机电脑同步</p>
+        <HeroArt />
+      </div>
+      <div className="authpanel">
+        <section className="card authcard">
+          <LoginForm compact />
+        </section>
+        <ul className="perks small">
+          {['拍照或 PDF 识别订单、boleto、水电税费单', '按商家账期自动算到期日，逾期一目了然', '对账单导入、每月流水、多设备同步', `新账号免费试用 ${TRIAL.days} 天，含 ${TRIAL.ai} 次 AI 识别`].map((t, i) => (
+            <li key={t} style={{ animationDelay: `${0.15 + i * 0.07}s` }}>
+              <ICheck width={16} height={16} /> {t}
+            </li>
+          ))}
+        </ul>
+        <div className="row" style={{ justifyContent: 'center', gap: 4 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setHelp(true)}>
+            <IHelp width={16} height={16} /> 使用教程
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setPrices(true)}>
+            套餐与价格
+          </button>
+        </div>
+      </div>
+      {prices && (
+        <Modal title="套餐与价格" onClose={() => setPrices(false)}>
+          <div className="stack">
+            <p className="small muted">
+              新账号免费试用 {TRIAL.days} 天，含 {TRIAL.ai} 次 AI 识别。试用结束后可订阅：
+            </p>
+            {(['t1', 't2'] as PlanId[]).map((p) => (
+              <div key={p} className="card stack" style={{ gap: 4 }}>
+                <b>
+                  {PLANS[p].name} · {brl(PLANS[p].month)}/月 · {brl(PLANS[p].year)}/年
+                </b>
+                <span className="small muted">
+                  关屏推送、AI 识别 {PLANS[p].ai} 次/月{PLANS[p].export ? '、CSV / Excel 导出' : ''}
+                </span>
+              </div>
+            ))}
+            <p className="xs muted">经 Mercado Pago 付款，可随时取消自动续费。没订阅时账单仍可查看和备份。</p>
+          </div>
+        </Modal>
+      )}
+      {help && (
+        <Modal title="使用教程" onClose={() => setHelp(false)}>
+          <HelpContent compact />
+        </Modal>
+      )}
     </div>
   );
 }
+
+/** 登录页右上的小动画：单据扫描 → 生成账单 → 标记已付 */
+function HeroArt() {
+  return (
+    <div className="heroart" aria-hidden="true">
+      <div className="ha-doc">
+        <i />
+        <i />
+        <i style={{ width: '60%' }} />
+        <i />
+        <i style={{ width: '45%' }} />
+        <span className="ha-scan" />
+      </div>
+      <div className="ha-bill">
+        <span className="ha-av">L</span>
+        <span className="grow">
+          <b>Loja Exemplo</b>
+          <small>3 天后到期</small>
+        </span>
+        <b>R$ 368,00</b>
+      </div>
+      <div className="ha-paid">
+        <ICheck width={16} height={16} /> 已付
+      </div>
+    </div>
+  );
+}
+
+/** 设备与安全：记住设备 + 面容 ID / 指纹解锁 */
+function DeviceSection() {
+  const { auth, lock, setBiometric, lockNow } = useStore();
+  const fb = useFeedback();
+  const [avail, setAvail] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const label = biometricLabel();
+  useEffect(() => {
+    void biometricAvailable().then(setAvail);
+  }, []);
+  const user = auth.session?.user;
+  const on = !!lock.cfg;
+
+  const toggle = async () => {
+    if (!user) return;
+    if (on) {
+      const ok = await fb.confirm({ title: `关闭${label}解锁？`, body: '关闭后打开应用不再需要验证，账号仍保持登录。', confirmLabel: '关闭' });
+      if (ok) {
+        await setBiometric(null);
+        fb.toast(`已关闭${label}解锁`);
+      }
+      return;
+    }
+    setBusy(true);
+    try {
+      const cfg = await enrollBiometric(user);
+      await setBiometric(cfg);
+      fb.toast(`已开启：以后打开应用用${label}解锁`);
+    } catch (e) {
+      fb.toast(e instanceof BiometricError ? e.message : `开启失败：${(e as Error).message}`, { bad: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card stack" aria-labelledby="h-device">
+      <h2 id="h-device" className="row">
+        <ILock width={20} height={20} /> 设备与安全
+      </h2>
+      <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap', gap: 10 }}>
+        <span className="okdot" aria-hidden="true">
+          <ICheck width={14} height={14} />
+        </span>
+        <span className="small">
+          <b>已记住这台设备</b>：登录一次在本机长期有效（至少 {REMEMBER_DAYS} 天），关掉浏览器、重启手机都不用重新登录。手机上建议「添加到主屏幕」，打开更快、也更不容易被系统清理。
+        </span>
+      </div>
+      {avail === false && <p className="xs muted">这台设备或浏览器不支持{label}解锁（需要面容 / 指纹硬件和 https 网址）。</p>}
+      {avail && (
+        <>
+          <label className="switchrow">
+            <span className="grow stack" style={{ gap: 2 }}>
+              <b className="small row" style={{ gap: 6 }}>
+                <IFace width={18} height={18} /> 打开应用时用{label}解锁
+              </b>
+              <span className="xs muted">别人拿到你的手机也看不到账单。离开应用超过 5 分钟回来会重新验证。生物信息只在本机芯片里，不会上传。</span>
+            </span>
+            <input type="checkbox" role="switch" className="switch" checked={on} disabled={busy} onChange={toggle} aria-label={`打开应用时用${label}解锁`} />
+          </label>
+          {on && (
+            <button className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={lockNow}>
+              <ILock width={16} height={16} /> 立即锁定
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
