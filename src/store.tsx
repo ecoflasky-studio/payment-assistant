@@ -9,6 +9,8 @@ import { syncOnce, SyncError, EMPTY_STATE, META_CONFIG, META_STATE, configProble
 import { loadPublicConfig, type PublicConfig } from './cloud/config';
 import { needsRefresh, refreshSession, signOutRemote, type Session } from './cloud/auth';
 import { ensureFresh, requestPersistentStorage } from './cloud/session';
+import { isNative } from './native/platform';
+import { syncReminders } from './native/reminders';
 import { META_BIOMETRIC, RELOCK_MS, type BiometricConfig } from './cloud/biometric';
 import { getAccount, type AccountInfo } from './cloud/api';
 import { entitlement, type Entitlement } from '../shared/plans.mjs';
@@ -56,6 +58,9 @@ export type Route =
   | { name: 'data' }
   | { name: 'account' }
   | { name: 'help' }
+  | { name: 'report'; period?: string }
+  | { name: 'cashflow' }
+  | { name: 'reconcile' }
   | { name: 'flow'; month?: string };
 
 export function parseHash(h: string): Route {
@@ -83,6 +88,12 @@ export function parseHash(h: string): Route {
       return { name: 'account' };
     case 'help':
       return { name: 'help' };
+    case 'report':
+      return { name: 'report', period: /^\d{4}(-\d{2})?$/.test(p[1] ?? '') ? p[1] : undefined };
+    case 'cashflow':
+      return { name: 'cashflow' };
+    case 'reconcile':
+      return { name: 'reconcile' };
     case 'flow':
       return { name: 'flow', month: /^\d{4}-\d{2}$/.test(p[1] ?? '') ? p[1] : undefined };
     default:
@@ -96,6 +107,8 @@ export function routeHash(r: Route): string {
       return `#/bills${r.filter ? '/' + r.filter : ''}`;
     case 'flow':
       return `#/flow${r.month ? '/' + r.month : ''}`;
+    case 'report':
+      return `#/report${r.period ? '/' + r.period : ''}`;
     case 'edit':
       return `#/edit/${encodeURIComponent(r.id)}`;
     case 'copy':
@@ -141,6 +154,8 @@ interface Store {
   signIn(session: Session): Promise<void>;
   signOut(): Promise<void>;
   refreshAccount(): Promise<AccountInfo | null>;
+  /** 用服务端返回的最新账号信息更新（内购核实后） */
+  setAccount(a: AccountInfo): void;
   /** 当前权限（按日期实时计算，离线也有效） */
   ent: Entitlement | null;
   gate: Gate;
@@ -526,6 +541,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [getToken, repo]);
 
+  const setAccount = useCallback(
+    (a: AccountInfo) => {
+      setAuth((x) => ({ ...x, account: a, error: null }));
+      void repo.setMeta(META_ACCOUNT, a);
+    },
+    [repo],
+  );
+
   const signIn = useCallback(
     async (session: Session) => {
       sessionRef.current = session;
@@ -572,6 +595,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const gateRef = useRef(gate);
   gateRef.current = gate;
   const [paywall, setPaywall] = useState<Feature | null>(null);
+  // 原生 App：按账单在手机上排好本地到期提醒（关屏推送是 T1 / T2 功能）
+  useEffect(() => {
+    if (!ready || !isNative()) return;
+    const t = setTimeout(() => {
+      void syncReminders(bills, today, gate.canPush && settings.notificationsEnabled).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [ready, bills, today, gate.canPush, settings.notificationsEnabled]);
+
   const requireFeature = useCallback((f: Feature) => {
     const g = gateRef.current;
     const ok = f === 'edit' ? g.canEdit : f === 'push' ? g.canPush : g.canExport;
@@ -608,6 +640,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [sessionStore, adoptSession],
   );
 
-  const value: Store = { ready, fatal, repo, bills, merchants, accounts, settings, today, route, go, back, reload, saveSettings, guard, storageError, hasSample, clearSample, sync, syncNow, saveSyncConfig, publicConfig, cloud, auth, getToken, signIn, signOut, refreshAccount, ent, gate, requireFeature, paywall, closePaywall, lock, setBiometric, lockNow, unlockApp, replaceSession };
+  const value: Store = { ready, fatal, repo, bills, merchants, accounts, settings, today, route, go, back, reload, saveSettings, guard, storageError, hasSample, clearSample, sync, syncNow, saveSyncConfig, publicConfig, cloud, auth, getToken, signIn, signOut, refreshAccount, setAccount, ent, gate, requireFeature, paywall, closePaywall, lock, setBiometric, lockNow, unlockApp, replaceSession };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -178,7 +178,7 @@ export class IndexedDbRepository implements Repository {
       if (b) {
         const imageId = b.ocrReview?.imageId;
         // 墓碑：保留 id 与时间，清除内容，便于未来同步删除
-        await putLocal(tx, 'bills', { ...b, items: [], notes: '', ocrReview: null, paymentCode: '', deletedAt: nowISO(), updatedAt: nowISO() });
+        await putLocal(tx, 'bills', { ...b, items: [], notes: '', tags: [], ocrReview: null, paymentCode: '', deletedAt: nowISO(), updatedAt: nowISO() });
         if (imageId) await tx.objectStore('images').delete(imageId);
         if (b.ocrReview?.originalImageId) await tx.objectStore('images').delete(b.ocrReview.originalImageId);
         for (const p of b.payments ?? []) if (p.receiptImageId) await tx.objectStore('images').delete(p.receiptImageId);
@@ -331,7 +331,7 @@ export class IndexedDbRepository implements Repository {
         if (b.ocrReview?.imageId) await tx.objectStore('images').delete(b.ocrReview.imageId);
         if (b.ocrReview?.originalImageId) await tx.objectStore('images').delete(b.ocrReview.originalImageId);
         for (const p of b.payments ?? []) if (p.receiptImageId) await tx.objectStore('images').delete(p.receiptImageId);
-        await tx.objectStore('bills').put({ ...b, items: [], notes: '', ocrReview: null, paymentCode: '', deletedAt: t, updatedAt: laterThan(b.updatedAt, t) });
+        await tx.objectStore('bills').put({ ...b, items: [], notes: '', tags: [], ocrReview: null, paymentCode: '', deletedAt: t, updatedAt: laterThan(b.updatedAt, t) });
         n++;
       }
       for (const m of await tx.objectStore('merchants').getAll()) {

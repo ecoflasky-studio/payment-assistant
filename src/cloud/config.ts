@@ -12,6 +12,8 @@ export interface PublicConfig {
   url: string;
   key: string;
   fn: string;
+  /** 网站地址（App 里打开隐私政策、使用条款用） */
+  site?: string;
 }
 
 export function parsePublicConfig(j: unknown): PublicConfig | null {
@@ -20,7 +22,8 @@ export function parsePublicConfig(j: unknown): PublicConfig | null {
   const url = String(o.supabaseUrl ?? '').trim().replace(/\/+$/, '');
   const key = String(o.publishableKey ?? '').trim();
   if (!/^https:\/\/[^/\s]+$/.test(url) || key.length < 20) return null;
-  return { url, key, fn: String(o.functionName ?? '').trim() };
+  const site = String(o.siteUrl ?? '').trim();
+  return { url, key, fn: String(o.functionName ?? '').trim(), ...(/^https:\/\//.test(site) ? { site: site.endsWith('/') ? site : site + '/' } : {}) };
 }
 
 export async function loadPublicConfig(fetchImpl: typeof fetch = fetch): Promise<PublicConfig | null> {

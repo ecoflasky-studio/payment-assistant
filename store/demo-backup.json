@@ -1,0 +1,663 @@
+{
+ "format": "zhangqi-zhushou-backup",
+ "schemaVersion": 1,
+ "exportedAt": "2026-10-27T18:37:31.756Z",
+ "bills": [
+  {
+   "id": "demo-bill-1",
+   "merchantId": "demo-m-1",
+   "merchantNameSnapshot": "Brás 配件批发",
+   "orderNumber": "0231",
+   "billDate": "2026-09-22",
+   "dueDate": "2026-10-24",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": null,
+   "notes": "",
+   "items": [
+    {
+     "id": "s1-0",
+     "quantity": 20,
+     "description": "FN-B12",
+     "unitPriceCents": 750,
+     "subtotalCents": 15000
+    },
+    {
+     "id": "s1-1",
+     "quantity": 10,
+     "description": "CA22-5",
+     "unitPriceCents": 1400,
+     "subtotalCents": 14000
+    }
+   ],
+   "totalCents": 29000,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "tags": [
+    "店铺A"
+   ]
+  },
+  {
+   "id": "demo-bill-2",
+   "merchantId": "demo-m-2",
+   "merchantNameSnapshot": "25 de Março 包装",
+   "orderNumber": "1187",
+   "billDate": "2026-10-07",
+   "dueDate": "2026-10-28",
+   "accountId": "demo-acc-boleto",
+   "accountLabelSnapshot": "Boleto 银行单",
+   "reminderDays": 3,
+   "paidAt": null,
+   "notes": "",
+   "items": [
+    {
+     "id": "s2-0",
+     "quantity": 3,
+     "description": "Caixa 20x20",
+     "unitPriceCents": 4590,
+     "subtotalCents": 13770
+    },
+    {
+     "id": "s2-1",
+     "quantity": 1,
+     "description": "Fita adesiva",
+     "unitPriceCents": 1290,
+     "subtotalCents": 1290
+    }
+   ],
+   "totalCents": 15060,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "tags": [
+    "年货"
+   ]
+  },
+  {
+   "id": "demo-bill-3",
+   "merchantId": "demo-m-1",
+   "merchantNameSnapshot": "Brás 配件批发",
+   "orderNumber": "0264",
+   "billDate": "2026-10-15",
+   "dueDate": "2026-11-01",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": null,
+   "notes": "",
+   "items": [
+    {
+     "id": "s3-0",
+     "quantity": 12,
+     "description": "KH-1695",
+     "unitPriceCents": 1850,
+     "subtotalCents": 22200
+    },
+    {
+     "id": "s3-1",
+     "quantity": 6,
+     "description": "FN-B20",
+     "unitPriceCents": 990,
+     "subtotalCents": 5940
+    },
+    {
+     "id": "s3-2",
+     "quantity": 4,
+     "description": "CA40-1",
+     "unitPriceCents": 2200,
+     "subtotalCents": 8800
+    },
+    {
+     "id": "s3-3",
+     "quantity": 2,
+     "description": "Cabo USB-C",
+     "unitPriceCents": 1450,
+     "subtotalCents": 2900
+    }
+   ],
+   "totalCents": 39840,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "payments": [
+    {
+     "id": "demo-pay-1",
+     "date": "2026-10-25",
+     "cents": 15000,
+     "note": "定金"
+    }
+   ],
+   "tags": []
+  },
+  {
+   "id": "demo-bill-4",
+   "merchantId": "demo-m-3",
+   "merchantNameSnapshot": "Bom Retiro 杯具",
+   "orderNumber": "77",
+   "billDate": "2026-10-23",
+   "dueDate": "2026-11-22",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 5,
+   "paidAt": null,
+   "notes": "",
+   "items": [
+    {
+     "id": "s4-0",
+     "quantity": 48,
+     "description": "Garrafa 750ml",
+     "unitPriceCents": 2150,
+     "subtotalCents": 103200
+    },
+    {
+     "id": "s4-1",
+     "quantity": 24,
+     "description": "Tampa inox",
+     "unitPriceCents": 390,
+     "subtotalCents": 9360
+    }
+   ],
+   "totalCents": 112560,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "tags": []
+  },
+  {
+   "id": "demo-bill-5",
+   "merchantId": "demo-m-2",
+   "merchantNameSnapshot": "25 de Março 包装",
+   "orderNumber": "1150",
+   "billDate": "2026-09-17",
+   "dueDate": "2026-10-17",
+   "accountId": "demo-acc-boleto",
+   "accountLabelSnapshot": "Boleto 银行单",
+   "reminderDays": 3,
+   "paidAt": "2026-10-27T18:37:31.754Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s5-0",
+     "quantity": 2,
+     "description": "Plástico bolha",
+     "unitPriceCents": 8900,
+     "subtotalCents": 17800
+    }
+   ],
+   "totalCents": 17800,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "tags": [
+    "店铺A"
+   ]
+  },
+  {
+   "id": "demo-bill-6",
+   "merchantId": "demo-p-1",
+   "merchantNameSnapshot": "Sabesp",
+   "orderNumber": "",
+   "billDate": "2026-10-21",
+   "dueDate": "2026-10-31",
+   "accountId": "demo-acc-boleto",
+   "accountLabelSnapshot": "Boleto 银行单",
+   "reminderDays": 3,
+   "paidAt": null,
+   "notes": "",
+   "items": [
+    {
+     "id": "s6-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 18790,
+     "subtotalCents": 18790
+    }
+   ],
+   "totalCents": 18790,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "kind": "expense",
+   "category": "water",
+   "recurrence": {
+    "freq": "monthly",
+    "seriesId": "demo-series-6"
+   },
+   "paymentCode": "82600000001-2 87900097000-1 01202609200-3 00000000000-0",
+   "tags": []
+  },
+  {
+   "id": "demo-bill-7",
+   "merchantId": "demo-p-2",
+   "merchantNameSnapshot": "DAS Simples Nacional",
+   "orderNumber": "",
+   "billDate": "2026-10-17",
+   "dueDate": "2026-11-08",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": null,
+   "notes": "",
+   "items": [
+    {
+     "id": "s7-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 76120,
+     "subtotalCents": 76120
+    }
+   ],
+   "totalCents": 76120,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "kind": "expense",
+   "category": "tax",
+   "recurrence": {
+    "freq": "monthly",
+    "seriesId": "demo-series-7"
+   },
+   "tags": [
+    "年货"
+   ]
+  },
+  {
+   "id": "demo-bill-8",
+   "merchantId": "demo-m-1",
+   "merchantNameSnapshot": "Brás 配件批发",
+   "orderNumber": "908",
+   "billDate": "2026-08-26",
+   "dueDate": "2026-09-25",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": "2026-09-23T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s8-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 98400,
+     "subtotalCents": 98400
+    }
+   ],
+   "totalCents": 98400,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "tags": []
+  },
+  {
+   "id": "demo-bill-9",
+   "merchantId": "demo-m-3",
+   "merchantNameSnapshot": "Bom Retiro 杯具",
+   "orderNumber": "909",
+   "billDate": "2026-08-13",
+   "dueDate": "2026-09-12",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": "2026-09-12T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s9-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 154000,
+     "subtotalCents": 154000
+    }
+   ],
+   "totalCents": 154000,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "tags": [
+    "店铺A"
+   ]
+  },
+  {
+   "id": "demo-bill-10",
+   "merchantId": "demo-m-2",
+   "merchantNameSnapshot": "25 de Março 包装",
+   "orderNumber": "910",
+   "billDate": "2026-07-24",
+   "dueDate": "2026-08-23",
+   "accountId": "demo-acc-boleto",
+   "accountLabelSnapshot": "Boleto 银行单",
+   "reminderDays": 3,
+   "paidAt": "2026-08-22T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s10-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 41200,
+     "subtotalCents": 41200
+    }
+   ],
+   "totalCents": 41200,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "tags": []
+  },
+  {
+   "id": "demo-bill-11",
+   "merchantId": "demo-m-1",
+   "merchantNameSnapshot": "Brás 配件批发",
+   "orderNumber": "911",
+   "billDate": "2026-06-29",
+   "dueDate": "2026-07-29",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": "2026-07-27T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s11-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 132500,
+     "subtotalCents": 132500
+    }
+   ],
+   "totalCents": 132500,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "tags": []
+  },
+  {
+   "id": "demo-bill-12",
+   "merchantId": "demo-m-3",
+   "merchantNameSnapshot": "Bom Retiro 杯具",
+   "orderNumber": "912",
+   "billDate": "2026-05-30",
+   "dueDate": "2026-07-01",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": "2026-07-01T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s12-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 87600,
+     "subtotalCents": 87600
+    }
+   ],
+   "totalCents": 87600,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "tags": [
+    "年货"
+   ]
+  },
+  {
+   "id": "demo-bill-13",
+   "merchantId": "demo-p-1",
+   "merchantNameSnapshot": "Sabesp",
+   "orderNumber": "",
+   "billDate": "2026-09-17",
+   "dueDate": "2026-10-01",
+   "accountId": "demo-acc-boleto",
+   "accountLabelSnapshot": "Boleto 银行单",
+   "reminderDays": 3,
+   "paidAt": "2026-09-30T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s13-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 17950,
+     "subtotalCents": 17950
+    }
+   ],
+   "totalCents": 17950,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "kind": "expense",
+   "category": "water",
+   "recurrence": null,
+   "tags": [
+    "店铺A"
+   ]
+  },
+  {
+   "id": "demo-bill-14",
+   "merchantId": "demo-p-1",
+   "merchantNameSnapshot": "Sabesp",
+   "orderNumber": "",
+   "billDate": "2026-08-18",
+   "dueDate": "2026-09-01",
+   "accountId": "demo-acc-boleto",
+   "accountLabelSnapshot": "Boleto 银行单",
+   "reminderDays": 3,
+   "paidAt": "2026-08-30T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s14-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 16820,
+     "subtotalCents": 16820
+    }
+   ],
+   "totalCents": 16820,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "kind": "expense",
+   "category": "water",
+   "recurrence": null,
+   "tags": []
+  },
+  {
+   "id": "demo-bill-15",
+   "merchantId": "demo-p-2",
+   "merchantNameSnapshot": "DAS Simples Nacional",
+   "orderNumber": "",
+   "billDate": "2026-09-12",
+   "dueDate": "2026-09-24",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": "2026-09-24T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s15-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 71300,
+     "subtotalCents": 71300
+    }
+   ],
+   "totalCents": 71300,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "kind": "expense",
+   "category": "tax",
+   "recurrence": null,
+   "tags": []
+  },
+  {
+   "id": "demo-bill-16",
+   "merchantId": "demo-p-2",
+   "merchantNameSnapshot": "DAS Simples Nacional",
+   "orderNumber": "",
+   "billDate": "2026-08-12",
+   "dueDate": "2026-08-24",
+   "accountId": "demo-acc-pix",
+   "accountLabelSnapshot": "PIX 公司主账户",
+   "reminderDays": 3,
+   "paidAt": "2026-08-23T15:00:00.000Z",
+   "notes": "",
+   "items": [
+    {
+     "id": "s16-0",
+     "quantity": 1,
+     "description": "整单金额（未列明细）",
+     "unitPriceCents": 68900,
+     "subtotalCents": 68900
+    }
+   ],
+   "totalCents": 68900,
+   "ocrReview": null,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z",
+   "schemaVersion": 1,
+   "amountMode": "total",
+   "kind": "expense",
+   "category": "tax",
+   "recurrence": null,
+   "tags": []
+  }
+ ],
+ "merchants": [
+  {
+   "id": "demo-m-1",
+   "color": 0,
+   "name": "Brás 配件批发",
+   "aliases": [
+    "BRAS ACESSORIOS"
+   ],
+   "defaultAccountId": "demo-acc-pix",
+   "active": true,
+   "term": {
+    "kind": "days",
+    "days": 30
+   },
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  },
+  {
+   "id": "demo-m-2",
+   "color": 1,
+   "name": "25 de Março 包装",
+   "aliases": [],
+   "defaultAccountId": "demo-acc-boleto",
+   "active": true,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  },
+  {
+   "id": "demo-m-3",
+   "color": 6,
+   "name": "Bom Retiro 杯具",
+   "aliases": [],
+   "defaultAccountId": "demo-acc-pix",
+   "active": true,
+   "term": {
+    "kind": "installments",
+    "days": [
+     30,
+     60,
+     90
+    ]
+   },
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  },
+  {
+   "id": "demo-p-1",
+   "color": 2,
+   "name": "Sabesp",
+   "aliases": [],
+   "defaultAccountId": "demo-acc-boleto",
+   "active": true,
+   "type": "payee",
+   "defaultCategory": "water",
+   "recurring": true,
+   "term": {
+    "kind": "monthDay",
+    "day": 20,
+    "monthOffset": 0
+   },
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  },
+  {
+   "id": "demo-p-2",
+   "color": 3,
+   "name": "DAS Simples Nacional",
+   "aliases": [
+    "DAS"
+   ],
+   "defaultAccountId": "demo-acc-pix",
+   "active": true,
+   "type": "payee",
+   "defaultCategory": "tax",
+   "recurring": true,
+   "term": {
+    "kind": "monthDay",
+    "day": 20,
+    "monthOffset": 1
+   },
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  }
+ ],
+ "accounts": [
+  {
+   "id": "demo-acc-pix",
+   "label": "PIX 公司主账户",
+   "type": "pix",
+   "owner": "Minha Loja",
+   "bank": "Itaú",
+   "optionalPixHint": "12.345.678/0001-90",
+   "active": true,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  },
+  {
+   "id": "demo-acc-boleto",
+   "label": "Boleto 银行单",
+   "type": "boleto",
+   "owner": "Minha Loja",
+   "bank": "Bradesco",
+   "optionalPixHint": "",
+   "active": true,
+   "createdAt": "2026-10-27T18:37:31.754Z",
+   "updatedAt": "2026-10-27T18:37:31.754Z"
+  }
+ ]
+}

@@ -195,14 +195,14 @@ export function canvasToBlob(c: HTMLCanvasElement, type = 'image/jpeg', quality 
 }
 
 /** 生成用于识别/存储的图片：长边上限，JPEG */
-export async function exportForRecognition(c: HTMLCanvasElement, maxSide = 2000): Promise<Blob> {
+export async function exportForRecognition(c: HTMLCanvasElement, maxSide = 2000, quality = 0.92): Promise<Blob> {
   const s = Math.min(1, maxSide / Math.max(c.width, c.height));
-  if (s === 1) return canvasToBlob(c, 'image/jpeg', 0.92);
+  if (s === 1) return canvasToBlob(c, 'image/jpeg', quality);
   const t = document.createElement('canvas');
   t.width = Math.round(c.width * s);
   t.height = Math.round(c.height * s);
   const ctx = t.getContext('2d')!;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(c, 0, 0, t.width, t.height);
-  return canvasToBlob(t, 'image/jpeg', 0.92);
+  return canvasToBlob(t, 'image/jpeg', quality);
 }

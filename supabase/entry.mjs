@@ -6,7 +6,9 @@
  *   POST /            AI 识别（登录用户按套餐扣额度）
  *   GET  /health      状态
  *   GET  /me          账号、套餐、本月用量
- *   POST /billing/checkout | /billing/cancel | /billing/webhook   Mercado Pago 订阅
+ *   POST /billing/checkout | /billing/cancel | /billing/webhook | /billing/once   Mercado Pago 订阅、PIX 年付、AI 加量包
+ *   POST /iap/verify | /iap/apple | /iap/google   App Store / Google Play 内购校验与服务器通知
+ *   POST /account/delete   删除账号
  *   GET  /push/key    POST /push/subscribe | /push/unsubscribe | /push/test | /push/cron   关屏推送
  * 函数设置里要关闭「Verify JWT」：认证由本函数自己做（publishable key 不是 JWT）。
  */
@@ -37,7 +39,7 @@ export function supabaseEnv(all) {
   return { ...all, ACCESS_TOKEN: token, ALLOWED_ORIGINS: get('ALLOWED_ORIGINS') || '*' };
 }
 
-const ROUTES = ['/billing/checkout', '/billing/cancel', '/billing/webhook', '/push/key', '/push/subscribe', '/push/unsubscribe', '/push/test', '/push/cron', '/me'];
+const ROUTES = ['/billing/checkout', '/billing/cancel', '/billing/webhook', '/billing/once', '/iap/verify', '/iap/apple', '/iap/google', '/account/delete', '/push/key', '/push/subscribe', '/push/unsubscribe', '/push/test', '/push/cron', '/me'];
 
 function cors(req, env) {
   const origin = req.headers.get('origin');

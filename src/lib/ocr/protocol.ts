@@ -238,6 +238,8 @@ export interface EditorState {
   dueDateText: string;
   reminderDays: string;
   notes: string;
+  /** 自定义标签 */
+  tags?: string[];
   rows: RowState[];
   dueBeforeConfirmed: boolean;
   /** 金额模式：逐行明细 / 仅填总金额 */
@@ -524,6 +526,28 @@ export function saveGate(s: EditorState, issues: Issue[], acknowledged: Set<stri
   return { canSave: reasons.length === 0, reasons };
 }
 
+/**
+ * 算术互证：模型分别读出的 数量、单价、小计 三个数正好对上，说明这几个数字读对了，
+ * 这一行不必再逐项核对（模型自己说「按小计辨认」的行、置信度很低的行除外）。
+ * 没有逐行小计时，明细合计与图片总额完全一致也算互证。
+ */
+export function corroborateByArithmetic(rows: RowState[], printedTotalRaw: string | null | undefined, warnings: string[] = []): RowState[] {
+  const guessed = new Set<number>();
+  for (const w of warnings) for (const m of w.matchAll(/第\s*(\d+)\s*行[^，。；]*?(按小计|辨认|拿不准|看不清)/g)) guessed.add(Number(m[1]));
+  const parsed = rows.map(parseRow);
+  const out = rows.map((r, i) => {
+    // 数量是 1 时 单价=小计 不是独立证据（同一个字形会被读成同一个数），只能靠总额互证
+    if (r.corroborated || guessed.has(i + 1) || (r.confidence ?? 1) < 0.5 || !parsed[i].valid || !r.printedSubtotalRaw || parsed[i].quantity === 1) return r;
+    const ps = parseBRL(r.printedSubtotalRaw, { groupingKnown: true });
+    return ps.cents !== null && ps.cents === parsed[i].subtotalCents ? { ...r, corroborated: '数量×单价与图片上的小计一致' } : r;
+  });
+  const total = printedTotalRaw ? parseBRL(printedTotalRaw, { groupingKnown: true }).cents : null;
+  if (total !== null && rows.length && parsed.every((p) => p.valid) && sumCents(parsed.map((p) => p.subtotalCents!)) === total) {
+    return out.map((r, i) => (r.corroborated || guessed.has(i + 1) || (r.confidence ?? 1) < 0.6 ? r : { ...r, corroborated: '明细合计与图片上的总额一致' }));
+  }
+  return out;
+}
+
 /** 把模型输出转成编辑状态（不做任何"修正"） */
 export function draftFromModel(m: ModelOutput, provider: string, base: Pick<EditorState, 'dueDateText' | 'reminderDays' | 'accountId' | 'accountLabel' | 'merchantId' | 'merchantName'>, keyGen: () => string, rawText?: string | null): EditorState {
   const qtyStr = (q: number | null) => (q === null ? '' : String(q).replace('.', ','));
@@ -533,13 +557,14 @@ export function draftFromModel(m: ModelOutput, provider: string, base: Pick<Edit
     const [y, mo, d] = m.billDate.iso.split('-');
     billText = `${d}/${mo}/${y}`;
   } else if (m.billDate.raw) billText = m.billDate.raw;
+  const printedTotal = m.printedTotalRaw ?? (m.printedTotalCents !== null ? formatBRL(m.printedTotalCents, false) : null);
   return {
     ...base,
     orderNumber: m.orderNumber.value ?? '',
     billDateText: billText,
     notes: '',
     dueBeforeConfirmed: false,
-    rows: m.items.map((it) => {
+    rows: corroborateByArithmetic(m.items.map((it) => {
       const r: RowState = {
         key: keyGen(),
         qtyText: qtyStr(it.quantity),
@@ -552,7 +577,7 @@ export function draftFromModel(m: ModelOutput, provider: string, base: Pick<Edit
       };
       r.orig = { qty: r.qtyText, desc: r.desc, unit: r.unitText };
       return r;
-    }),
+    }), printedTotal, m.warnings),
     ocr: {
       provider,
       merchantRaw: m.merchant.value,
@@ -562,7 +587,7 @@ export function draftFromModel(m: ModelOutput, provider: string, base: Pick<Edit
       orderRaw: m.orderNumber.value,
       billDateRaw: m.billDate.raw,
       billDateConfidence: m.billDate.confidence,
-      printedTotalRaw: m.printedTotalRaw ?? (m.printedTotalCents !== null ? formatBRL(m.printedTotalCents, false) : null),
+      printedTotalRaw: printedTotal,
       unparsedLines: m.unparsedLines,
       modelWarnings: m.warnings,
       rawText: rawText ?? null,

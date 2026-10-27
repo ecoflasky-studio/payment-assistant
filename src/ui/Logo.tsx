@@ -1,11 +1,19 @@
-/** 账期助手图标（票据 + 提醒红点） */
+/** 账期助手图标（紫色渐变 + 白色票据 + 黄色对勾），与 App 图标一致 */
 export function Logo({ size = 28 }: { size?: number }) {
+  const id = `lg${size}`;
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" rx="8" fill="#ffffff" fillOpacity="0.14" />
-      <path d="M9 8h14v17l-2.3-1.5L18.3 25 16 23.5 13.7 25l-2.4-1.5L9 25z" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M12.5 13h7M12.5 17h4.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="23" cy="9" r="3.2" fill="#ff5d73" />
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#6a4bff" />
+          <stop offset="1" stopColor="#9a5cf6" />
+        </linearGradient>
+      </defs>
+      <rect x="1" y="1" width="30" height="30" rx="9" fill={`url(#${id})`} />
+      <path d="M9.4 7.2h13.2a1.1 1.1 0 0 1 1.1 1.1v16.1l-2-1.3-2.1 1.3-2-1.3-2.1 1.3-2-1.3-2.1 1.3-2-1.3V8.3a1.1 1.1 0 0 1 1-1.1z" fill="#fff" />
+      <rect x="11.1" y="11" width="7.8" height="1.6" rx=".8" fill="#5b3df5" />
+      <rect x="11.1" y="14.2" width="5.3" height="1.6" rx=".8" fill="#c9bfff" />
+      <circle cx="23.2" cy="8.2" r="3.6" fill="#ffd94d" stroke="#fff" strokeWidth="1" />
     </svg>
   );
 }

@@ -8,6 +8,7 @@ import { useActions } from '../actions';
 import { ICal, ISearch, IList, IPlus, ICheckSquare, ICheck, IX, IFilter } from '../ui/icons';
 import { MonthGrid, MonthNav } from '../ui/Calendar';
 import { dailyTotals, monthSummary } from '../lib/monthly';
+import { billSlot } from '../lib/colors';
 import { billTitle, EXPENSE_CATEGORIES, categoryLabel } from '../lib/expense';
 import { amountOf, flatGroup, groupByMerchant, groupByWeek, groupPaid, groupUnpaidCards } from '../lib/groups';
 import { GroupedBills, useGroupMode } from '../ui/BillList';
@@ -53,7 +54,7 @@ const safeDecode = (s: string) => {
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
 export function Bills({ initialFilter }: { initialFilter?: string }) {
-  const { bills, today, settings, go } = useStore();
+  const { bills, today, settings, go, merchants } = useStore();
   const { exportICS, markManyPaid, postponeMany } = useActions();
   const [postponeOpen, setPostponeOpen] = useState(false);
   const monthParam = initialFilter?.startsWith('month-') ? initialFilter.slice(6) : null;
@@ -84,8 +85,12 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
       if (kind === 'supplier' && b.kind === 'expense') return false;
       if (kind === 'expense' && b.kind !== 'expense') return false;
       if (cat && b.category !== cat) return false;
-      if (nq) {
-        const hay = norm([billTitle(b), b.orderNumber, b.accountLabelSnapshot, b.notes, b.paymentCode ?? '', ...b.items.map((i) => i.description)].join(' '));
+      if (nq.startsWith('#')) {
+        // #标签：精确匹配标签
+        const t = nq.slice(1).trim();
+        if (t && !(b.tags ?? []).some((x) => norm(x) === t)) return false;
+      } else if (nq) {
+        const hay = norm([billTitle(b), b.orderNumber, b.accountLabelSnapshot, b.notes, b.paymentCode ?? '', ...(b.tags ?? []).map((x) => `#${x}`), ...b.items.map((i) => i.description)].join(' '));
         if (!hay.includes(nq)) return false;
       }
       return true;
@@ -150,7 +155,7 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
   const flat = groups.length === 1 && groups[0].key === 'flat';
 
   const total = list.reduce((s, b) => s + amountOf(b), 0);
-  const totals = useMemo(() => dailyTotals(base), [base]);
+  const totals = useMemo(() => dailyTotals(base, { slotOf: (b) => billSlot(b, merchants, billTitle(b)) }), [base, merchants]);
   const ms = useMemo(() => monthSummary(base, month, today), [base, month, today]);
 
   const selected = list.filter((b) => sel.has(b.id));
@@ -258,7 +263,7 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
               <div style={{ fontWeight: 800, fontSize: '1.2rem', color: ms.overdueCount ? 'var(--overdue)' : undefined }}>{formatBRL(ms.unpaidCents)}</div>
             </div>
           </div>
-          <MonthGrid month={month} today={today} selected={day} totals={totals} size="lg" onPick={(d) => setDay(day === d ? null : d)} />
+          <MonthGrid month={month} today={today} selected={day} totals={totals} size="lg" dueSoonDays={settings.dueSoonDays} onPick={(d) => setDay(day === d ? null : d)} />
           <p className="xs muted">
             {day ? (
               <>

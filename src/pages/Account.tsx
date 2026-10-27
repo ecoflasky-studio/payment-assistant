@@ -8,6 +8,10 @@ import { formatBRL } from '../lib/money';
 import { IBell, ICloud, IShield, ICheck, IFace, ILock, IHelp } from '../ui/icons';
 import { Logo } from '../ui/Logo';
 import { HelpContent } from './Help';
+import { Pricing, PackCard, sourceLabel } from './Billing';
+import { isNative, platform } from '../native/platform';
+import { manageSubscriptions } from '../native/iap';
+import { deleteAccountRemote } from '../cloud/api';
 import { biometricAvailable, biometricLabel, enrollBiometric, BiometricError } from '../cloud/biometric';
 import { REMEMBER_DAYS } from '../cloud/session';
 
@@ -197,81 +201,6 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
 
 /* ---------------- 套餐 ---------------- */
 
-const FEATURE_ROWS: { label: string; t1: boolean | string; t2: boolean | string }[] = [
-  { label: '账期、缴费、对账、流水、提醒、多设备同步', t1: true, t2: true },
-  { label: 'PDF 直读、本机 OCR、日历提醒', t1: true, t2: true },
-  { label: '关屏推送提醒', t1: true, t2: true },
-  { label: 'AI 识别（每月）', t1: `${PLANS.t1.ai} 次`, t2: `${PLANS.t2.ai} 次` },
-  { label: '导出记录（CSV / Excel）', t1: false, t2: true },
-];
-
-export function Pricing() {
-  const { cloud, getToken, ent, auth } = useStore();
-  const { busy, run } = useRunner();
-  const [period, setPeriod] = useState<Period>('year');
-  const billingOn = !!auth.account?.billing;
-  const save = (p: PlanId) => Math.round((1 - PLANS[p].year / (PLANS[p].month * 12)) * 100);
-
-  const subscribe = (plan: PlanId) =>
-    run(`跳转付款 ${plan}`, async () => {
-      if (!cloud) throw new ApiError(0, '没有连接服务');
-      const token = await getToken();
-      if (!token) throw new ApiError(401, '请先登录');
-      const { url } = await startCheckout(cloud, token, plan, period, `${location.origin}${location.pathname}?mp=1`);
-      location.href = url;
-    });
-
-  return (
-    <div className="stack">
-      <div className="seg seg-sm" role="group" aria-label="付款周期" style={{ alignSelf: 'center' }}>
-        <button aria-pressed={period === 'month'} onClick={() => setPeriod('month')}>
-          月付
-        </button>
-        <button aria-pressed={period === 'year'} onClick={() => setPeriod('year')}>
-          年付（省最多 {save('t2')}%）
-        </button>
-      </div>
-      <div className="plans">
-        {(['t1', 't2'] as PlanId[]).map((p) => {
-          const current = ent?.plan === p;
-          return (
-            <div key={p} className={`plan${p === 't2' ? ' hot' : ''}${current ? ' current' : ''}`}>
-              <div className="row between">
-                <b className="plan-name">{PLANS[p].name}</b>
-                {p === 't2' && <span className="pill brand">最划算</span>}
-                {current && <span className="pill paid">当前</span>}
-              </div>
-              <div className="plan-price">
-                <b className="num">{brl(PLANS[p][period])}</b>
-                <span className="small muted">/{period === 'year' ? '年' : '月'}</span>
-              </div>
-              {period === 'year' && <span className="xs muted">相当于 {brl(PLANS[p].year / 12)}/月，省 {save(p)}%</span>}
-              <ul className="plan-feats small">
-                {FEATURE_ROWS.map((f) => {
-                  const v = f[p];
-                  return (
-                    <li key={f.label} className={v ? '' : 'off'}>
-                      {v ? <ICheck width={14} height={14} /> : <span aria-hidden="true">—</span>} {f.label}
-                      {typeof v === 'string' ? <b> {v}</b> : null}
-                    </li>
-                  );
-                })}
-              </ul>
-              <button className={`btn ${p === 't2' ? 'btn-primary' : ''}`} disabled={!!busy || !billingOn || (current && ent?.period === period && auth.account?.subscription?.status === 'authorized')} onClick={() => subscribe(p)}>
-                {busy === `跳转付款 ${p}` ? <span className="spin" /> : null}
-                {current ? (ent?.period === period ? '已订阅' : `改为${period === 'year' ? '年付' : '月付'}`) : ent?.plan === 't1' && p === 't2' ? '升级到 T2' : `订阅 ${PLANS[p].name}`}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      <span className="xs muted" style={{ textAlign: 'center' }}>
-        {billingOn ? '通过 Mercado Pago 付款，自动续费，可以随时取消；取消后已付的期间照常可用。' : '订阅收款暂未开放，请联系管理员。'}
-      </span>
-    </div>
-  );
-}
-
 const FEATURE_TEXT: Record<Feature, { title: string; body: string }> = {
   edit: { title: '试用已结束', body: '账单仍然可以查看、标记已付。新增、编辑、识别单据需要订阅 T1 或 T2。数据都还在，订阅后立即恢复。' },
   push: { title: '关屏推送是 T1 / T2 的功能', body: '订阅后，每天 09:00 把要付和已逾期的账单推送到手机，不用打开应用。' },
@@ -421,7 +350,8 @@ export function AccountPage() {
           {(plan === 't1' || plan === 't2') && (
             <>
               {PLAN_LABEL[plan]}（{ent?.period === 'year' ? '年付' : '月付'}）有效期至 <b>{fmtDate(ent?.planUntil ?? null)}</b>
-              {sub === 'authorized' ? '，到期自动续费。' : sub === 'cancelled' ? '，已取消自动续费。' : '。'}
+              {acc?.autoRenew ? '，到期自动续费。' : acc?.source === 'pix' ? '（PIX 年付，不自动续费）。' : sub === 'cancelled' || acc?.autoRenew === false ? '，已取消自动续费。' : '。'}
+              {acc?.source && (!isNative() || acc.source === (platform() === 'ios' ? 'apple' : 'google')) && <span className="xs muted"> 来自{sourceLabel(acc.source)}。</span>}
             </>
           )}
           {plan === 'owner' && <>管理员：全部功能、不限次数。</>}
@@ -437,14 +367,25 @@ export function AccountPage() {
                 <div style={{ width: `${pct}%` }} />
               </div>
             )}
-            <span className="xs muted">{usage.period === 'trial' ? '试用期共 ' + TRIAL.ai + ' 次。' : '每月 1 日重置。'}识别失败不计次数；PDF 直接读文字、本机 OCR 都不占次数。</span>
+            {!!usage.bonus && (
+              <div className="row between small">
+                <span>AI 加量包剩余</span>
+                <b className="num">{usage.bonus} 次</b>
+              </div>
+            )}
+            <span className="xs muted">{usage.period === 'trial' ? '试用期共 ' + TRIAL.ai + ' 次。' : '每月 1 日重置。'}用完后自动用加量包。识别失败不计次数；PDF 直接读文字、本机 OCR 都不占次数。</span>
           </div>
         )}
         <div className="row">
           <button className="btn btn-sm" disabled={!!busy} onClick={() => run('刷新…', refreshAccount)}>
             刷新
           </button>
-          {sub === 'authorized' && (
+          {isNative() && acc?.autoRenew && acc.source === (platform() === 'ios' ? 'apple' : 'google') && (
+            <button className="btn btn-sm btn-ghost" onClick={() => void manageSubscriptions().catch(() => {})}>
+              管理订阅
+            </button>
+          )}
+          {!isNative() && sub === 'authorized' && (acc?.source ?? 'mp') === 'mp' && (
             <button
               className="btn btn-sm btn-ghost"
               disabled={!!busy}
@@ -489,10 +430,60 @@ export function AccountPage() {
           <Pricing />
         </section>
       )}
+      <PackCard />
 
       <DeviceSection />
       <PushSection />
+      <DeleteAccount />
     </>
+  );
+}
+
+/** 删除账号（App Store / Google Play 要求 App 内能删除） */
+function DeleteAccount() {
+  const { cloud, auth, getToken, signOut, repo, reload } = useStore();
+  const fb = useFeedback();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const { busy, run } = useRunner();
+  const email = auth.session?.user.email ?? '';
+  const acc = auth.account;
+  const storeSub = acc?.subs?.some((x) => (x.source === 'apple' || x.source === 'google') && x.autoRenew);
+  const doDelete = () =>
+    run('删除中…', async () => {
+      if (!cloud) throw new ApiError(0, '没有连接服务');
+      const token = await getToken();
+      if (!token) throw new ApiError(401, '请重新登录');
+      const r = await deleteAccountRemote(cloud, token, text.trim().toLowerCase());
+      await signOut();
+      await repo.clearAll();
+      await reload();
+      setOpen(false);
+      fb.toast(r.cancelInStore.length ? `账号已删除。别忘了到 ${r.cancelInStore.map((x) => (x === 'apple' ? 'App Store' : 'Google Play')).join('、')} 取消自动续订` : '账号和数据已全部删除');
+    });
+  return (
+    <section className="card stack" aria-labelledby="h-del">
+      <details className="more" onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary id="h-del">删除账号</summary>
+        {open && (
+          <div className="stack" style={{ marginTop: 8 }}>
+            <p className="small">
+              将永久删除这个账号、云端的全部账单和识别记录，以及这台设备上的数据，无法恢复。需要的话先到「数据管理」导出备份。
+              {storeSub && <b> 在 App Store / Google Play 买的订阅不会自动停止扣费，请到商店的订阅管理里取消。</b>}
+              {acc?.source === 'mp' && acc.autoRenew && ' 网页的自动续费会一起取消。'}
+            </p>
+            <div className="field">
+              <label htmlFor="del-confirm">输入你的邮箱 {email} 确认</label>
+              <input id="del-confirm" className="input" type="email" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} placeholder={email} />
+            </div>
+            <button className="btn btn-danger" style={{ alignSelf: 'flex-start' }} disabled={!!busy || text.trim().toLowerCase() !== email.toLowerCase()} onClick={doDelete}>
+              {busy ? <span className="spin" /> : null}
+              永久删除账号
+            </button>
+          </div>
+        )}
+      </details>
+    </section>
   );
 }
 
@@ -651,7 +642,7 @@ export function Welcome() {
                 </span>
               </div>
             ))}
-            <p className="xs muted">经 Mercado Pago 付款，可随时取消自动续费。没订阅时账单仍可查看和备份。</p>
+            <p className="xs muted">{isNative() ? `通过 ${platform() === 'ios' ? 'App Store' : 'Google Play'} 订阅，可随时取消。` : '网页可用信用卡自动续费或 PIX 一次付清一年；手机 App 里也能订阅。'}没订阅时账单仍可查看和备份。</p>
           </div>
         </Modal>
       )}

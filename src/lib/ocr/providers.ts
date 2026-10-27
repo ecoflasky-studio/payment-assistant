@@ -257,38 +257,62 @@ export async function recognize(provider: ProviderId, image: Blob, opts: { endpo
       const bearer = opts.accessToken ?? opts.supa.bearer;
       headers = { apikey: opts.supa.key.trim(), ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) };
     }
-    opts.onProgress?.('上传图片，AI 正在读单据…');
     const body = JSON.stringify({ mediaType: image.type || 'image/jpeg', imageBase64: await blobToBase64(image), ...(opts.hints ? { hints: opts.hints.slice(0, HINTS_MAX) } : {}) });
-    let r: Response;
-    try {
-      r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body, signal: opts.signal });
-    } catch (e: any) {
-      if (e?.name === 'AbortError') throw new RecognizeError('cancelled', '已取消');
-      throw new RecognizeError('network', '网络错误，连接不到识别服务');
-    }
-    let text: string;
-    try {
-      text = await r.text();
-    } catch (e: any) {
-      if (e?.name === 'AbortError' || opts.signal.aborted) throw new RecognizeError('cancelled', '已取消');
-      throw new RecognizeError('network', '网络中断，没有收到识别结果');
-    }
-    if (!r.ok) {
-      let msg = `识别服务出错（HTTP ${r.status}）`;
+    const started = Date.now();
+    let phase = '上传图片';
+    const tick = () => {
+      const sec = Math.round((Date.now() - started) / 1000);
+      opts.onProgress?.(`${phase}… ${sec} 秒${sec > 25 ? '（手写单据较复杂，AI 会自动复核算术）' : ''}`);
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    const once = async (): Promise<any> => {
+      let r: Response;
       try {
-        msg = JSON.parse(text).error ?? msg;
-      } catch {}
-      if (r.status === 546) msg = '识别函数资源不足（图片可能太大），请裁小一点再试';
-      if (r.status === 402) throw new RecognizeError('quota', msg);
-      if (r.status === 401 && /登录/.test(msg)) throw new RecognizeError('login', msg);
-      if (r.status === 401 && provider === 'supabase' && /JWT|authorization/i.test(text)) msg = '识别函数开启了 JWT 校验：请在 Supabase 函数设置里关闭「Verify JWT」';
-      throw new RecognizeError(r.status === 504 ? 'timeout' : r.status === 429 ? 'rate_limited' : 'server', msg);
-    }
+        r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body, signal: opts.signal });
+      } catch (e: any) {
+        if (e?.name === 'AbortError') throw new RecognizeError('cancelled', '已取消');
+        throw new RecognizeError('network', '网络错误，连接不到识别服务');
+      }
+      let text: string;
+      try {
+        text = await r.text();
+      } catch (e: any) {
+        if (e?.name === 'AbortError' || opts.signal.aborted) throw new RecognizeError('cancelled', '已取消');
+        throw new RecognizeError('network', '网络中断，没有收到识别结果');
+      }
+      if (!r.ok) {
+        let msg = `识别服务出错（HTTP ${r.status}）`;
+        try {
+          msg = JSON.parse(text).error ?? msg;
+        } catch {}
+        if (r.status === 546) msg = '识别函数资源不足（图片可能太大），请裁小一点再试';
+        if (r.status === 402) throw new RecognizeError('quota', msg);
+        if (r.status === 401 && /登录/.test(msg)) throw new RecognizeError('login', msg);
+        if (r.status === 401 && provider === 'supabase' && /JWT|authorization/i.test(text)) msg = '识别函数开启了 JWT 校验：请在 Supabase 函数设置里关闭「Verify JWT」';
+        throw new RecognizeError(r.status === 504 ? 'timeout' : r.status === 429 ? 'rate_limited' : r.status === 503 || r.status === 502 ? 'busy' : 'server', msg);
+      }
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new RecognizeError('protocol', '识别服务返回的不是 JSON');
+      }
+    };
     let payload: any;
     try {
-      payload = JSON.parse(text);
-    } catch {
-      throw new RecognizeError('protocol', '识别服务返回的不是 JSON');
+      setTimeout(() => (phase = 'AI 正在读单据'), 1500);
+      try {
+        payload = await once();
+      } catch (e) {
+        // 模型繁忙 / 网络抖动 / 结果格式不对：自动再试一次（失败的那次不扣次数）
+        if (!(e instanceof RecognizeError) || !['busy', 'network', 'protocol'].includes(e.code) || opts.signal.aborted) throw e;
+        phase = '第一次没成功，自动重试';
+        await new Promise((ok) => setTimeout(ok, 1200));
+        phase = 'AI 正在重新读单据';
+        payload = await once();
+      }
+    } finally {
+      clearInterval(timer);
     }
     return { output: normalizeModelOutput(payload.result ?? payload), rawText: payload.rawText ?? null, provider };
   }

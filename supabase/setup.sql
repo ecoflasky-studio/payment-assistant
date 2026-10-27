@@ -369,3 +369,127 @@ grant execute on function public.zq_usage_refund(uuid, text) to service_role;
 grant execute on function public.zq_push_bills(uuid) to service_role;
 grant all on public.zq_profiles, public.zq_usage, public.zq_push_subs, public.zq_push_log, public.zq_kv to service_role;
 
+
+-- ============================================================ 第十二轮：多来源订阅、AI 加量包、App Store / Google Play
+-- 每个来源一条订阅记录（Mercado Pago 自动续费 / PIX 年付 / App Store / Google Play），账号权限取其中最好的一条
+create table if not exists public.zq_subs (
+  id          text primary key,              -- 来源:外部ID，例如 apple:2000000123、google:<purchaseToken>、mp:<preapproval>、pix:<payment>
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  source      text not null,                 -- mp | pix | apple | google
+  plan        text not null,                 -- t1 | t2
+  period      text not null,                 -- month | year
+  until       timestamptz,
+  status      text not null default 'active',-- active | grace | canceled | expired | revoked | pending
+  auto_renew  boolean not null default false,
+  product     text,
+  updated_at  timestamptz not null default now()
+);
+create index if not exists zq_subs_user on public.zq_subs (user_id);
+-- 一次性购买（AI 加量包等）：主键防止重复入账
+create table if not exists public.zq_purchases (
+  id         text primary key,               -- 来源:交易ID
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  kind       text not null,                  -- ai_pack | pix_year
+  qty        int not null default 0,
+  amount     numeric,
+  refunded   boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists zq_purchases_user on public.zq_purchases (user_id);
+alter table public.zq_profiles add column if not exists ai_bonus int not null default 0;
+alter table public.zq_profiles add column if not exists plan_source text;
+alter table public.zq_profiles add column if not exists auto_renew boolean;
+
+alter table public.zq_subs      enable row level security;
+alter table public.zq_purchases enable row level security;
+revoke all on public.zq_subs, public.zq_purchases from anon, authenticated;
+grant all on public.zq_subs, public.zq_purchases to service_role;
+
+-- 入账一次性购买：第一次返回 true 并增加 AI 加量次数；重复通知返回 false
+create or replace function public.zq_credit_purchase(p_id text, p_user uuid, p_kind text, p_qty int, p_amount numeric)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n int;
+begin
+  insert into zq_purchases(id, user_id, kind, qty, amount) values (p_id, p_user, p_kind, p_qty, p_amount) on conflict (id) do nothing;
+  get diagnostics n = row_count;
+  if n = 0 then
+    return false;
+  end if;
+  if p_kind = 'ai_pack' and p_qty > 0 then
+    update zq_profiles set ai_bonus = ai_bonus + p_qty, updated_at = now() where user_id = p_user;
+  end if;
+  return true;
+end;
+$$;
+
+-- 退款：扣回还没用掉的加量次数（不扣成负数）
+create or replace function public.zq_refund_purchase(p_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+begin
+  update zq_purchases set refunded = true where id = p_id and not refunded returning * into r;
+  if r is null then
+    return false;
+  end if;
+  if r.kind = 'ai_pack' then
+    update zq_profiles set ai_bonus = greatest(ai_bonus - r.qty, 0), updated_at = now() where user_id = r.user_id;
+  end if;
+  return true;
+end;
+$$;
+
+-- 月度额度用完后，从加量包里扣 1 次；没有了返回 -1
+create or replace function public.zq_bonus_take(p_user uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n int;
+begin
+  update zq_profiles set ai_bonus = ai_bonus - 1 where user_id = p_user and ai_bonus > 0 returning ai_bonus into n;
+  return coalesce(n, -1);
+end;
+$$;
+
+create or replace function public.zq_bonus_refund(p_user uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update zq_profiles set ai_bonus = ai_bonus + 1 where user_id = p_user;
+$$;
+
+revoke all on function public.zq_credit_purchase(text, uuid, text, int, numeric) from public, anon, authenticated;
+revoke all on function public.zq_refund_purchase(text) from public, anon, authenticated;
+revoke all on function public.zq_bonus_take(uuid) from public, anon, authenticated;
+revoke all on function public.zq_bonus_refund(uuid) from public, anon, authenticated;
+grant execute on function public.zq_credit_purchase(text, uuid, text, int, numeric) to service_role;
+grant execute on function public.zq_refund_purchase(text) to service_role;
+grant execute on function public.zq_bonus_take(uuid) to service_role;
+grant execute on function public.zq_bonus_refund(uuid) to service_role;
+
+-- 删除账号：账单与同步空间（auth.users 删除后其余表级联删除）
+create or replace function public.zq_delete_space(p_user uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from zq_records where space = 'u:' || p_user::text;
+  delete from zq_spaces where space = 'u:' || p_user::text;
+$$;
+revoke all on function public.zq_delete_space(uuid) from public, anon, authenticated;
+grant execute on function public.zq_delete_space(uuid) to service_role;

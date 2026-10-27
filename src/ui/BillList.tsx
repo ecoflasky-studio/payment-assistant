@@ -1,3 +1,4 @@
+import { tap } from '../native/platform';
 import { useState } from 'react';
 
 export type GroupMode = 'date' | 'merchant';
@@ -82,9 +83,7 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
   const title = billTitle(bill);
   const [leaving, setLeaving] = useState(false);
   const pay = () => {
-    try {
-      navigator.vibrate?.(15);
-    } catch {}
+    void tap();
     setLeaving(true);
     setTimeout(() => {
       void markPaid(bill).finally(() => setLeaving(false));
@@ -98,7 +97,7 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
   const main = sameTitle ? when : title;
   const sub = (sameTitle ? [`开单 ${shortDate(bill.billDate)}`, order] : [bill.paidAt ? paidText : `${shortDate(bill.dueDate)} · ${when}`, order]).filter(Boolean);
   return (
-    <div className={`brow st-${st}${selected ? ' selected' : ''}${leaving ? ' leaving' : ''}`}>
+    <div className={`brow st-${st} mc-${colorSlot(merchantOf(bill), merchantOf(bill)?.id ?? bill.merchantId ?? title)}${selected ? ' selected' : ''}${leaving ? ' leaving' : ''}`}>
       {selectable && <input type="checkbox" className="brow-check" checked={!!selected} onChange={onToggle} aria-label={`选择 ${title}`} />}
       <button type="button" className="brow-main" onClick={() => (selectable ? onToggle?.() : onOpen(bill))} aria-label={`${title}，${formatBRL(amount ?? amountOf(bill))}${isPartial(bill) ? `（还差，账单共 ${formatBRL(bill.totalCents)}）` : ''}，${STATUS_LABEL[st]}，到期 ${formatBR(bill.dueDate)}`}>
         {sameTitle ? (

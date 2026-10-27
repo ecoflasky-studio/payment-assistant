@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { addMonths, endOfMonth, shiftMonth, monthGrid, monthLabel } from '../src/lib/dates';
-import { monthSummary, dailyTotals, compactBRL } from '../src/lib/monthly';
+import { monthSummary, dailyTotals, dayUrgency, compactBRL } from '../src/lib/monthly';
 import { computeIssues, saveGate, stateTotal, itemsForSave, draftFromModel, normalizeModelOutput, TOTAL_ONLY_DESC, type EditorState } from '../src/lib/ocr/protocol';
 import { recompute, validateBill } from '../src/lib/bill';
 import fixture from './fixtures/ticket-258.model.json';
@@ -39,7 +39,18 @@ describe('本月账期总额', () => {
   });
   it('每日汇总可排除当前编辑的账单', () => {
     const d = dailyTotals([...bills, mk('f', '2026-09-05', 1, true)], { excludeId: 'a' });
-    expect(d.get('2026-09-05')).toEqual({ cents: 1, unpaidCents: 0, count: 1, unpaidCount: 0 });
+    expect(d.get('2026-09-05')).toMatchObject({ cents: 1, unpaidCents: 0, count: 1, unpaidCount: 0 });
+  });
+  it('月历：金额按商家颜色拆开（未付在前），角标按付款时限', () => {
+    const list = [{ ...mk('x', '2026-09-20', 500), merchantId: 'A' }, { ...mk('y', '2026-09-20', 900), merchantId: 'B' }, { ...mk('z', '2026-09-20', 300, true), merchantId: 'A' }, { ...mk('w', '2026-09-20', 200), merchantId: 'A' }] as Bill[];
+    const d = dailyTotals(list, { slotOf: (b) => (b.merchantId === 'A' ? 0 : 3) }).get('2026-09-20')!;
+    expect(d.parts).toEqual([{ slot: 3, cents: 900, paid: false }, { slot: 0, cents: 700, paid: false }, { slot: 0, cents: 300, paid: true }]);
+    expect(dayUrgency('2026-09-10', d, '2026-09-16')).toBe('late');
+    expect(dayUrgency('2026-09-20', d, '2026-09-16')).toBe('soon');
+    expect(dayUrgency('2026-09-30', d, '2026-09-16')).toBe('fine');
+    expect(dayUrgency('2026-09-30', d, '2026-09-16', 20)).toBe('soon');
+    expect(dayUrgency('2026-09-10', { count: 2, unpaidCount: 0 }, '2026-09-16')).toBe('paid');
+    expect(dayUrgency('2026-09-10', { count: 0, unpaidCount: 0 }, '2026-09-16')).toBeNull();
   });
   it('紧凑金额', () => {
     expect(compactBRL(85000)).toBe('850');

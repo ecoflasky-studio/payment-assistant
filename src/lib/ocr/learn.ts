@@ -254,6 +254,7 @@ export function applyLearning(state: EditorState, merchant: Pick<Merchant, 'id' 
   const fixes = merchant.ocrFixes ?? {};
   const known = catalog.get(merchant.id) ?? new Map<string, CatalogEntry>();
   let learnedCount = 0;
+  let histCount = 0;
   const rows: RowState[] = state.rows.map((r) => {
     const row: RowState = { ...r };
     const raw = row.desc.trim();
@@ -272,7 +273,10 @@ export function applyLearning(state: EditorState, merchant: Pick<Merchant, 'id' 
     const arithOk = qm !== null && unit.cents !== null && !unit.ambiguous && sub !== null && lineSubtotalCents(qm / 1000, unit.cents) === sub;
     if (entry) {
       const priceSame = unit.cents !== null && unit.cents === entry.lastUnitCents;
-      if (arithOk || (priceSame && qm !== null)) row.corroborated = arithOk ? '型号是这个商家的常用型号，数量×单价与图片小计一致' : '型号与单价都和这个商家上次一致';
+      if (arithOk || (priceSame && qm !== null)) {
+        row.corroborated = arithOk ? '型号是这个商家的常用型号，数量×单价与图片小计一致' : '型号与单价都和这个商家上次一致';
+        histCount++;
+      }
       if (unit.cents !== null && entry.lastUnitCents > 0) {
         const ratio = unit.cents / entry.lastUnitCents;
         if (ratio > 1.3 || ratio < 0.7) row.priceNote = `${entry.desc} 上次单价 ${formatBRL(entry.lastUnitCents)}（${entry.lastDate.split('-').reverse().join('/')}），这次差别较大`;
@@ -295,7 +299,7 @@ export function applyLearning(state: EditorState, merchant: Pick<Merchant, 'id' 
     return row;
   });
   if (learnedCount) notes.push(`已按你之前的修改自动更正 ${learnedCount} 处型号`);
-  const corr = rows.filter((r) => r.corroborated).length;
+  const corr = histCount;
   if (corr) notes.push(`${corr} 行与「${merchant.name}」的历史记录一致，已免去逐行核对`);
   return { state: { ...state, rows }, notes };
 }

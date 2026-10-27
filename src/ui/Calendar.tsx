@@ -1,12 +1,13 @@
 import { holidayName } from '../lib/holidays';
 import { useEffect, useMemo, useState } from 'react';
 import { monthGrid, monthLabel, shiftMonth, formatBR, parseBRDate, addDays, addMonths, endOfMonth, isValidISO } from '../lib/dates';
-import { compactBRL, type DayTotal } from '../lib/monthly';
+import { compactBRL, dayUrgency, type DayTotal, type DayUrgency } from '../lib/monthly';
 import { formatBRL } from '../lib/money';
 import { Modal } from './feedback';
-import { ICal } from './icons';
+import { ICal, ICheck } from './icons';
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+const URG_LABEL: Record<DayUrgency, string> = { late: '已逾期', soon: '即将到期', fine: '时间充裕', paid: '已付清' };
 
 /** 月历网格：可显示每日到期金额 */
 export function MonthGrid({
@@ -16,6 +17,7 @@ export function MonthGrid({
   totals,
   onPick,
   size = 'md',
+  dueSoonDays = 7,
 }: {
   month: string;
   today: string;
@@ -23,6 +25,7 @@ export function MonthGrid({
   totals?: Map<string, DayTotal>;
   onPick: (iso: string) => void;
   size?: 'md' | 'lg';
+  dueSoonDays?: number;
 }) {
   const days = useMemo(() => monthGrid(month), [month]);
   // 只显示需要的行数
@@ -53,7 +56,12 @@ export function MonthGrid({
         const t = totals?.get(d);
         const out = d.slice(0, 7) !== month;
         const hol = holidayName(d);
-        const cls = ['mg-d', out ? 'out' : '', d === today ? 'today' : '', d === selected ? 'sel' : '', hol ? 'hol' : '', t?.unpaidCount ? (d < today ? 'has-over' : 'has-due') : t?.count ? 'has-paid' : ''].filter(Boolean).join(' ');
+        const urg = t ? dayUrgency(d, t, today, dueSoonDays) : null;
+        const cls = ['mg-d', out ? 'out' : '', d === today ? 'today' : '', d === selected ? 'sel' : '', hol ? 'hol' : '', t ? 'has' : ''].filter(Boolean).join(' ');
+        // 有未付就只显示未付金额（按商家颜色），全部付清才显示已付（划线）
+        const parts = t ? (t.unpaidCount ? t.parts.filter((p) => !p.paid) : t.parts) : [];
+        const shownParts = parts.slice(0, size === 'lg' ? 2 : 1);
+        const more = parts.length - shownParts.length;
         return (
           <button
             key={d}
@@ -64,11 +72,17 @@ export function MonthGrid({
             className={cls}
             aria-selected={d === selected}
             title={hol ?? undefined}
-            aria-label={`${formatBR(d)}${hol ? `（${hol}）` : ''}${t ? `，${t.count} 笔，${formatBRL(t.cents)}${t.unpaidCount ? `，未付 ${formatBRL(t.unpaidCents)}` : ''}` : ''}`}
+            aria-label={`${formatBR(d)}${hol ? `（${hol}）` : ''}${t ? `，${t.count} 笔，${formatBRL(t.cents)}${t.unpaidCount ? `，未付 ${formatBRL(t.unpaidCents)}，${URG_LABEL[urg!]}` : '，已全部付清'}` : ''}`}
             onClick={() => onPick(d)}
           >
+            {urg && (urg === 'paid' ? <ICheck className="mg-ok" aria-hidden="true" /> : <i className={`mg-dot ${urg}`} aria-hidden="true" />)}
             <span className="n">{Number(d.slice(8))}</span>
-            {t && <span className="amt num">{compactBRL(t.unpaidCount ? t.unpaidCents : t.cents)}</span>}
+            {shownParts.map((p, i) => (
+              <span key={i} className={`amt num${p.slot >= 0 ? ` mc-${p.slot}` : ''}${p.paid ? ' paid' : ''}`}>
+                {compactBRL(p.cents)}
+              </span>
+            ))}
+            {more > 0 && <span className="amt more">+{more}</span>}
           </button>
         );
       })}

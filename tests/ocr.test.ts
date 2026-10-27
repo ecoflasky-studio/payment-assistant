@@ -22,7 +22,20 @@ describe('A03 样例票据 258（测试夹具）', () => {
     expect(computedTotal(draft.rows)).toBe(36800);
   });
   it('订单号保留前导零', () => expect(draft.orderNumber).toBe('0258'));
+  it('算术互证：数量×单价=小计的行、合计=总额时，不再要求逐行核对', () => {
+    expect(draft.rows.map((r) => !!r.corroborated)).toEqual([true, true, true, true]);
+    expect(draft.rows[0].corroborated).toMatch(/小计一致/);
+    expect(draft.rows[3].corroborated).toMatch(/总额一致/);
+    expect(computeIssues(draft, now).some((i) => i.field === 'row')).toBe(false);
+    // 总额对不上：数量为 1 的低置信度行仍要核对
+    const off = draftFromModel(normalizeModelOutput({ ...fixture, printedTotalRaw: '378', printedTotalCents: 37800 }), 'claude', base, key);
+    expect(off.rows.map((r) => !!r.corroborated)).toEqual([true, true, true, false]);
+    // 模型说「按小计辨认」的行不算互证
+    const g = draftFromModel(normalizeModelOutput({ ...fixture, warnings: ['第 2 行按小计辨认 5'] }), 'claude', base, key);
+    expect(g.rows[1].corroborated ?? null).toBeNull();
+  });
   it('两位年份与低置信度必须处理，未确认不能保存', () => {
+    const draft = draftFromModel(normalizeModelOutput({ ...fixture, printedTotalRaw: '378', printedTotalCents: 37800 }), 'claude', base, key);
     const issues = computeIssues(draft, now);
     expect(issues.find((i) => i.id === 'billDate:yy')?.level).toBe('block');
     expect(issues.some((i) => i.level === 'warn' && i.field === 'merchant')).toBe(true);

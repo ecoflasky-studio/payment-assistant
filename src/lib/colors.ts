@@ -27,3 +27,9 @@ export function nextSlot(existing: { color?: number | null; id?: string }[]): nu
   for (let i = 1; i < COLOR_COUNT; i++) if (n[i] < n[best]) best = i;
   return best;
 }
+
+/** 账单用哪种商家色（与列表里的商家头像一致） */
+export function billSlot(b: { merchantId?: string | null }, merchants: { id: string; color?: number | null }[], title: string): number {
+  const m = b.merchantId ? merchants.find((x) => x.id === b.merchantId) ?? null : null;
+  return colorSlot(m, m?.id ?? b.merchantId ?? title);
+}

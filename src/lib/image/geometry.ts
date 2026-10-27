@@ -95,3 +95,44 @@ export function warpSize(q: Pt[], maxSide = 2400): { w: number; h: number } {
   h = Math.max(1, Math.round(h * s));
   return { w, h };
 }
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** 四边形的外接矩形（四角：左上、右上、右下、左下） */
+export function boundingRect(q: Pt[]): Pt[] {
+  const xs = q.map((p) => p.x);
+  const ys = q.map((p) => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+}
+
+/**
+ * 拖动第 i 个角：
+ *  - linked（默认，矩形框）：相邻两个角跟着动，始终保持横平竖直的矩形；拖过对角时不翻转，最小 minSize。
+ *  - 自由：只动这一个角（纸张有透视时用）。
+ */
+export function dragCorner(q: Pt[], i: number, p: Pt, linked: boolean, w: number, h: number, minSize = Math.max(w, h) / 20): Pt[] {
+  const pt = { x: clamp(p.x, 0, w), y: clamp(p.y, 0, h) };
+  if (!linked) return q.map((c, j) => (j === i ? pt : c));
+  const r = boundingRect(q);
+  let x0 = r[0].x, y0 = r[0].y, x1 = r[2].x, y1 = r[2].y;
+  if (i === 0 || i === 3) x0 = Math.min(pt.x, x1 - minSize);
+  else x1 = Math.max(pt.x, x0 + minSize);
+  if (i === 0 || i === 1) y0 = Math.min(pt.y, y1 - minSize);
+  else y1 = Math.max(pt.y, y0 + minSize);
+  x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(w, x1); y1 = Math.min(h, y1);
+  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+}
+
+/** 整体平移（不出图片边界） */
+export function moveQuad(q: Pt[], dx: number, dy: number, w: number, h: number): Pt[] {
+  const xs = q.map((p) => p.x), ys = q.map((p) => p.y);
+  const ddx = clamp(dx, -Math.min(...xs), w - Math.max(...xs));
+  const ddy = clamp(dy, -Math.min(...ys), h - Math.max(...ys));
+  return q.map((p) => ({ x: p.x + ddx, y: p.y + ddy }));
+}
+
+/** 四边形是否已是横平竖直的矩形 */
+export function isAxisRect(q: Pt[], eps = 0.5): boolean {
+  return q.length === 4 && Math.abs(q[0].y - q[1].y) < eps && Math.abs(q[2].y - q[3].y) < eps && Math.abs(q[0].x - q[3].x) < eps && Math.abs(q[1].x - q[2].x) < eps;
+}

@@ -3,11 +3,25 @@ import { supaFnUrl, type SupaTarget } from '../lib/ocr/providers';
 import type { Entitlement, PlanDef, PlanId, Period } from '../../shared/plans.mjs';
 export { PLAN_LABEL } from '../../shared/plans.mjs';
 
+export type SubSource = 'mp' | 'pix' | 'apple' | 'google';
 export interface AccountInfo extends Entitlement {
   email: string;
+  /** 当前套餐来自哪里（网页自动续费 / PIX 年付 / App Store / Google Play） */
+  source?: SubSource | null;
+  autoRenew?: boolean | null;
   subscription: { status: string | null; plan: string | null } | null;
-  usage: { period: string | null; ai: number; limit: number };
-  billing: { currency: string; plans: Record<PlanId, PlanDef>; trial: { days: number; ai: number } } | null;
+  subs?: { source: SubSource; plan: PlanId; period: Period; until: string | null; status: string; autoRenew: boolean }[];
+  usage: { period: string | null; ai: number; limit: number; bonus?: number };
+  billing: {
+    currency: string;
+    plans: Record<PlanId, PlanDef>;
+    trial: { days: number; ai: number };
+    pack?: { qty: number; price: number };
+    /** 网页收款（Mercado Pago）是否开通 */
+    web?: boolean;
+    stores?: { apple: boolean; google: boolean };
+  } | null;
+  appAccountToken?: string;
 }
 
 export class ApiError extends Error {
@@ -49,3 +63,7 @@ export const pushSubscribe = (t: SupaTarget, token: string, sub: PushSubscriptio
 export const pushUnsubscribe = (t: SupaTarget, token: string, endpoint: string) => fnCall<{ ok: true }>(t, token, '/push/unsubscribe', { body: { endpoint } });
 export const pushTest = (t: SupaTarget, token: string) => fnCall<{ sent: number; devices: number }>(t, token, '/push/test', { body: {} });
 
+export const buyOnce = (t: SupaTarget, token: string, kind: 'pix_year' | 'ai_pack', returnUrl: string, plan?: PlanId) => fnCall<{ url: string }>(t, token, '/billing/once', { body: { kind, plan, returnUrl } });
+export const verifyPurchases = (t: SupaTarget, token: string, store: 'apple' | 'google', purchases: { productId: string; transactionId?: string; purchaseToken?: string }[]) =>
+  fnCall<{ results: { kind?: string; status?: string; error?: string; credited?: boolean }[]; me: AccountInfo }>(t, token, '/iap/verify', { body: { store, purchases } });
+export const deleteAccountRemote = (t: SupaTarget, token: string, confirm: string) => fnCall<{ ok: true; cancelInStore: ('apple' | 'google')[] }>(t, token, '/account/delete', { body: { confirm } });

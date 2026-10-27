@@ -13,6 +13,103 @@ function withHints(prompt, hints) {
   return prompt + "\n\n【参考资料】以下是这位用户以往记录的商家与型号，只用来帮助辨认模糊的手写字：图片上没有的内容绝不能因为参考资料而写出；看得清的字以图片为准；某处字形本身模糊、而按常用型号/商家名读正好说得通时，可以这样读，但该字段 confidence 不得高于 0.8，并在 warnings 写明「按常用型号辨认」。\n" + h;
 }
 
+// shared/recognize-schema.mjs
+var S = (description, extra = {}) => ({ type: "STRING", nullable: true, description, ...extra });
+var I = (description) => ({ type: "INTEGER", nullable: true, description });
+var N = (description) => ({ type: "NUMBER", nullable: true, description });
+var C = { type: "NUMBER", description: "0–1：每个字都清楚 ≥0.95；一个字符拿不准 0.6–0.8；多处拿不准 ≤0.5" };
+var obj = (properties, required = Object.keys(properties), extra = {}) => ({ type: "OBJECT", properties, required, propertyOrdering: Object.keys(properties), ...extra });
+var dateF = (what) => obj({ raw: S(`${what}原文照抄`), iso: S("YYYY-MM-DD；年份写全且日期真实存在时才填，否则 null"), confidence: C });
+var RECOGNIZE_SCHEMA = obj(
+  {
+    docType: { type: "STRING", enum: ["order", "boleto", "utility", "tax", "payslip", "statement", "receipt"], description: "单据类型" },
+    merchant: obj({ value: S("收款方名称（不是付款人）"), confidence: C, candidates: { type: "ARRAY", items: { type: "STRING" }, description: "其他可能的收款方写法" } }),
+    orderNumber: obj({ value: S("订单号/单号，保留前导零"), confidence: C }),
+    billDate: dateF("开单日期"),
+    dueDate: dateF("到期日 Vencimento"),
+    amountDue: obj({ raw: S("应付金额原文"), cents: I("应付金额，整数分"), confidence: C }),
+    paymentLine: S("47/48 位数字线逐位照抄；看不清为 null"),
+    pixCode: S("PIX Copia e Cola 原文"),
+    referenceMonth: S("账单所属月份原文"),
+    categoryHint: S("缴费类别", { enum: ["water", "electricity", "gas", "internet", "phone", "rent", "condo", "tax", "payroll", "accounting", "logistics", "platform", "loan", "subscription", "other"] }),
+    items: {
+      type: "ARRAY",
+      description: "逐行明细，按单据从上到下",
+      items: obj(
+        {
+          row: { type: "INTEGER", description: "行号，从 1 开始" },
+          quantity: N("总件数"),
+          boxes: N("箱数（「箱数×每箱件数×单价」写法时）"),
+          perBox: N("每箱件数"),
+          description: S("型号/描述原样照抄"),
+          unitPriceRaw: S("单价原文照抄"),
+          unitPriceCents: I("单价，整数分"),
+          printedSubtotalRaw: S("图片上写的本行小计原文"),
+          printedSubtotalCents: I("图片上写的本行小计，整数分"),
+          confidence: C,
+          needsReview: { type: "BOOLEAN", description: "确有拿不准的字符时为 true" },
+          bbox: { type: "ARRAY", nullable: true, items: { type: "NUMBER" }, description: "[x, y, w, h] 归一化 0–1" }
+        },
+        ["row", "quantity", "description", "unitPriceRaw", "unitPriceCents", "printedSubtotalRaw", "printedSubtotalCents", "confidence", "needsReview"]
+      )
+    },
+    printedTotalRaw: S("图片上的总额原文"),
+    printedTotalCents: I("图片上的总额，整数分"),
+    statement: obj(
+      {
+        entries: { type: "ARRAY", items: obj({ date: S("YYYY-MM-DD"), dateRaw: S("日期原文"), orderNumber: S("单号"), cents: I("金额，整数分"), raw: S("金额原文"), paid: { type: "BOOLEAN", nullable: true } }) },
+        payments: { type: "ARRAY", items: obj({ date: S("YYYY-MM-DD"), cents: I("金额，整数分"), note: S("备注") }) },
+        balanceCents: I("结欠，整数分")
+      },
+      ["entries", "payments", "balanceCents"],
+      { nullable: true, description: "只有 docType 为 statement 时填写，其他为 null" }
+    ),
+    unparsedLines: { type: "ARRAY", items: { type: "STRING" }, description: "含数字但无法拆成明细的行原文" },
+    warnings: { type: "ARRAY", items: { type: "STRING" }, description: "算术不符、涂改、按小计辨认等说明" }
+  },
+  ["docType", "merchant", "orderNumber", "billDate", "dueDate", "amountDue", "items", "printedTotalRaw", "printedTotalCents", "unparsedLines", "warnings"]
+);
+var int = (v) => typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
+function arithmeticIssues(result) {
+  const items = Array.isArray(result?.items) ? result.items : [];
+  const issues = [];
+  let sum = 0;
+  let complete = items.length > 0;
+  for (const [i, it] of items.entries()) {
+    const q = typeof it?.quantity === "number" ? it.quantity : null;
+    const u = int(it?.unitPriceCents);
+    const s = int(it?.printedSubtotalCents);
+    const calc = q !== null && u !== null ? Math.round(q * u) : null;
+    if (calc !== null && s !== null && calc !== s) issues.push({ row: it?.row ?? i + 1, kind: "row", calc, printed: s });
+    const lineTotal = s ?? calc;
+    if (lineTotal === null) complete = false;
+    else sum += lineTotal;
+  }
+  const total = int(result?.printedTotalCents);
+  if (complete && total !== null && sum !== total) issues.push({ row: null, kind: "total", calc: sum, printed: total });
+  return issues;
+}
+var brl = (c) => (c / 100).toFixed(2).replace(".", ",");
+function verifyPrompt(basePrompt, result, issues) {
+  const lines = issues.map((x) => x.kind === "row" ? `- 第 ${x.row} 行：数量×单价 = ${brl(x.calc)}，但读到的小计是 ${brl(x.printed)}` : `- 明细合计 ${brl(x.calc)}，但读到的总额是 ${brl(x.printed)}`);
+  return `${basePrompt}
+
+【复核】你刚才对这张图片的识别结果如下：
+${JSON.stringify({ items: result.items, printedTotalRaw: result.printedTotalRaw ?? null, printedTotalCents: result.printedTotalCents ?? null })}
+
+其中这些地方算术对不上：
+${lines.join("\n")}
+
+请重新仔细查看原图上这些行的数量、单价、小计和总额的每一个字符（特别注意 1/7、4/9、5/6、0/6、3/8 等手写混淆），然后按同一 Schema 输出完整 JSON。
+规则：清楚可读的数字不得为了凑数而修改；确实读错的改正并在 warnings 写「复核第 N 行：X 改为 Y」；如果原单据本身就算错了，保持读数，在 warnings 写「原单据第 N 行算术不符」。`;
+}
+function acceptVerified(first, second) {
+  if (!second || typeof second !== "object" || !Array.isArray(second.items)) return false;
+  const n1 = Array.isArray(first?.items) ? first.items.length : 0;
+  if (second.items.length < Math.ceil(n1 * 0.8)) return false;
+  return arithmeticIssues(second).length < arithmeticIssues(first).length;
+}
+
 // server/core.mjs
 var MEDIA_TYPES = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/webp"]);
 function extractJson(text) {
@@ -59,6 +156,10 @@ function createHandler({ prompt, log: log2 = () => {
       model: provider === "gemini" ? env.GEMINI_MODEL || "gemini-3.8-flash" : env.ANTHROPIC_MODEL || "claude-sonnet-5",
       apiUrl: provider === "gemini" ? env.GEMINI_API_URL || "https://generativelanguage.googleapis.com/v1beta" : env.ANTHROPIC_API_URL || "https://api.anthropic.com/v1/messages",
       thinking: env.GEMINI_THINKING === "off" ? "" : env.GEMINI_THINKING || "low",
+      /** 结构化输出（字段不会错位）；个别模型不支持时自动关闭 */
+      schema: env.GEMINI_SCHEMA !== "off",
+      /** 算术对不上时自动复核一遍 */
+      verify: env.RECOGNIZE_VERIFY !== "off",
       fallbacks: String(env.GEMINI_FALLBACK_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean),
       /** 整个识别请求的时间预算（Supabase 函数最长约 150 秒） */
       budget: Number(env.RECOGNIZE_BUDGET_MS || 12e4),
@@ -92,7 +193,7 @@ function createHandler({ prompt, log: log2 = () => {
     }
     return {};
   }
-  const json = (status, obj, extra = {}) => new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra } });
+  const json = (status, obj2, extra = {}) => new Response(JSON.stringify(obj2), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra } });
   async function post(c, url, headers, body, timeout = c.timeout) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeout);
@@ -176,6 +277,7 @@ function createHandler({ prompt, log: log2 = () => {
     const queue = [c.model, ...c.fallbacks.filter((m) => m !== c.model)];
     let discovered = false;
     let thinking = c.thinking;
+    let schema = c.schema;
     const errors = [];
     for (let i = 0; i < queue.length && i < 4; i++) {
       const model = queue[i];
@@ -189,6 +291,7 @@ function createHandler({ prompt, log: log2 = () => {
         }
         const generationConfig = { responseMimeType: "application/json", temperature: 0, maxOutputTokens: 16384 };
         if (thinking) generationConfig.thinkingConfig = { thinkingLevel: thinking };
+        if (schema) generationConfig.responseSchema = RECOGNIZE_SCHEMA;
         const url = `${c.apiUrl.replace(/\/$/, "")}/models/${encodeURIComponent(model)}:generateContent`;
         let r;
         try {
@@ -215,6 +318,12 @@ function createHandler({ prompt, log: log2 = () => {
           continue;
         }
         const detail = await r.text().catch(() => "");
+        if (r.status === 400 && schema && /schema|response_?schema|Unknown name|Invalid JSON payload/i.test(detail)) {
+          schema = false;
+          log2(`[recognize] ${model} 不支持 responseSchema，已改用纯提示词`);
+          attempt--;
+          continue;
+        }
         if (r.status === 400 && thinking && /thinking/i.test(detail)) {
           thinking = "";
           attempt--;
@@ -252,15 +361,48 @@ function createHandler({ prompt, log: log2 = () => {
     if (!MEDIA_TYPES.has(mediaType)) throw new HttpError(415, "只接受 JPG、PNG、WebP 图片");
     if (typeof imageBase64 !== "string" || !imageBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64)) throw new HttpError(400, "图片数据无效");
     if (imageBase64.length * 3 / 4 > c.maxBytes) throw new HttpError(413, "图片过大");
-    const text = c.provider === "gemini" ? await callGemini(c, mediaType, imageBase64, fullPrompt) : await callAnthropic(c, mediaType, imageBase64, fullPrompt);
-    let result = extractJson(text);
-    if (Array.isArray(result) && result.length === 1 && result[0] && typeof result[0] === "object") result = result[0];
-    if (!result || typeof result !== "object" || Array.isArray(result)) throw new HttpError(502, "模型没有返回符合格式的 JSON，请重试");
-    if (!Array.isArray(result.items)) {
-      if (result.items != null) throw new HttpError(502, "模型没有返回符合格式的 JSON，请重试");
-      result.items = [];
+    const started = Date.now();
+    const call = (cc, p) => cc.provider === "gemini" ? callGemini(cc, mediaType, imageBase64, p) : callAnthropic(cc, mediaType, imageBase64, p);
+    const parse = (text2) => {
+      let r = extractJson(text2);
+      if (Array.isArray(r) && r.length === 1 && r[0] && typeof r[0] === "object") r = r[0];
+      if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+      if (!Array.isArray(r.items)) {
+        if (r.items != null) return null;
+        r.items = [];
+      }
+      return r;
+    };
+    let text = await call(c, fullPrompt);
+    let result = parse(text);
+    if (!result && Date.now() - started < c.budget * 0.5) {
+      log2("[recognize] 结果不是有效 JSON，自动重试");
+      text = await call({ ...c, budget: c.budget - (Date.now() - started) - 3e3 }, fullPrompt);
+      result = parse(text);
     }
-    return { result, rawText: text.slice(0, 2e4), model: c.model };
+    if (!result) throw new HttpError(502, "模型没有返回符合格式的 JSON，请重试");
+    let verified = null;
+    const issues = c.verify && result.docType !== "statement" ? arithmeticIssues(result) : [];
+    const left = c.budget - (Date.now() - started);
+    if (issues.length && left > 4e4) {
+      try {
+        const t2 = await call({ ...c, budget: left - 5e3, fallbacks: [] }, verifyPrompt(fullPrompt, result, issues));
+        const second = parse(t2);
+        if (acceptVerified(result, second)) {
+          verified = { before: issues.length, after: arithmeticIssues(second).length };
+          second.warnings = [...Array.isArray(second.warnings) ? second.warnings : [], `已自动复核算术不符的地方（${issues.length} 处 → ${verified.after} 处）`];
+          result = second;
+          text = t2;
+        } else if (second && Array.isArray(second.warnings)) {
+          const extra = second.warnings.filter((w) => typeof w === "string" && /复核|原单据/.test(w));
+          result.warnings = [...Array.isArray(result.warnings) ? result.warnings : [], ...extra];
+        }
+        log2(`[recognize] verify ${issues.length} issue(s) → ${verified ? verified.after : "kept first"}`);
+      } catch (e) {
+        log2(`[recognize] verify skipped: ${e?.message ?? e}`);
+      }
+    }
+    return { result, rawText: text.slice(0, 2e4), model: c.model, ms: Date.now() - started, verified };
   }
   return async function handle2(request, env = {}) {
     const c = cfg(env);
@@ -340,9 +482,9 @@ function formatBRL(cents, withSymbol = true) {
   if (cents === null || cents === void 0 || !Number.isFinite(cents)) return "—";
   const neg = cents < 0;
   const abs = Math.abs(Math.round(cents));
-  const int = Math.floor(abs / 100);
+  const int2 = Math.floor(abs / 100);
   const dec = String(abs % 100).padStart(2, "0");
-  const intStr = String(int).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const intStr = String(int2).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${neg ? "-" : ""}${withSymbol ? "R$ " : ""}${intStr},${dec}`;
 }
 
@@ -449,11 +591,47 @@ async function sendPush(sub, payload, vapid, { subject, ttl = 86400, fetchImpl =
 }
 
 // shared/plans.mjs
-var TRIAL = { days: 30, ai: 5 };
+var TRIAL = { days: 30, ai: 10 };
 var PLANS = {
-  t1: { name: "T1", month: 7.99, year: 89.99, ai: 20, push: true, export: false },
-  t2: { name: "T2", month: 19.98, year: 199.99, ai: 50, push: true, export: true }
+  t1: { name: "T1", month: 7.99, year: 79.9, ai: 20, push: true, export: false },
+  t2: { name: "T2", month: 19.9, year: 199, ai: 50, push: true, export: true }
 };
+var AI_PACK = { qty: 20, price: 4.9 };
+var STORE = {
+  apple: {
+    "t1.month": "zq.t1.monthly",
+    "t1.year": "zq.t1.yearly",
+    "t2.month": "zq.t2.monthly",
+    "t2.year": "zq.t2.yearly",
+    ai_pack: "zq.ai20"
+  },
+  google: {
+    t1: "zq_t1",
+    t2: "zq_t2",
+    basePlan: { month: "monthly", year: "yearly" },
+    ai_pack: "zq_ai20"
+  }
+};
+function planOfProduct(store, productId, basePlanId = null) {
+  if (store === "apple") {
+    for (const [k, v] of Object.entries(STORE.apple)) {
+      if (v !== productId || k === "ai_pack") continue;
+      const [plan2, period2] = k.split(".");
+      return { plan: plan2, period: period2 };
+    }
+    return null;
+  }
+  const plan = productId === STORE.google.t1 ? "t1" : productId === STORE.google.t2 ? "t2" : null;
+  if (!plan) return null;
+  const period = basePlanId === STORE.google.basePlan.year ? "year" : "month";
+  return { plan, period };
+}
+function bestSub(subs, now = /* @__PURE__ */ new Date()) {
+  const t = now.getTime();
+  const live = (subs || []).filter((s) => (s.plan === "t1" || s.plan === "t2") && ["active", "grace", "canceled"].includes(s.status) && s.until && Date.parse(s.until) > t);
+  live.sort((a, b) => a.plan === b.plan ? Date.parse(b.until) - Date.parse(a.until) : a.plan === "t2" ? -1 : 1);
+  return live[0] ?? null;
+}
 function monthKey(d = /* @__PURE__ */ new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(d).slice(0, 7);
 }
@@ -484,6 +662,162 @@ function priceOf(plan, period, plans = PLANS) {
   if (!p || period !== "month" && period !== "year") return null;
   return p[period];
 }
+
+// supabase/stores.mjs
+var enc2 = new TextEncoder();
+var b64u2 = (buf) => {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+var b64uJson = (o) => b64u2(enc2.encode(JSON.stringify(o)));
+function unb64u2(s) {
+  const p = String(s).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(p + "=".repeat((4 - p.length % 4) % 4));
+  return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+}
+function decodeJws(jws) {
+  if (typeof jws !== "string") return null;
+  const parts = jws.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(unb64u2(parts[1])));
+  } catch {
+    return null;
+  }
+}
+function pemToDer(pem) {
+  const body = String(pem).replace(/\\n/g, "\n").replace(/-----BEGIN [^-]+-----/, "").replace(/-----END [^-]+-----/, "").replace(/\s+/g, "");
+  return unb64u2(body.replace(/\+/g, "-").replace(/\//g, "_"));
+}
+async function signJwt(alg, pem, header, payload) {
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToDer(pem),
+    alg === "ES256" ? { name: "ECDSA", namedCurve: "P-256" } : { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const input = `${b64uJson({ alg, typ: "JWT", ...header })}.${b64uJson(payload)}`;
+  const sig = await crypto.subtle.sign(alg === "ES256" ? { name: "ECDSA", hash: "SHA-256" } : { name: "RSASSA-PKCS1-v1_5" }, key, enc2.encode(input));
+  return `${input}.${b64u2(sig)}`;
+}
+var StoreError = class extends Error {
+  constructor(status, message, code) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+};
+function appleConfigured(c) {
+  return !!(c.apple.bundleId && c.apple.issuer && c.apple.keyId && c.apple.key);
+}
+function createApple(c, fetchImpl, now = () => /* @__PURE__ */ new Date()) {
+  let cached = { token: "", exp: 0 };
+  async function token() {
+    const t = Math.floor(now().getTime() / 1e3);
+    if (cached.token && cached.exp - 60 > t) return cached.token;
+    const jwt = await signJwt("ES256", c.apple.key, { kid: c.apple.keyId }, { iss: c.apple.issuer, iat: t, exp: t + 1200, aud: "appstoreconnect-v1", bid: c.apple.bundleId });
+    cached = { token: jwt, exp: t + 1200 };
+    return jwt;
+  }
+  async function get(path) {
+    if (!appleConfigured(c)) throw new StoreError(503, "还没配置 App Store 内购校验（APPLE_* 密钥）", "store_off");
+    const auth = { authorization: `Bearer ${await token()}` };
+    for (const base of [c.apple.api, c.apple.sandbox]) {
+      const r = await fetchImpl(`${base}${path}`, { headers: auth });
+      if (r.status === 404) continue;
+      const text = await r.text();
+      if (!r.ok) throw new StoreError(502, `App Store 校验失败（${r.status}）`, "store_error");
+      return { data: JSON.parse(text), sandbox: base === c.apple.sandbox };
+    }
+    throw new StoreError(404, "在 App Store 找不到这笔交易", "not_found");
+  }
+  return {
+    /** 单笔交易 */
+    async transaction(transactionId) {
+      const { data, sandbox } = await get(`/inApps/v1/transactions/${encodeURIComponent(transactionId)}`);
+      const tx = decodeJws(data.signedTransactionInfo);
+      if (!tx) throw new StoreError(502, "App Store 返回的交易无法解析");
+      if (tx.bundleId && tx.bundleId !== c.apple.bundleId) throw new StoreError(400, "交易不属于这个 App", "wrong_app");
+      return { ...tx, sandbox };
+    },
+    /** 订阅当前状态：status 1 有效 2 过期 3 扣款重试 4 宽限期 5 已撤销 */
+    async subscription(transactionId) {
+      const { data } = await get(`/inApps/v1/subscriptions/${encodeURIComponent(transactionId)}`);
+      let best = null;
+      for (const g of data.data ?? []) {
+        for (const lt of g.lastTransactions ?? []) {
+          const tx = decodeJws(lt.signedTransactionInfo);
+          const ri = decodeJws(lt.signedRenewalInfo);
+          if (!tx) continue;
+          const item = { status: lt.status, originalTransactionId: lt.originalTransactionId ?? tx.originalTransactionId, tx, renewal: ri };
+          if (!best || (tx.expiresDate ?? 0) > (best.tx.expiresDate ?? 0)) best = item;
+        }
+      }
+      if (!best) throw new StoreError(404, "找不到订阅状态", "not_found");
+      return best;
+    }
+  };
+}
+var APPLE_STATUS = { 1: "active", 2: "expired", 3: "expired", 4: "grace", 5: "revoked" };
+function googleConfigured(c) {
+  return !!(c.google.packageName && c.google.account?.client_email && c.google.account?.private_key);
+}
+function createGoogle(c, fetchImpl, now = () => /* @__PURE__ */ new Date()) {
+  let cached = { token: "", exp: 0 };
+  async function token() {
+    const t = Math.floor(now().getTime() / 1e3);
+    if (cached.token && cached.exp - 60 > t) return cached.token;
+    const sa = c.google.account;
+    const assertion = await signJwt("RS256", sa.private_key, sa.private_key_id ? { kid: sa.private_key_id } : {}, {
+      iss: sa.client_email,
+      scope: "https://www.googleapis.com/auth/androidpublisher",
+      aud: c.google.tokenUrl,
+      iat: t,
+      exp: t + 3600
+    });
+    const r = await fetchImpl(c.google.tokenUrl, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${encodeURIComponent(assertion)}`
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.access_token) throw new StoreError(502, `Google 服务账号登录失败（${r.status}）`, "store_error");
+    cached = { token: j.access_token, exp: t + Number(j.expires_in || 3600) };
+    return cached.token;
+  }
+  async function call(method, path) {
+    if (!googleConfigured(c)) throw new StoreError(503, "还没配置 Google Play 内购校验（GOOGLE_* 密钥）", "store_off");
+    const r = await fetchImpl(`${c.google.api}/androidpublisher/v3/applications/${encodeURIComponent(c.google.packageName)}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${await token()}`, "content-type": "application/json" },
+      body: method === "POST" ? "{}" : void 0
+    });
+    const text = await r.text();
+    if (r.status === 404 || r.status === 410) throw new StoreError(404, "在 Google Play 找不到这笔购买", "not_found");
+    if (!r.ok) throw new StoreError(502, `Google Play 校验失败（${r.status}）`, "store_error");
+    return text ? JSON.parse(text) : {};
+  }
+  const tok = (t) => encodeURIComponent(String(t));
+  return {
+    subscription: (purchaseToken) => call("GET", `/purchases/subscriptionsv2/tokens/${tok(purchaseToken)}`),
+    acknowledgeSubscription: (productId, purchaseToken) => call("POST", `/purchases/subscriptions/${tok(productId)}/tokens/${tok(purchaseToken)}:acknowledge`),
+    product: (productId, purchaseToken) => call("GET", `/purchases/products/${tok(productId)}/tokens/${tok(purchaseToken)}`),
+    consume: (productId, purchaseToken) => call("POST", `/purchases/products/${tok(productId)}/tokens/${tok(purchaseToken)}:consume`)
+  };
+}
+var GOOGLE_STATE = {
+  SUBSCRIPTION_STATE_ACTIVE: "active",
+  SUBSCRIPTION_STATE_IN_GRACE_PERIOD: "grace",
+  SUBSCRIPTION_STATE_CANCELED: "canceled",
+  SUBSCRIPTION_STATE_ON_HOLD: "expired",
+  SUBSCRIPTION_STATE_PAUSED: "expired",
+  SUBSCRIPTION_STATE_EXPIRED: "expired",
+  SUBSCRIPTION_STATE_PENDING: "pending",
+  SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED: "expired"
+};
 
 // supabase/saas.mjs
 var ApiError = class extends Error {
@@ -519,7 +853,28 @@ function saasConfig(env) {
     mpApi: get("MP_API_URL") || "https://api.mercadopago.com",
     owners: get("OWNER_EMAILS").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
     allowKeyOnly: /^(1|true|yes|on)$/i.test(get("ALLOW_KEY_ONLY")),
-    pushSubject: get("PUSH_SUBJECT") || "mailto:noreply@zhangqi.app"
+    pushSubject: get("PUSH_SUBJECT") || "mailto:noreply@zhangqi.app",
+    apple: {
+      bundleId: get("APPLE_BUNDLE_ID"),
+      issuer: get("APPLE_ISSUER_ID"),
+      keyId: get("APPLE_KEY_ID"),
+      key: get("APPLE_PRIVATE_KEY"),
+      api: get("APPLE_API_URL") || "https://api.storekit.itunes.apple.com",
+      sandbox: get("APPLE_SANDBOX_API_URL") || "https://api.storekit-sandbox.itunes.apple.com"
+    },
+    google: {
+      packageName: get("GOOGLE_PACKAGE_NAME"),
+      account: (() => {
+        try {
+          return JSON.parse(get("GOOGLE_SERVICE_ACCOUNT") || "null");
+        } catch {
+          return null;
+        }
+      })(),
+      api: get("GOOGLE_API_URL") || "https://androidpublisher.googleapis.com",
+      tokenUrl: get("GOOGLE_TOKEN_URL") || "https://oauth2.googleapis.com/token",
+      rtdnToken: get("GOOGLE_RTDN_TOKEN")
+    }
   };
 }
 function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
@@ -609,26 +964,37 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     try {
       const ent = entOf(c, user, await getProfile(c, user));
       if (ent.plan === "expired") return { ok: false, status: 402, code: "expired", error: "试用已结束：订阅 T1 或 T2 后继续使用 AI 识别" };
-      const n = await rpc(c, "zq_usage_take", { p_user: user.id, p_month: ent.ai.key, p_limit: ent.ai.limit });
+      let n = await rpc(c, "zq_usage_take", { p_user: user.id, p_month: ent.ai.key, p_limit: ent.ai.limit });
+      let fromBonus = false;
       if (n === -1 || n === null) {
-        const msg = ent.plan === "trial" ? `试用期的 ${ent.ai.limit} 次 AI 识别已用完：订阅后每月 ${PLANS.t1.ai}～${PLANS.t2.ai} 次` : ent.plan === "t1" ? `本月 ${ent.ai.limit} 次 AI 识别已用完：升级 T2 每月 ${PLANS.t2.ai} 次，或下月 1 日恢复` : `本月 ${ent.ai.limit} 次 AI 识别已用完，下月 1 日恢复`;
-        return { ok: false, status: 402, code: "quota", error: msg };
+        const left = await rpc(c, "zq_bonus_take", { p_user: user.id });
+        if (left === -1 || left === null) {
+          const tail = `，或买 AI 加量包（${AI_PACK.qty} 次）`;
+          const msg = ent.plan === "trial" ? `试用期的 ${ent.ai.limit} 次 AI 识别已用完：订阅后每月 ${PLANS.t1.ai}～${PLANS.t2.ai} 次${tail}` : ent.plan === "t1" ? `本月 ${ent.ai.limit} 次 AI 识别已用完：升级 T2 每月 ${PLANS.t2.ai} 次${tail}` : `本月 ${ent.ai.limit} 次 AI 识别已用完${tail}，或等下月 1 日恢复`;
+          return { ok: false, status: 402, code: "quota", error: msg };
+        }
+        fromBonus = true;
+        n = ent.ai.limit;
       }
       return {
         ok: true,
         key: `u:${user.id}`,
         done: async (success) => {
           if (!success) {
-            await rpc(c, "zq_usage_refund", { p_user: user.id, p_month: ent.ai.key }).catch(() => {
+            await (fromBonus ? rpc(c, "zq_bonus_refund", { p_user: user.id }) : rpc(c, "zq_usage_refund", { p_user: user.id, p_month: ent.ai.key })).catch(() => {
             });
             return void 0;
           }
-          return { used: n, limit: ent.ai.limit, plan: ent.plan };
+          return { used: n, limit: ent.ai.limit, plan: ent.plan, fromBonus };
         }
       };
     } catch (e) {
       return { ok: false, status: e.status || 500, error: e.message, code: e.code };
     }
+  }
+  const storesOn = (c) => ({ apple: appleConfigured(c), google: googleConfigured(c) });
+  async function subsOf(c, userId) {
+    return await db(c, `zq_subs?user_id=eq.${userId}&select=*`) ?? [];
   }
   async function me(c, request) {
     const user = await requireUser(c, request);
@@ -639,14 +1005,48 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     const ent = entOf(c, user, p);
     await rememberFnUrl(c, request).catch(() => {
     });
+    const subs = await subsOf(c, user.id);
+    const st = storesOn(c);
+    const anyBilling = !!c.mpToken || st.apple || st.google;
     return {
       email: user.email,
       ...ent,
+      source: p.plan_source ?? (p.mp_preapproval_id ? "mp" : null),
+      autoRenew: p.auto_renew ?? (p.mp_status === "authorized" ? true : null),
       subscription: p.mp_preapproval_id ? { status: p.mp_status ?? null, plan: p.pending_plan ?? null } : null,
-      usage: { period: ent.ai.key, ai: await usedOf(c, user, ent.ai.key), limit: ent.ai.limit },
-      billing: c.mpToken ? { currency: "BRL", plans: PLANS, trial: TRIAL } : null
+      subs: subs.map((x) => ({ source: x.source, plan: x.plan, period: x.period, until: x.until, status: x.status, autoRenew: !!x.auto_renew })),
+      usage: { period: ent.ai.key, ai: await usedOf(c, user, ent.ai.key), limit: ent.ai.limit, bonus: p.ai_bonus ?? 0 },
+      billing: anyBilling ? { currency: "BRL", plans: PLANS, trial: TRIAL, pack: AI_PACK, web: !!c.mpToken, stores: st, products: STORE } : null,
+      appAccountToken: user.id
     };
   }
+  async function applySub(c, userId, sub) {
+    await db(c, "zq_subs", {
+      method: "POST",
+      headers: { prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ ...sub, user_id: userId, updated_at: now().toISOString() })
+    });
+    return recompute(c, userId);
+  }
+  async function recompute(c, userId) {
+    const subs = await subsOf(c, userId);
+    const cur = (await db(c, `zq_profiles?user_id=eq.${userId}&select=*`))?.[0];
+    if (!cur || !subs.length) return cur;
+    const best = bestSub(subs, now());
+    const pick = best ?? [...subs].filter((x) => x.until && x.status !== "pending").sort((a, b) => Date.parse(b.until) - Date.parse(a.until))[0];
+    if (!pick) return cur;
+    const patch = {
+      plan: cur.plan === "owner" ? "owner" : pick.plan,
+      period: pick.period,
+      plan_until: pick.until,
+      plan_source: pick.source,
+      auto_renew: !!pick.auto_renew && pick.status !== "canceled",
+      updated_at: now().toISOString()
+    };
+    await db(c, `zq_profiles?user_id=eq.${userId}`, { method: "PATCH", body: JSON.stringify(patch) });
+    return { ...cur, ...patch };
+  }
+  const userExists = async (c, id) => /^[0-9a-f-]{36}$/i.test(String(id || "")) && !!(await db(c, `zq_profiles?user_id=eq.${id}&select=user_id`))?.length;
   async function mp(c, path, init = {}) {
     if (!c.mpToken) throw new ApiError(503, "还没开通订阅收款（服务器未配置 MP_ACCESS_TOKEN）", "billing_off");
     const r = await fetchImpl(`${c.mpApi}${path}`, { ...init, headers: { authorization: `Bearer ${c.mpToken}`, "content-type": "application/json", ...init.headers || {} } });
@@ -678,9 +1078,9 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     if (pa.status === "authorized") {
       const next = pa.next_payment_date ? Date.parse(pa.next_payment_date) : NaN;
       const fallback = (ref.period === "year" ? 368 : 33) * 864e5;
-      const until = Number.isFinite(next) ? next + 3 * 864e5 : now().getTime() + fallback;
+      const until2 = Number.isFinite(next) ? next + 3 * 864e5 : now().getTime() + fallback;
       const keep = cur.plan === ref.plan && cur.plan_until ? Date.parse(cur.plan_until) : 0;
-      Object.assign(patch, { plan: cur.plan === "owner" ? "owner" : ref.plan, period: ref.period, plan_until: new Date(Math.max(until, keep)).toISOString(), mp_preapproval_id: pa.id, mp_status: "authorized", pending_plan: null });
+      Object.assign(patch, { plan: cur.plan === "owner" ? "owner" : ref.plan, period: ref.period, plan_until: new Date(Math.max(until2, keep)).toISOString(), mp_preapproval_id: pa.id, mp_status: "authorized", pending_plan: null });
       const old = cur.mp_preapproval_id && cur.mp_preapproval_id !== pa.id ? cur.mp_preapproval_id : null;
       if (old) {
         await mp(c, `/preapproval/${encodeURIComponent(old)}`, { method: "PUT", body: JSON.stringify({ status: "cancelled" }) }).catch(() => {
@@ -694,7 +1094,273 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
       patch.pending_id = pa.id;
     }
     await db(c, `zq_profiles?user_id=eq.${ref.userId}`, { method: "PATCH", body: JSON.stringify(patch) });
-    return { ...cur, ...patch };
+    const prev = (await db(c, `zq_subs?id=eq.${encodeURIComponent("mp:" + pa.id)}&select=until`))?.[0];
+    const status = pa.status === "authorized" ? "active" : pa.status === "pending" ? "pending" : "canceled";
+    const until = pa.status === "authorized" ? patch.plan_until : prev?.until ?? (isCurrent ? cur.plan_until : null);
+    await db(c, "zq_subs", {
+      method: "POST",
+      headers: { prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ id: `mp:${pa.id}`, user_id: ref.userId, source: "mp", plan: ref.plan, period: ref.period, until, status, auto_renew: pa.status === "authorized", product: "preapproval", updated_at: now().toISOString() })
+    });
+    const merged = await recompute(c, ref.userId);
+    return { ...cur, ...patch, ...merged ?? {} };
+  }
+  async function once(c, request) {
+    const user = await requireUser(c, request);
+    const body = await request.json().catch(() => ({}));
+    const kind = body.kind;
+    const back = String(body.returnUrl || "");
+    if (!/^https:\/\/[^\s]+$/.test(back) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/[^\s]*$/.test(back)) throw new ApiError(400, "返回地址必须是 https 网址");
+    let item;
+    let ref;
+    if (kind === "pix_year") {
+      const plan = body.plan;
+      const price = priceOf(plan, "year");
+      if (price === null) throw new ApiError(400, "请选择套餐（T1 / T2）");
+      item = { title: `账期助手 ${PLANS[plan].name} · 1 年（一次付清）`, unit_price: price };
+      ref = `${user.id}|pix|${plan}|year`;
+    } else if (kind === "ai_pack") {
+      item = { title: `账期助手 AI 识别加量包 · ${AI_PACK.qty} 次`, unit_price: AI_PACK.price };
+      ref = `${user.id}|pack|ai`;
+    } else throw new ApiError(400, "未知的购买项目");
+    const fnUrl = await kvGet(c, "fn_url").catch(() => null);
+    const pref = await mp(c, "/checkout/preferences", {
+      method: "POST",
+      body: JSON.stringify({
+        items: [{ id: kind, title: item.title, quantity: 1, unit_price: item.unit_price, currency_id: "BRL" }],
+        external_reference: ref,
+        payer: user.email ? { email: user.email } : void 0,
+        back_urls: { success: back, pending: back, failure: back },
+        auto_return: "approved",
+        ...fnUrl ? { notification_url: `${fnUrl}/billing/webhook?source=once` } : {},
+        statement_descriptor: "ZHANGQI"
+      })
+    });
+    if (!pref.init_point) throw new ApiError(502, "Mercado Pago 没有返回付款链接");
+    return { url: pref.init_point };
+  }
+  async function settlePayment(c, id) {
+    const pay = await mp(c, `/v1/payments/${encodeURIComponent(id)}`);
+    const [userId, kind, plan] = String(pay.external_reference || "").split("|");
+    if (!await userExists(c, userId)) return { ignored: true };
+    const pid = `mp:${pay.id}`;
+    if (pay.status === "approved") {
+      if (kind === "pack") {
+        await rpc(c, "zq_credit_purchase", { p_id: pid, p_user: userId, p_kind: "ai_pack", p_qty: AI_PACK.qty, p_amount: pay.transaction_amount ?? AI_PACK.price });
+        return { ok: true };
+      }
+      if (kind === "pix" && (plan === "t1" || plan === "t2")) {
+        const first = await rpc(c, "zq_credit_purchase", { p_id: pid, p_user: userId, p_kind: "pix_year", p_qty: 0, p_amount: pay.transaction_amount ?? null });
+        if (first) {
+          const subs = await subsOf(c, userId);
+          const sameUntil = subs.filter((x) => x.plan === plan && ["active", "grace", "canceled"].includes(x.status) && x.until).map((x) => Date.parse(x.until));
+          const base = Math.max(now().getTime(), ...sameUntil);
+          await applySub(c, userId, { id: `pix:${pay.id}`, source: "pix", plan, period: "year", until: new Date(base + 365 * 864e5).toISOString(), status: "active", auto_renew: false, product: "pix_year" });
+        }
+        return { ok: true };
+      }
+    }
+    if (pay.status === "refunded" || pay.status === "charged_back" || pay.status === "cancelled") {
+      await rpc(c, "zq_refund_purchase", { p_id: pid });
+      if (kind === "pix") await setSubStatus(c, `pix:${pay.id}`, "revoked");
+    }
+    return { ok: true };
+  }
+  async function setSubStatus(c, id, status) {
+    const row = (await db(c, `zq_subs?id=eq.${encodeURIComponent(id)}&select=*`))?.[0];
+    if (!row) return null;
+    const { user_id, ...rest } = row;
+    return applySub(c, user_id, { ...rest, status });
+  }
+  const ms2 = (v) => v == null ? null : typeof v === "number" ? v : Date.parse(v);
+  const iso = (v) => ms2(v) ? new Date(ms2(v)).toISOString() : null;
+  async function syncApple(c, transactionId, userId = null) {
+    const apple = createApple(c, fetchImpl, now);
+    const tx = await apple.transaction(transactionId);
+    const owner = await ownerOf(c, userId, tx.appAccountToken, `apple:${tx.originalTransactionId}`);
+    if (tx.productId === STORE.apple.ai_pack) {
+      if (tx.revocationDate) {
+        await rpc(c, "zq_refund_purchase", { p_id: `apple:${tx.transactionId}` });
+        return { kind: "ai_pack", refunded: true };
+      }
+      if (!owner) throw new StoreError(400, "这笔购买不属于当前账号", "wrong_account");
+      const credited = await rpc(c, "zq_credit_purchase", { p_id: `apple:${tx.transactionId}`, p_user: owner, p_kind: "ai_pack", p_qty: AI_PACK.qty * (tx.quantity || 1), p_amount: tx.price ? tx.price / 1e3 : null });
+      return { kind: "ai_pack", credited };
+    }
+    const pl = planOfProduct("apple", tx.productId);
+    if (!pl) throw new StoreError(400, `未知商品 ${tx.productId}`, "unknown_product");
+    if (!owner) throw new StoreError(400, "这笔订阅不属于当前账号", "wrong_account");
+    const st = await apple.subscription(transactionId);
+    const cur = planOfProduct("apple", st.tx.productId) ?? pl;
+    const status = st.tx.revocationDate ? "revoked" : APPLE_STATUS[st.status] ?? "expired";
+    const autoRenew = st.renewal ? st.renewal.autoRenewStatus === 1 : status === "active";
+    await applySub(c, owner, {
+      id: `apple:${st.originalTransactionId}`,
+      source: "apple",
+      plan: cur.plan,
+      period: cur.period,
+      until: iso(st.renewal?.gracePeriodExpiresDate && status === "grace" ? st.renewal.gracePeriodExpiresDate : st.tx.expiresDate),
+      status: status === "active" && !autoRenew ? "canceled" : status,
+      auto_renew: autoRenew,
+      product: st.tx.productId
+    });
+    return { kind: "sub", status, plan: cur.plan, period: cur.period };
+  }
+  async function syncGoogle(c, { productId, purchaseToken }, userId = null) {
+    const google = createGoogle(c, fetchImpl, now);
+    if (productId === STORE.google.ai_pack) {
+      const pr = await google.product(productId, purchaseToken);
+      const owner2 = await ownerOf(c, userId, pr.obfuscatedExternalAccountId, null);
+      const pid = `google:${pr.orderId || purchaseToken}`;
+      if (pr.purchaseState === 1) {
+        await rpc(c, "zq_refund_purchase", { p_id: pid });
+        return { kind: "ai_pack", refunded: true };
+      }
+      if (pr.purchaseState !== 0) return { kind: "ai_pack", pending: true };
+      if (!owner2) throw new StoreError(400, "这笔购买不属于当前账号", "wrong_account");
+      const credited = await rpc(c, "zq_credit_purchase", { p_id: pid, p_user: owner2, p_kind: "ai_pack", p_qty: AI_PACK.qty * (pr.quantity || 1), p_amount: null });
+      if (pr.consumptionState === 0) await google.consume(productId, purchaseToken).catch((e) => log2(`[iap] consume ${e.message}`));
+      return { kind: "ai_pack", credited };
+    }
+    const sub = await google.subscription(purchaseToken);
+    const li = (sub.lineItems ?? []).slice().sort((a, b) => (ms2(b.expiryTime) ?? 0) - (ms2(a.expiryTime) ?? 0))[0];
+    if (!li) throw new StoreError(404, "找不到订阅内容", "not_found");
+    const pl = planOfProduct("google", li.productId, li.offerDetails?.basePlanId);
+    if (!pl) throw new StoreError(400, `未知商品 ${li.productId}`, "unknown_product");
+    const owner = await ownerOf(c, userId, sub.externalAccountIdentifiers?.obfuscatedExternalAccountId, `google:${purchaseToken}`);
+    if (!owner) throw new StoreError(400, "这笔订阅不属于当前账号", "wrong_account");
+    const status = GOOGLE_STATE[sub.subscriptionState] ?? "expired";
+    if (sub.linkedPurchaseToken) await setSubStatus(c, `google:${sub.linkedPurchaseToken}`, "expired").catch(() => {
+    });
+    await applySub(c, owner, {
+      id: `google:${purchaseToken}`,
+      source: "google",
+      plan: pl.plan,
+      period: pl.period,
+      until: iso(li.expiryTime),
+      status,
+      auto_renew: !!li.autoRenewingPlan?.autoRenewEnabled,
+      product: `${li.productId}:${li.offerDetails?.basePlanId ?? ""}`
+    });
+    if (sub.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING" && (status === "active" || status === "grace")) {
+      await google.acknowledgeSubscription(li.productId, purchaseToken).catch((e) => log2(`[iap] ack ${e.message}`));
+    }
+    return { kind: "sub", status, plan: pl.plan, period: pl.period };
+  }
+  async function ownerOf(c, userId, token, subId) {
+    const tok = token && /^[0-9a-f-]{36}$/i.test(token) ? token.toLowerCase() : null;
+    if (userId) {
+      if (tok && tok !== userId) return null;
+      if (subId) {
+        const row = (await db(c, `zq_subs?id=eq.${encodeURIComponent(subId)}&select=user_id`))?.[0];
+        if (row && row.user_id !== userId) return null;
+      }
+      return userId;
+    }
+    if (subId) {
+      const row = (await db(c, `zq_subs?id=eq.${encodeURIComponent(subId)}&select=user_id`))?.[0];
+      if (row) return row.user_id;
+    }
+    return tok && await userExists(c, tok) ? tok : null;
+  }
+  async function iapVerify(c, request) {
+    const user = await requireUser(c, request);
+    await getProfile(c, user);
+    const b = await request.json().catch(() => ({}));
+    const list = Array.isArray(b.purchases) ? b.purchases.slice(0, 20) : [b];
+    const results = [];
+    for (const it of list) {
+      try {
+        if (b.store === "apple" || it.store === "apple") {
+          if (!it.transactionId) throw new StoreError(400, "缺少交易 ID");
+          results.push(await syncApple(c, String(it.transactionId), user.id));
+        } else if (b.store === "google" || it.store === "google") {
+          if (!it.purchaseToken || !it.productId) throw new StoreError(400, "缺少购买令牌");
+          results.push(await syncGoogle(c, { productId: String(it.productId), purchaseToken: String(it.purchaseToken) }, user.id));
+        } else throw new StoreError(400, "未知商店");
+      } catch (e) {
+        if (list.length === 1) throw e instanceof StoreError ? new ApiError(e.status, e.message, e.code) : e;
+        results.push({ error: e.message });
+      }
+    }
+    return { results, me: await me(c, request) };
+  }
+  async function appleNotify(c, request) {
+    const b = await request.json().catch(() => ({}));
+    const n = decodeJws(b.signedPayload);
+    const tx = decodeJws(n?.data?.signedTransactionInfo);
+    if (!tx?.transactionId) return { ignored: true };
+    if (tx.bundleId && c.apple.bundleId && tx.bundleId !== c.apple.bundleId) return { ignored: true };
+    try {
+      const r = await syncApple(c, String(tx.transactionId), null);
+      log2(`[iap] apple ${n.notificationType}${n.subtype ? "/" + n.subtype : ""} → ${r.status ?? r.kind}`);
+    } catch (e) {
+      log2(`[iap] apple notify ${e.message}`);
+    }
+    return { ok: true };
+  }
+  async function googleNotify(c, request) {
+    const url = new URL(request.url);
+    if (!c.google.rtdnToken || url.searchParams.get("token") !== c.google.rtdnToken) throw new ApiError(401, "bad token");
+    const b = await request.json().catch(() => ({}));
+    let msg = null;
+    try {
+      msg = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b.message?.data || ""), (ch) => ch.charCodeAt(0))));
+    } catch {
+    }
+    if (!msg || msg.packageName && msg.packageName !== c.google.packageName) return { ignored: true };
+    try {
+      if (msg.subscriptionNotification?.purchaseToken) {
+        const r = await syncGoogle(c, { productId: msg.subscriptionNotification.subscriptionId, purchaseToken: msg.subscriptionNotification.purchaseToken }, null);
+        log2(`[iap] google sub ${msg.subscriptionNotification.notificationType} → ${r.status}`);
+      } else if (msg.oneTimeProductNotification?.purchaseToken) {
+        await syncGoogle(c, { productId: msg.oneTimeProductNotification.sku, purchaseToken: msg.oneTimeProductNotification.purchaseToken }, null);
+      } else if (msg.voidedPurchaseNotification) {
+        const v = msg.voidedPurchaseNotification;
+        if (v.productType === 1) await setSubStatus(c, `google:${v.purchaseToken}`, "revoked");
+        else await rpc(c, "zq_refund_purchase", { p_id: `google:${v.orderId || v.purchaseToken}` });
+      }
+    } catch (e) {
+      log2(`[iap] google notify ${e.message}`);
+    }
+    return { ok: true };
+  }
+  async function reconcileStores(c) {
+    const soon = new Date(now().getTime() + 2 * 864e5).toISOString();
+    const rows = await db(c, `zq_subs?source=in.(apple,google)&select=*`) ?? [];
+    let n = 0;
+    for (const r of rows) {
+      if (!["active", "grace", "canceled"].includes(r.status) || r.until && r.until > soon) continue;
+      try {
+        if (r.source === "apple" && appleConfigured(c)) await syncApple(c, r.id.slice(6), r.user_id);
+        if (r.source === "google" && googleConfigured(c)) await syncGoogle(c, { productId: String(r.product || "").split(":")[0], purchaseToken: r.id.slice(7) }, r.user_id);
+        n++;
+      } catch (e) {
+        log2(`[iap] reconcile ${r.id.slice(0, 20)} ${e.message}`);
+      }
+    }
+    return n;
+  }
+  async function deleteAccount(c, request) {
+    const user = await requireUser(c, request);
+    const b = await request.json().catch(() => ({}));
+    if (b.confirm !== user.email && b.confirm !== "DELETE") throw new ApiError(400, "请输入你的邮箱确认删除");
+    const p = (await db(c, `zq_profiles?user_id=eq.${user.id}&select=*`))?.[0];
+    const subs = await subsOf(c, user.id);
+    if (c.mpToken && p?.mp_preapproval_id && p.mp_status === "authorized") {
+      await mp(c, `/preapproval/${encodeURIComponent(p.mp_preapproval_id)}`, { method: "PUT", body: JSON.stringify({ status: "cancelled" }) }).catch(() => {
+      });
+    }
+    await rpc(c, "zq_delete_space", { p_user: user.id });
+    const r = await fetchImpl(`${c.url}/auth/v1/admin/users/${user.id}`, { method: "DELETE", headers: dbHeaders(c) });
+    if (!r.ok && r.status !== 404) {
+      log2(`[account] delete user HTTP ${r.status}`);
+      throw new ApiError(500, "删除账号失败，请稍后再试");
+    }
+    userCache.clear();
+    const store = subs.filter((x) => (x.source === "apple" || x.source === "google") && x.auto_renew && x.until && Date.parse(x.until) > now().getTime()).map((x) => x.source);
+    log2(`[account] deleted ${user.id.slice(0, 8)}`);
+    return { ok: true, cancelInStore: [...new Set(store)] };
   }
   async function checkout(c, request) {
     const user = await requireUser(c, request);
@@ -775,6 +1441,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
       await refreshPreapproval(c, id);
       return { ok: true };
     }
+    if (type === "payment") return settlePayment(c, id);
     return { ignored: true };
   }
   async function rememberFnUrl(c, request) {
@@ -864,7 +1531,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     const want = await kvGet(c, "cron_token");
     if (!want || token !== want) throw new ApiError(401, "bad cron token");
     const today = todayISO(now());
-    const reconciled = await reconcileSubscriptions(c).catch(() => 0);
+    const reconciled = await reconcileSubscriptions(c).catch(() => 0) + await reconcileStores(c).catch(() => 0);
     const subs = await db(c, "zq_push_subs?select=*") ?? [];
     const profiles = new Map((await db(c, "zq_profiles?select=*") ?? []).map((p) => [p.user_id, p]));
     const byUser = /* @__PURE__ */ new Map();
@@ -889,12 +1556,17 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
   }
   async function route(request, env, sub, cors2) {
     const c = saasConfig(env);
-    const json = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors2 } });
+    const json = (status, obj2) => new Response(JSON.stringify(obj2), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors2 } });
     const handlers = {
       "GET /me": () => me(c, request),
       "POST /billing/checkout": () => checkout(c, request),
       "POST /billing/cancel": () => cancel(c, request),
       "POST /billing/webhook": () => webhook(c, request),
+      "POST /billing/once": () => once(c, request),
+      "POST /iap/verify": () => iapVerify(c, request),
+      "POST /iap/apple": () => appleNotify(c, request),
+      "POST /iap/google": () => googleNotify(c, request),
+      "POST /account/delete": () => deleteAccount(c, request),
       "GET /push/key": async () => ({ publicKey: (await vapid(c)).publicKey }),
       "POST /push/subscribe": () => subscribe(c, request),
       "POST /push/unsubscribe": () => unsubscribe(c, request),
@@ -906,6 +1578,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     try {
       return json(200, await h());
     } catch (e) {
+      if (e instanceof StoreError) return json(e.status, { error: e.message, code: e.code });
       if (!(e instanceof ApiError)) log2(`[saas] ${sub} ${e?.stack ?? e}`);
       return json(e instanceof ApiError ? e.status : 500, { error: e instanceof ApiError ? e.message : "服务器内部错误", code: e?.code });
     }
@@ -917,7 +1590,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
       user = await getUser(c, request);
     } catch {
     }
-    return { login: c.allowKeyOnly ? "optional" : "required", signedIn: !!user, billing: !!c.mpToken };
+    return { login: c.allowKeyOnly ? "optional" : "required", signedIn: !!user, billing: !!c.mpToken, stores: storesOn(c) };
   }
   return { route, authorizeRecognize, health, digest, verifyMpSignature, saasConfig };
 }
@@ -943,7 +1616,7 @@ function supabaseEnv(all) {
   const token = [get("ACCESS_TOKEN"), ...keys].filter(Boolean).join(",");
   return { ...all, ACCESS_TOKEN: token, ALLOWED_ORIGINS: get("ALLOWED_ORIGINS") || "*" };
 }
-var ROUTES = ["/billing/checkout", "/billing/cancel", "/billing/webhook", "/push/key", "/push/subscribe", "/push/unsubscribe", "/push/test", "/push/cron", "/me"];
+var ROUTES = ["/billing/checkout", "/billing/cancel", "/billing/webhook", "/billing/once", "/iap/verify", "/iap/apple", "/iap/google", "/account/delete", "/push/key", "/push/subscribe", "/push/unsubscribe", "/push/test", "/push/cron", "/me"];
 function cors(req, env) {
   const origin = req.headers.get("origin");
   if (!origin) return {};

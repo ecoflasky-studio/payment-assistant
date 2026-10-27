@@ -1,0 +1,40 @@
+# 账期助手 · 一次性生成签名密钥（不用自己装 Java / OpenSSL）
+# 运行后在本次运行页面下载「signing-secrets」，按里面的说明填进仓库 Secrets，然后【立刻删除】这次运行的产物。
+name: 生成签名密钥
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: 生成安卓上传密钥 + iOS 证书私钥
+        run: |
+          mkdir out && cd out
+          PASS=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)
+          keytool -genkeypair -v -storetype PKCS12 -keystore upload.keystore -alias upload -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "$PASS" -keypass "$PASS" -dname "CN=Zhangqi Upload, O=EcoFlasky, C=BR"
+          base64 -w0 upload.keystore > ANDROID_KEYSTORE_BASE64.txt
+          echo -n "$PASS" > ANDROID_KEYSTORE_PASSWORD.txt
+          openssl genrsa -traditional -out IOS_CERTIFICATE_PRIVATE_KEY.pem 2048 2>/dev/null || openssl genrsa -out IOS_CERTIFICATE_PRIVATE_KEY.pem 2048
+          cat > 说明.txt <<'TXT'
+          把下面每个文件的全部内容，分别填到 GitHub 仓库 Settings → Secrets and variables → Actions → New repository secret：
+            ANDROID_KEYSTORE_BASE64      ← ANDROID_KEYSTORE_BASE64.txt
+            ANDROID_KEYSTORE_PASSWORD    ← ANDROID_KEYSTORE_PASSWORD.txt
+            IOS_CERTIFICATE_PRIVATE_KEY  ← IOS_CERTIFICATE_PRIVATE_KEY.pem（包括 BEGIN / END 两行）
+          upload.keystore 是安卓上传密钥本体，请另外备份到安全的地方（丢了可以在 Play Console 申请重置）。
+          填完后回到这次运行页面，点产物旁边的垃圾桶删除它。
+          TXT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signing-secrets
+          path: out
+          retention-days: 1

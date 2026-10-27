@@ -293,7 +293,15 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
           <input type="checkbox" checked={settings.cloudConsent} onChange={(e) => saveSettings({ cloudConsent: e.target.checked })} />
           <span>发送图片识别前不再逐次询问（取消勾选即可恢复每次询问）</span>
         </label>
-        <p className="xs muted">默认不上传任何票据。只有你在识别页点「开始识别」并同意后，才会发送当前这 1 张图片。</p>
+        <label className="check">
+          <input type="checkbox" checked={!!settings.cropFirst} onChange={(e) => saveSettings({ cropFirst: e.target.checked })} />
+          <span>
+            识别前先框选范围
+            <br />
+            <span className="xs muted">默认关闭：拍完直接识别整张图（相机取景框内）；需要时可在识别页点「调整范围」。</span>
+          </span>
+        </label>
+        <p className="xs muted">默认不上传任何票据。只有你同意后，才会发送当前这 1 张图片。</p>
       </section>
 
       <details className="card more guide">

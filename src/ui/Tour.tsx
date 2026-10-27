@@ -15,11 +15,11 @@ export interface TourStep {
 }
 
 export const TOUR_STEPS: TourStep[] = [
-  { title: '欢迎使用账期助手', text: '花 20 秒认识一下主要按钮。随时可以点「跳过」。' },
+  { title: '欢迎使用账期助手', text: '花 20 秒认识一下主要按钮。随时可以点「跳过」。右上角的放大镜可以搜索全部账单。' },
   { target: 'add', title: '新增账单', text: '从这里拍照识别、上传图片或 PDF，也可以手动录入商家账单和日常缴费。' },
   { target: 'capture', title: '拍照识别', text: '对准订单、boleto 或水电单拍一张，金额、到期日自动填好，你只需核对标黄的字段。' },
   { target: 'bills', title: '账单', text: '所有未付、逾期、即将到期的账单都在这里；付完点右侧 ✓ 标记已付。' },
-  { target: 'flow', title: '每月流水', text: '按月看应付、已付和各商家占比。' },
+  { target: 'flow', title: '报表', text: '流水、月报 / 年报、未来几周的现金流、每个商家的欠款和账龄都在这里。' },
   { target: 'settings', title: '设置', text: '商家账期、提醒、账号与套餐、面容 / 指纹解锁和使用教程都在这里。' },
   { title: '准备好了', text: '先拍一张单据试试吧。以后可以在「设置 → 使用教程」重新看这段导览。' },
 ];

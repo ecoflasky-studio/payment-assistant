@@ -1,3 +1,7 @@
+import { billSlot } from '../lib/colors';
+import { tagStats } from '../lib/insights';
+import { TagField } from '../ui/TagField';
+import { billTitle } from '../lib/expense';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useFeedback } from '../ui/feedback';
@@ -69,6 +73,7 @@ function stateFromBill(b: Bill): EditorState {
     dueDateText: isoToBR(b.dueDate),
     reminderDays: String(b.reminderDays),
     notes: b.notes,
+    tags: b.tags ?? [],
     rows: totalOnly
       ? [blankRow()]
       : b.items.map((i) => ({ key: i.id, qtyText: formatQuantity(i.quantity), desc: i.description, unitText: centsToInput(i.unitPriceCents), printedSubtotalRaw: null })),
@@ -243,7 +248,8 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
     })();
   }, [mode, id, copyFrom, initialKind, repo, guard, merchants, accounts, settings]);
 
-  const dueTotals = useMemo(() => dailyTotals(bills, { excludeId: existing?.id }), [bills, existing?.id]);
+  const tagSuggestions = useMemo(() => tagStats(bills, todayISO()).map((t) => t.tag).slice(0, 12), [bills]);
+  const dueTotals = useMemo(() => dailyTotals(bills, { excludeId: existing?.id, slotOf: (b) => billSlot(b, merchants, billTitle(b)) }), [bills, existing?.id, merchants]);
 
   /* ---------- 复核草稿自动保存 ---------- */
   useEffect(() => {
@@ -541,6 +547,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         reminderDays: Number(state.reminderDays),
         paidAt,
         notes: state.notes.slice(0, 1000),
+        tags: state.tags ?? [],
         items,
         amountMode: totalMode ? 'total' : 'items',
         kind: expenseMode ? 'expense' : 'supplier',
@@ -1198,6 +1205,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
       )}
 
       <section className="card stack">
+        <TagField value={state.tags ?? []} onChange={(tags) => set({ tags })} suggestions={tagSuggestions} />
         <div className="field">
           <label htmlFor="f-notes">备注</label>
           <textarea id="f-notes" className={`input${cls('notes')}`} maxLength={1000} value={state.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="如：月结、含运费、找某某结账" />

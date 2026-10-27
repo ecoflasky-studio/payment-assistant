@@ -18,6 +18,7 @@
  */
 
 import { withHints } from '../shared/hints.mjs';
+import { RECOGNIZE_SCHEMA, arithmeticIssues, verifyPrompt, acceptVerified } from '../shared/recognize-schema.mjs';
 
 const MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -75,6 +76,10 @@ export function createHandler({ prompt, log = () => {}, authorize = null, health
     model: provider === 'gemini' ? env.GEMINI_MODEL || 'gemini-3.8-flash' : env.ANTHROPIC_MODEL || 'claude-sonnet-5',
     apiUrl: provider === 'gemini' ? env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta' : env.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1/messages',
     thinking: env.GEMINI_THINKING === 'off' ? '' : env.GEMINI_THINKING || 'low',
+    /** 结构化输出（字段不会错位）；个别模型不支持时自动关闭 */
+    schema: env.GEMINI_SCHEMA !== 'off',
+    /** 算术对不上时自动复核一遍 */
+    verify: env.RECOGNIZE_VERIFY !== 'off',
     fallbacks: String(env.GEMINI_FALLBACK_MODELS || '')
       .split(',')
       .map((s) => s.trim())
@@ -224,6 +229,7 @@ export function createHandler({ prompt, log = () => {}, authorize = null, health
     const queue = [c.model, ...c.fallbacks.filter((m) => m !== c.model)];
     let discovered = false;
     let thinking = c.thinking;
+    let schema = c.schema;
     const errors = [];
     for (let i = 0; i < queue.length && i < 4; i++) {
       const model = queue[i];
@@ -237,6 +243,7 @@ export function createHandler({ prompt, log = () => {}, authorize = null, health
         }
         const generationConfig = { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 16384 };
         if (thinking) generationConfig.thinkingConfig = { thinkingLevel: thinking };
+        if (schema) generationConfig.responseSchema = RECOGNIZE_SCHEMA;
         const url = `${c.apiUrl.replace(/\/$/, '')}/models/${encodeURIComponent(model)}:generateContent`;
         let r;
         try {
@@ -263,6 +270,13 @@ export function createHandler({ prompt, log = () => {}, authorize = null, health
           continue;
         }
         const detail = await r.text().catch(() => '');
+        // 这个模型不支持结构化输出 Schema：去掉后立刻重试（提示词里也有完整格式说明）
+        if (r.status === 400 && schema && /schema|response_?schema|Unknown name|Invalid JSON payload/i.test(detail)) {
+          schema = false;
+          log(`[recognize] ${model} 不支持 responseSchema，已改用纯提示词`);
+          attempt--;
+          continue;
+        }
         // 这个模型不支持思考级别参数：去掉后立刻重试
         if (r.status === 400 && thinking && /thinking/i.test(detail)) {
           thinking = '';
@@ -305,15 +319,52 @@ export function createHandler({ prompt, log = () => {}, authorize = null, health
     if (typeof imageBase64 !== 'string' || !imageBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64)) throw new HttpError(400, '图片数据无效');
     if ((imageBase64.length * 3) / 4 > c.maxBytes) throw new HttpError(413, '图片过大');
 
-    const text = c.provider === 'gemini' ? await callGemini(c, mediaType, imageBase64, fullPrompt) : await callAnthropic(c, mediaType, imageBase64, fullPrompt);
-    let result = extractJson(text);
-    if (Array.isArray(result) && result.length === 1 && result[0] && typeof result[0] === 'object') result = result[0];
-    if (!result || typeof result !== 'object' || Array.isArray(result)) throw new HttpError(502, '模型没有返回符合格式的 JSON，请重试');
-    if (!Array.isArray(result.items)) {
-      if (result.items != null) throw new HttpError(502, '模型没有返回符合格式的 JSON，请重试');
-      result.items = [];
+    const started = Date.now();
+    const call = (cc, p) => (cc.provider === 'gemini' ? callGemini(cc, mediaType, imageBase64, p) : callAnthropic(cc, mediaType, imageBase64, p));
+    const parse = (text) => {
+      let r = extractJson(text);
+      if (Array.isArray(r) && r.length === 1 && r[0] && typeof r[0] === 'object') r = r[0];
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+      if (!Array.isArray(r.items)) {
+        if (r.items != null) return null;
+        r.items = [];
+      }
+      return r;
+    };
+    let text = await call(c, fullPrompt);
+    let result = parse(text);
+    // 偶尔输出被截断或夹杂文字：时间够就自动再试一次
+    if (!result && Date.now() - started < c.budget * 0.5) {
+      log('[recognize] 结果不是有效 JSON，自动重试');
+      text = await call({ ...c, budget: c.budget - (Date.now() - started) - 3000 }, fullPrompt);
+      result = parse(text);
     }
-    return { result, rawText: text.slice(0, 20000), model: c.model };
+    if (!result) throw new HttpError(502, '模型没有返回符合格式的 JSON，请重试');
+
+    // 算术复核：手写订单里 数量×单价≠小计 或 合计≠总额 时，让模型只重看这些行
+    let verified = null;
+    const issues = c.verify && result.docType !== 'statement' ? arithmeticIssues(result) : [];
+    const left = c.budget - (Date.now() - started);
+    if (issues.length && left > 40_000) {
+      try {
+        const t2 = await call({ ...c, budget: left - 5000, fallbacks: [] }, verifyPrompt(fullPrompt, result, issues));
+        const second = parse(t2);
+        if (acceptVerified(result, second)) {
+          verified = { before: issues.length, after: arithmeticIssues(second).length };
+          second.warnings = [...(Array.isArray(second.warnings) ? second.warnings : []), `已自动复核算术不符的地方（${issues.length} 处 → ${verified.after} 处）`];
+          result = second;
+          text = t2;
+        } else if (second && Array.isArray(second.warnings)) {
+          // 复核后仍对不上：保留第一次的读数，带上复核说明
+          const extra = second.warnings.filter((w) => typeof w === 'string' && /复核|原单据/.test(w));
+          result.warnings = [...(Array.isArray(result.warnings) ? result.warnings : []), ...extra];
+        }
+        log(`[recognize] verify ${issues.length} issue(s) → ${verified ? verified.after : 'kept first'}`);
+      } catch (e) {
+        log(`[recognize] verify skipped: ${e?.message ?? e}`);
+      }
+    }
+    return { result, rawText: text.slice(0, 20000), model: c.model, ms: Date.now() - started, verified };
   }
 
   /** 处理 /api/* 请求；非 API 路径返回 null，由宿主决定 */

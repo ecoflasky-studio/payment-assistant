@@ -1,0 +1,152 @@
+# 账期助手 · 打包 iPhone / 安卓 App 并上传到 TestFlight / Google Play 内部测试
+# 不需要 Mac：iOS 在 GitHub 的 macOS 机器上打包，签名证书用 App Store Connect API 自动创建。
+# 用法：Actions → 「打包 App」→ Run workflow，选平台。第一次之前请按 docs/上架指南.md 填好密钥。
+name: 打包 App
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 打包哪个平台
+        type: choice
+        options: [both, ios, android]
+        default: both
+      version:
+        description: 版本号（商店里显示，如 1.0.0）
+        default: 1.0.0
+
+permissions:
+  contents: read
+
+env:
+  APP_ID: ${{ vars.APP_ID || 'com.ecoflasky.zhangqi' }}
+  SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  APP_VERSION: ${{ inputs.version }}
+  APP_BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  web:
+    name: 构建网页包
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:app
+      - name: 取网站配置（Supabase 地址与公开 key，由「一键部署」生成）
+        run: |
+          curl -fsSL "${SITE_URL%/}/zq-config.json" -o dist-app/zq-config.json || { echo "::error::取不到 ${SITE_URL}zq-config.json：请先运行「一键部署」，或在仓库 Variables 里设置 SITE_URL"; exit 1; }
+          rm -f dist-app/sw.js dist-app/zq-config.example.json
+          cat dist-app/zq-config.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-app
+          path: dist-app
+          retention-days: 3
+
+  ios:
+    name: iPhone（上传 TestFlight）
+    needs: web
+    if: inputs.platform != 'android'
+    runs-on: macos-26
+    env:
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      CERTIFICATE_PRIVATE_KEY: ${{ secrets.IOS_CERTIFICATE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-app
+          path: dist-app
+      - name: 检查密钥
+        run: |
+          for k in APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_PRIVATE_KEY CERTIFICATE_PRIVATE_KEY; do
+            [ -n "${!k}" ] || { echo "::error::缺少 $k（见 docs/上架指南.md 第 3 步）"; exit 1; }
+          done
+      - name: 同步到 Xcode 工程
+        run: |
+          npx cap sync ios
+          # Bundle ID 与版本号
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = ${APP_ID};/g; s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = ${APP_BUILD_NUMBER};/g; s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = ${APP_VERSION};/g" ios/App/App.xcodeproj/project.pbxproj
+      - name: 自动签名（App Store Connect API 创建 / 下载证书和描述文件）
+        run: |
+          pip3 install --break-system-packages codemagic-cli-tools==0.70.0
+          keychain initialize
+          app-store-connect fetch-signing-files "$APP_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles --project ios/App/App.xcodeproj
+      - name: 打包 IPA
+        run: xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App --config Release
+      - name: 上传到 App Store Connect（TestFlight）
+        run: app-store-connect publish --path build/ios/ipa/*.ipa
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-ipa
+          path: build/ios/ipa/*.ipa
+          retention-days: 7
+
+  android:
+    name: 安卓（AAB → Google Play 内部测试）
+    needs: web
+    if: inputs.platform != 'ios'
+    runs-on: ubuntu-latest
+    env:
+      PLAY_JSON: ${{ secrets.PLAY_UPLOAD_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-app
+          path: dist-app
+      - name: 同步到安卓工程
+        run: |
+          npx cap sync android
+          sed -i "s/applicationId \"[^\"]*\"/applicationId \"${APP_ID}\"/" android/app/build.gradle
+      - name: 还原上架签名
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          [ -n "$KEYSTORE_B64" ] || { echo "::error::缺少 ANDROID_KEYSTORE_BASE64（见 docs/上架指南.md 第 4 步，可用「生成签名密钥」工作流生成）"; exit 1; }
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload.keystore" >> "$GITHUB_ENV"
+      - name: 打包 AAB
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'upload' }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: ./gradlew --no-daemon bundleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+      - name: 上传到 Google Play 内部测试（第一次请在 Play Console 手动上传上一步的 AAB）
+        if: env.PLAY_JSON != ''
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_UPLOAD_SERVICE_ACCOUNT }}
+          packageName: ${{ env.APP_ID }}
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed

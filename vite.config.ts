@@ -6,8 +6,9 @@ export default defineConfig(({ mode }) => ({
   base: './',
   plugins: mode === 'single' ? [react(), viteSingleFile()] : [react()],
   // artifact：发布为 Claude 页面（多文件、不注册 Service Worker）
+  // app：打包进 iOS / Android 安装包（Capacitor，见 capacitor.config.ts）
   define: { __SINGLE__: JSON.stringify(mode === 'single' || mode === 'artifact') },
-  build: mode === 'single' ? { outDir: 'dist-single', assetsInlineLimit: 100000000 } : mode === 'artifact' ? { outDir: 'dist-artifact' } : { outDir: 'dist' },
+  build: mode === 'single' ? { outDir: 'dist-single', assetsInlineLimit: 100000000 } : mode === 'artifact' ? { outDir: 'dist-artifact' } : mode === 'app' ? { outDir: 'dist-app' } : { outDir: 'dist' },
   server: { proxy: { '/api': 'http://localhost:8787' } },
   test: { environment: 'node', include: ['tests/**/*.test.ts'], testTimeout: 15000 },
 }));

@@ -9,6 +9,7 @@ import { BillRow } from '../ui/BillList';
 import { formatBR } from '../lib/dates';
 import { compactBRL } from '../lib/monthly';
 import { MonthNav } from '../ui/Calendar';
+import { ReportTabs } from './Insights';
 import { MerchantAvatar } from '../ui/BillList';
 import { IDownload, IChart } from '../ui/icons';
 import { saveFile, copyText } from '../lib/platform';
@@ -61,6 +62,7 @@ export function FlowPage({ month: initialMonth }: { month?: string }) {
 
   return (
     <>
+      <ReportTabs current="flow" />
       <section className="card flow-head" aria-label={`${monthLabel(month)}流水`}>
         <MonthNav
           month={month}
@@ -201,20 +203,9 @@ export function FlowPage({ month: initialMonth }: { month?: string }) {
             <span className="v num">{formatBRL(fc.next30, false)}</span>
           </button>
         </div>
-        <ul className="weeklist">
-          {fc.weeks.map((w) => {
-            const wmax = Math.max(1, ...fc.weeks.map((x) => x.cents));
-            return (
-              <li key={w.from}>
-                <span className="wk-label">{w.label}</span>
-                <span className="wk-bar" aria-hidden="true">
-                  <span style={{ width: `${(w.cents / wmax) * 100}%` }} />
-                </span>
-                <span className="wk-amt num">{w.cents ? formatBRL(w.cents) : '—'}</span>
-              </li>
-            );
-          })}
-        </ul>
+        <button className="btn btn-soft" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'cashflow' })}>
+          看 12 周现金流预测（含重复账单、资金余额）›
+        </button>
         <p className="xs muted" style={{ margin: 0 }}>按「还差多少」计算：分次付过的账单只算剩下的部分。</p>
       </section>
 

@@ -51,7 +51,7 @@ describe('一键部署脚本', () => {
     const out = await main({ env, fetchImpl, run, root, log: () => {} });
     // 再跑一次：全部可重复执行
     await main({ env, fetchImpl, run, root, log: () => {} });
-    expect(out.config).toEqual({ supabaseUrl: 'https://abcdefghijklmnopqrst.supabase.co', publishableKey: 'sb_publishable_xyz', functionName: 'recognize' });
+    expect(out.config).toEqual({ supabaseUrl: 'https://abcdefghijklmnopqrst.supabase.co', publishableKey: 'sb_publishable_xyz', functionName: 'recognize', siteUrl: 'https://tagmycup-hub.github.io/zhangqi/' });
     expect(JSON.parse(readFileSync(path.join(root, 'dist/zq-config.json'), 'utf8'))).toEqual(out.config);
     expect(calls.find((c) => c.path.endsWith('/config/auth'))!.body).toMatchObject({ mailer_autoconfirm: true, site_url: 'https://tagmycup-hub.github.io/zhangqi/' });
     expect(calls.find((c) => c.path.endsWith('/secrets'))!.body).toEqual([{ name: 'GEMINI_API_KEY', value: 'g' }, { name: 'OWNER_EMAILS', value: 'me@x.com' }]);

@@ -6,6 +6,9 @@
  * 之后每次打开只需刷脸/指纹。凭证只存在这台设备的安全芯片里，不上传任何生物信息。
  */
 
+import { isNative } from '../native/platform';
+import { nativeBiometricAvailable, nativeAuthenticate } from '../native/biometric';
+
 export interface BiometricConfig {
   /** 凭证 ID（base64url） */
   credId: string;
@@ -32,6 +35,7 @@ const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 /** 这台设备能不能用面容 / 指纹（需要 https 和平台验证器） */
 export async function biometricAvailable(): Promise<boolean> {
+  if (isNative()) return nativeBiometricAvailable();
   try {
     if (typeof window === 'undefined' || !window.isSecureContext || !('PublicKeyCredential' in window)) return false;
     return await (window.PublicKeyCredential as any).isUserVerifyingPlatformAuthenticatorAvailable();
@@ -64,6 +68,14 @@ function explain(e: unknown): BiometricError {
 
 /** 开启：在这台设备上创建一个只能用本人生物特征解锁的凭证 */
 export async function enrollBiometric(user: { id: string; email: string }): Promise<BiometricConfig> {
+  if (isNative()) {
+    try {
+      await nativeAuthenticate('开启后，打开账期助手时用它验证本人');
+    } catch (e: any) {
+      throw new BiometricError(e?.cancelled ? 'cancelled' : 'failed', e?.cancelled ? '已取消' : `开启失败：${e?.message ?? e}`);
+    }
+    return { credId: 'native', userId: user.id, enabledAt: new Date().toISOString() };
+  }
   let cred: PublicKeyCredential | null;
   try {
     cred = (await navigator.credentials.create({
@@ -89,6 +101,14 @@ export async function enrollBiometric(user: { id: string; email: string }): Prom
 
 /** 解锁：要求本人验证（面容 / 指纹 / 设备密码） */
 export async function verifyBiometric(cfg: BiometricConfig): Promise<true> {
+  if (cfg.credId === 'native' || isNative()) {
+    try {
+      await nativeAuthenticate('解锁账期助手');
+      return true;
+    } catch (e: any) {
+      throw new BiometricError(e?.cancelled ? 'cancelled' : 'failed', e?.cancelled ? '已取消，请再试一次' : '验证没有通过');
+    }
+  }
   try {
     const got = (await navigator.credentials.get({
       publicKey: {

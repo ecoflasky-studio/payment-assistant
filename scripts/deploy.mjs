@@ -125,6 +125,14 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
     MP_ACCESS_TOKEN: env.MP_ACCESS_TOKEN,
     MP_WEBHOOK_SECRET: env.MP_WEBHOOK_SECRET,
     OWNER_EMAILS: env.OWNER_EMAILS,
+    // App 内购校验（见 docs/上架指南.md）
+    APPLE_BUNDLE_ID: env.APPLE_BUNDLE_ID || (env.APPLE_ISSUER_ID ? env.APP_ID || 'com.ecoflasky.zhangqi' : ''),
+    APPLE_ISSUER_ID: env.APPLE_ISSUER_ID,
+    APPLE_KEY_ID: env.APPLE_IAP_KEY_ID,
+    APPLE_PRIVATE_KEY: env.APPLE_IAP_PRIVATE_KEY,
+    GOOGLE_PACKAGE_NAME: env.GOOGLE_PACKAGE_NAME || (env.GOOGLE_SERVICE_ACCOUNT ? env.APP_ID || 'com.ecoflasky.zhangqi' : ''),
+    GOOGLE_SERVICE_ACCOUNT: env.GOOGLE_SERVICE_ACCOUNT,
+    GOOGLE_RTDN_TOKEN: env.GOOGLE_RTDN_TOKEN,
   })
     .filter(([, v]) => v)
     .map(([name, value]) => ({ name, value }));
@@ -145,7 +153,7 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   const keys = (await api('GET', `/projects/${ref}/api-keys?reveal=false`)) ?? [];
   const pub = keys.find((k) => k.type === 'publishable') ?? keys.find((k) => k.name === 'anon' || k.type === 'legacy');
   if (!pub?.api_key) throw new DeployError('没找到 publishable key：请在 Supabase → Project Settings → API Keys 创建一个 publishable key 后重试');
-  const cfg = { supabaseUrl: projectUrl, publishableKey: pub.api_key, functionName: fn };
+  const cfg = { supabaseUrl: projectUrl, publishableKey: pub.api_key, functionName: fn, ...(site ? { siteUrl: site } : {}) };
   await mkdir(path.join(root, 'dist'), { recursive: true });
   await writeFile(path.join(root, 'dist/zq-config.json'), JSON.stringify(cfg, null, 2) + '\n');
   ok('dist/zq-config.json');
@@ -153,7 +161,9 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   log(warnings.length ? `\n✅ 部署完成（有 ${warnings.length} 处要手动补）` : '\n✅ 部署完成');
   warnings.forEach((w) => log(`\n⚠ ${w}`));
   if (site) log(`   网站：${site}`);
-  log(`   Mercado Pago 通知网址（可选，在 Mercado Pago 开发者后台 → Webhooks 填写，事件选「Planos e assinaturas」）：\n   ${fnUrl}/billing/webhook`);
+  log(`   Mercado Pago 通知网址（在 Mercado Pago 开发者后台 → Webhooks 填写，事件选「Planos e assinaturas」和「Pagamentos」）：\n   ${fnUrl}/billing/webhook`);
+  if (env.APPLE_ISSUER_ID) log(`   App Store 服务器通知网址（App Store Connect → App 信息 → App Store 服务器通知，版本 2，正式和沙盒都填）：\n   ${fnUrl}/iap/apple`);
+  if (env.GOOGLE_SERVICE_ACCOUNT) log(`   Google Play 实时通知（Pub/Sub 推送订阅的端点网址）：\n   ${fnUrl}/iap/google?token=${env.GOOGLE_RTDN_TOKEN ? '<GOOGLE_RTDN_TOKEN>' : '（先设置 GOOGLE_RTDN_TOKEN）'}`);
   return { ref, fnUrl, site, config: cfg, warnings };
 }
 

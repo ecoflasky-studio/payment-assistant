@@ -82,6 +82,8 @@ export interface Bill {
   schemaVersion: number;
   /** 分次付款记录（付清后 paidAt 同时写入） */
   payments?: import('./payments').Payment[];
+  /** 自定义标签（如「店铺A」「年货」「待报销」），可按标签搜索和汇总 */
+  tags?: string[];
 }
 
 export interface Merchant {
@@ -145,6 +147,10 @@ export interface Settings {
   lastProvider: string | null;
   /** 每月支出预算（分），0 或空表示不设 */
   monthlyBudgetCents?: number | null;
+  /** 识别前先手动框选范围（默认关：直接用整张图或相机取景框） */
+  cropFirst?: boolean;
+  /** 现金流预测用的可用资金（分），空 = 不算余额 */
+  cashOnHandCents?: number | null;
   updatedAt: string;
 }
 

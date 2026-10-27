@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, type ReactNode } from 'react';
+import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { StoreProvider, useStore, type Route } from './store';
 import { FeedbackProvider } from './ui/feedback';
 import { Dashboard, PickImageButton } from './pages/Dashboard';
@@ -13,12 +13,15 @@ import { LockScreen } from './pages/Lock';
 import { Logo } from './ui/Logo';
 import { FlowPage } from './pages/Flow';
 import { HelpPage } from './pages/Help';
+import { ReportPage, CashflowPage, ReconcilePage, SearchSheet } from './pages/Insights';
 import { Tour, shouldAutoStart, tourDone } from './ui/Tour';
+import { initNative } from './native/platform';
+import { onReminderTap } from './native/reminders';
 import { useReminders } from './reminders';
 import { IHome, IList, IPlus, IStore, ISettings, ICamera, IEdit, IImage, IBolt, ICloud } from './ui/icons';
 import { syncLabel } from './pages/SyncSettings';
 import { useTheme } from './theme';
-import { ISun, IMoon, IChart } from './ui/icons';
+import { ISun, IMoon, IChart, ISearch } from './ui/icons';
 import { Modal } from './ui/feedback';
 
 const TITLES: Record<Route['name'], string> = {
@@ -34,7 +37,10 @@ const TITLES: Record<Route['name'], string> = {
   data: '数据管理',
   account: '账号与套餐',
   help: '使用教程',
-  flow: '每月流水',
+  report: '报表',
+  cashflow: '报表',
+  reconcile: '报表',
+  flow: '报表',
 };
 
 function Shell() {
@@ -43,6 +49,7 @@ function Shell() {
   const rem = useReminders();
   const [, setTheme, theme] = useTheme();
   const [addOpen, setAddOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   useEffect(() => {
     const on = () => setOnline(true);
@@ -54,6 +61,22 @@ function Shell() {
       window.removeEventListener('offline', off);
     };
   }, []);
+
+  // 原生 App：状态栏、启动图、安卓返回键、点提醒通知打开账单
+  const routeRef = useRef(route.name);
+  routeRef.current = route.name;
+  useEffect(() => {
+    void initNative(() => {
+      if (document.querySelector('.modal-bg')) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        return true;
+      }
+      if (routeRef.current === 'home') return false;
+      back();
+      return true;
+    });
+    void onReminderTap((h) => (location.hash = h));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 键盘快捷键（电脑上）：n 新增，/ 搜索，g 回首页，l 账单，f 流水
   useEffect(() => {
@@ -68,8 +91,7 @@ function Shell() {
         openAdd();
       } else if (e.key === '/') {
         e.preventDefault();
-        if (route.name !== 'bills') go({ name: 'bills' });
-        setTimeout(() => document.getElementById('q')?.focus(), 120);
+        setSearchOpen(true);
       } else if (k === 'g') go({ name: 'home' });
       else if (k === 'l') go({ name: 'bills' });
       else if (k === 'f') go({ name: 'flow' });
@@ -98,16 +120,16 @@ function Shell() {
     );
   }
 
-  const top = ['home', 'bills', 'flow', 'settings'].includes(route.name);
+  const top = ['home', 'bills', 'flow', 'settings', 'report', 'cashflow', 'reconcile'].includes(route.name);
   const nav: { r: Route; label: string; icon: ReactNode; badge?: number }[] = [
     { r: { name: 'home' }, label: '首页', icon: <IHome /> },
     { r: { name: 'bills' }, label: '账单', icon: <IList />, badge: rem.overdue || undefined },
-    { r: { name: 'flow' }, label: '流水', icon: <IChart /> },
+    { r: { name: 'flow' }, label: '报表', icon: <IChart /> },
     { r: { name: 'settings' }, label: '设置', icon: <ISettings /> },
   ];
   // 电脑侧栏多一个「资料」；手机上从「设置」进入
   const sideNav: typeof nav = [...nav.slice(0, 3), { r: { name: 'masters' }, label: '资料', icon: <IStore /> }, nav[3]];
-  const isCur = (r: Route) => r.name === route.name || (r.name === 'settings' && (route.name === 'data' || route.name === 'account' || route.name === 'help'));
+  const isCur = (r: Route) => r.name === route.name || (r.name === 'flow' && ['report', 'cashflow', 'reconcile'].includes(route.name)) || (r.name === 'settings' && (route.name === 'data' || route.name === 'account' || route.name === 'help'));
   const isCurTab = (r: Route) => isCur(r) || (r.name === 'settings' && route.name === 'masters');
 
   return (
@@ -139,6 +161,9 @@ function Shell() {
             </button>
           )}
           <h1>{TITLES[route.name]}</h1>
+          <button className="syncdot" onClick={() => setSearchOpen(true)} aria-label="搜索全部账单（快捷键 /）" title="搜索（/）">
+            <ISearch />
+          </button>
           <button className="syncdot" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? '切换到光明模式' : '切换到深色模式'} title={theme === 'dark' ? '光明模式' : '深色模式'}>
             {theme === 'dark' ? <ISun /> : <IMoon />}
           </button>
@@ -204,6 +229,7 @@ function Shell() {
         ))}
       </nav>
       <PaywallModal />
+      {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} />}
       <Tour autoStart={ready && shouldAutoStart({ saas: gate.saas, signedIn: !!auth.session, locked: lock.locked, route: route.name, done: tourDone() })} />
       {addOpen && (
         <Modal title="新增账单" onClose={() => setAddOpen(false)}>
@@ -262,6 +288,12 @@ function Page({ route, rem }: { route: Route; rem: ReturnType<typeof useReminder
       return <AccountPage />;
     case 'help':
       return <HelpPage />;
+    case 'report':
+      return <ReportPage period={route.period} />;
+    case 'cashflow':
+      return <CashflowPage />;
+    case 'reconcile':
+      return <ReconcilePage />;
     case 'flow':
       return <FlowPage month={route.month} />;
   }

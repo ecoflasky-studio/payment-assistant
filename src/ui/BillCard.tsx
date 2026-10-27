@@ -119,6 +119,16 @@ export function BillCard({
         <span className="num">开单 {formatBR(bill.billDate)}</span>
         {bill.paidAt ? <span className="num">付款 {new Date(bill.paidAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span> : <span>提前 {bill.reminderDays} 天提醒</span>}
       </div>
+      {!!bill.tags?.length && (
+        <div className="tagline" aria-label="标签">
+          {bill.tags.map((t) => (
+            <button key={t} type="button" className="tagchip" style={{ border: 0, cursor: 'pointer' }} onClick={() => go({ name: 'bills', filter: `q=${encodeURIComponent('#' + t)}` })}>
+              #{t}
+            </button>
+          ))}
+        </div>
+      )}
+      {!compact && inSheet && bill.notes && <p className="small muted" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>备注：{bill.notes}</p>}
       {!compact && !selectable && !bill.paidAt && (bill.paymentCode || pix) && (
         <div className="stack" style={{ gap: 4 }}>
           {bill.paymentCode && (

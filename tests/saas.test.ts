@@ -115,7 +115,7 @@ beforeEach(() => {
   pushStatus = 201;
 });
 
-describe('账号版：试用 30 天 + AI 5 次，到期只读', () => {
+describe('账号版：试用 30 天 + AI 10 次，到期只读', () => {
   it('没登录：识别返回 401（login_required），health 报告需要登录', async () => {
     const r = await recognizeAs();
     expect(r.status).toBe(401);
@@ -131,24 +131,24 @@ describe('账号版：试用 30 天 + AI 5 次，到期只读', () => {
   });
   it('新用户自动开始 30 天试用：基础功能开，推送和导出关', async () => {
     const j = await (await call('/me', { token: 'jwt-u1' })).json();
-    expect(j).toMatchObject({ email: 'ana@example.com', plan: 'trial', daysLeft: 30, features: { edit: true, push: false, export: false }, usage: { period: 'trial', ai: 0, limit: 5 }, billing: null });
+    expect(j).toMatchObject({ email: 'ana@example.com', plan: 'trial', daysLeft: 30, features: { edit: true, push: false, export: false }, usage: { period: 'trial', ai: 0, limit: 10, bonus: 0 }, billing: null });
     expect((await call('/me')).status).toBe(401);
     const kv = await pg.query(`select value from zq_kv where key = 'fn_url'`);
     expect(kv.rows[0]).toEqual({ value: `${SB}/functions/v1/quick-api` });
   });
-  it('试用期 AI 识别共 5 次：成功才计次，失败退还，用完返回 402', async () => {
+  it('试用期 AI 识别共 10 次：成功才计次，失败退还，用完返回 402', async () => {
     const r = await recognizeAs('jwt-u1');
     expect(r.status).toBe(200);
-    expect((await r.json()).usage).toEqual({ used: 1, limit: 5, plan: 'trial' });
+    expect((await r.json()).usage).toEqual({ used: 1, limit: 10, plan: 'trial', fromBonus: false });
     gemini = 'busy';
     expect((await recognizeAs('jwt-u1')).status).toBe(503);
     gemini = 'ok';
-    for (let i = 0; i < 4; i++) expect((await recognizeAs('jwt-u1')).status).toBe(200);
+    for (let i = 0; i < 9; i++) expect((await recognizeAs('jwt-u1')).status).toBe(200);
     const r6 = await recognizeAs('jwt-u1');
     expect(r6.status).toBe(402);
     const j = await r6.json();
     expect(j.code).toBe('quota');
-    expect(j.error).toMatch(/试用期的 5 次 AI 识别已用完/);
+    expect(j.error).toMatch(/试用期的 10 次 AI 识别已用完.*AI 加量包/);
   });
   it('试用到期：AI 识别 402（expired），账号同步只能下载不能上传', async () => {
     await pg.query(`update zq_profiles set trial_until = now() - interval '1 day' where user_id = $1`, [U1]);
@@ -173,15 +173,16 @@ describe('账号版：试用 30 天 + AI 5 次，到期只读', () => {
 
 describe('订阅（Mercado Pago）：T1 / T2，月付或年付', () => {
   const MP = { MP_ACCESS_TOKEN: 'TEST-mp-token' };
-  it('/me 列出套餐价格；创建 T1 年付订阅：每 12 个月扣 R$ 89,99', async () => {
+  it('/me 列出套餐价格；创建 T1 年付订阅：每 12 个月扣 R$ 79,90', async () => {
     const me = await (await call('/me', { token: 'jwt-u1', env: ENV(MP) })).json();
-    expect(me.billing.plans).toMatchObject({ t1: { month: 7.99, year: 89.99, ai: 20 }, t2: { month: 19.98, year: 199.99, ai: 50 } });
+    expect(me.billing.plans).toMatchObject({ t1: { month: 7.99, year: 79.9, ai: 20 }, t2: { month: 19.9, year: 199, ai: 50 } });
+    expect(me.billing).toMatchObject({ pack: { qty: 20, price: 4.9 }, web: true, stores: { apple: false, google: false } });
     expect((await call('/billing/checkout', { token: 'jwt-u1', body: { plan: 't3', period: 'month', returnUrl: 'https://app.github.io/zq/?mp=1' }, env: ENV(MP) })).status).toBe(400);
     const r = await call('/billing/checkout', { token: 'jwt-u1', body: { plan: 't1', period: 'year', returnUrl: 'https://app.github.io/zq/?mp=1' }, env: ENV(MP) });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ url: 'https://mp.test/checkout/pa1' });
     const c = mpCalls.find((x) => x.path === '/preapproval' && x.method === 'POST')!;
-    expect(c.body).toMatchObject({ external_reference: `${U1}|t1|year`, payer_email: 'ana@example.com', status: 'pending', reason: '账期助手 T1（年付）', auto_recurring: { frequency: 12, frequency_type: 'months', transaction_amount: 89.99, currency_id: 'BRL' } });
+    expect(c.body).toMatchObject({ external_reference: `${U1}|t1|year`, payer_email: 'ana@example.com', status: 'pending', reason: '账期助手 T1（年付）', auto_recurring: { frequency: 12, frequency_type: 'months', transaction_amount: 79.9, currency_id: 'BRL' } });
   });
   it('付款通知：签名错误拒绝；签名正确 → 回 Mercado Pago 查真实状态，开通 T1（推送开、导出关、AI 20 次/月）', async () => {
     authorize('pa1');

@@ -1,3 +1,4 @@
+import { dragCorner, moveQuad, boundingRect, isAxisRect } from '../lib/image/geometry';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useFeedback, Modal } from '../ui/feedback';
@@ -25,6 +26,8 @@ const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,applicatio
 
 const normAngle = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 
+const fullQuad = (w: number, h: number): Pt[] => [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
+
 function defaultQuad(w: number, h: number): Pt[] {
   const ix = w * 0.03;
   const iy = h * 0.03;
@@ -50,6 +53,7 @@ export function CapturePage() {
   const [warped, setWarped] = useState<HTMLCanvasElement | null>(null);
   const [blue, setBlue] = useState(false);
   const [variant, setVariant] = useState<Variant>('gray');
+  const [linked, setLinked] = useState(true);
   const [thumbs, setThumbs] = useState<Record<Variant, string>>({ color: '', gray: '', binary: '' });
   const variants = useRef<Record<Variant, HTMLCanvasElement | null>>({ color: null, gray: null, binary: null });
 
@@ -63,6 +67,10 @@ export function CapturePage() {
   const isPdfLoaded = useRef(false);
   const angleRef = useRef(0);
   const skipRotate = useRef(false);
+  const cropFirst = useRef(!!settings.cropFirst);
+  cropFirst.current = !!settings.cropFirst;
+  /** 当前识别范围是不是整张图片（没框选过） */
+  const [wholeImage, setWholeImage] = useState(true);
   const load = useCallback(async (f: File, quadHint?: Pt[]) => {
     setErr(null);
     const token = ++loadToken.current;
@@ -72,6 +80,7 @@ export function CapturePage() {
     setAiOpen(false);
     // 换图时清掉上一张的增强版本，避免把旧图发去识别
     variants.current = { color: null, gray: null, binary: null };
+    variantPicked.current = false;
     setThumbs({ color: '', gray: '', binary: '' });
     setWarped(null);
     // 角度从非 0 复位时，旋转效果不要覆盖相机给的裁切框
@@ -107,8 +116,21 @@ export function CapturePage() {
       base.current = c;
       setAngle(0);
       setRotated(c);
-      setQuad(quadHint ? quadHint.map((p) => ({ x: p.x * c.width, y: p.y * c.height })) : defaultQuad(c.width, c.height));
-      setStep('adjust');
+      const q = quadHint ? quadHint.map((p) => ({ x: p.x * c.width, y: p.y * c.height })) : cropFirst.current ? defaultQuad(c.width, c.height) : fullQuad(c.width, c.height);
+      setQuad(q);
+      setWholeImage(!quadHint);
+      if (cropFirst.current) {
+        setStep('adjust');
+      } else {
+        // 默认不框选：整张图（或相机取景框）直接进入识别，识别方式就绪后自动开始
+        const w = quadHint ? warpQuad(c, q, 2400) : c;
+        setWarped(w);
+        setVariant('gray');
+        setStep('recognize');
+        autoRun.current = true;
+        setBusy(null);
+        await buildVariants(w, false);
+      }
     } catch (e) {
       setErr(e instanceof ImageError ? e.message : '图片读取失败，请换一张');
       setStep('pick');
@@ -176,6 +198,7 @@ export function CapturePage() {
     try {
       const w = warpQuad(rotated, quad, 2400);
       setWarped(w);
+      setWholeImage(quad.every((p, i) => Math.abs(p.x - fullQuad(rotated.width, rotated.height)[i].x) < 1 && Math.abs(p.y - fullQuad(rotated.width, rotated.height)[i].y) < 1));
       setStep(quick ? 'recognize' : 'enhance');
       autoRun.current = quick;
       await buildVariants(w, blue);
@@ -229,9 +252,13 @@ export function CapturePage() {
     };
   };
 
-  const images = async () => {
-    const v = variants.current[variant] ?? warped!;
-    const processed = await exportForRecognition(v, 2000);
+  /** 用户在「增强」里亲自选过版本就用它；否则 AI 用彩色（能分清蓝色表格线和笔迹），本机 OCR 用灰度增强 */
+  const variantPicked = useRef(false);
+  const images = async (forAI = true) => {
+    const want: Variant = variantPicked.current ? variant : forAI ? 'color' : 'gray';
+    const v = variants.current[want] ?? variants.current[variant] ?? warped!;
+    // 发给 AI 的图：长边 1800、质量 0.85，手机上传快一倍，手写字迹仍清楚
+    const processed = await exportForRecognition(v, 1800, 0.85);
     const original = base.current ? await exportForRecognition(base.current, 2000) : undefined;
     return { processed, original };
   };
@@ -246,7 +273,7 @@ export function CapturePage() {
     ctl.current = new AbortController();
     setProgress('准备图片…');
     try {
-      const { processed, original } = await images();
+      const { processed, original } = await images(p.id !== 'local');
       const hints = p.id === 'local' ? '' : buildHints(merchants, bills);
       const r = await recognize(p.id, processed, { endpoint: settings.recognizeEndpoint, token: settings.recognizeToken, supa, hints, accessToken: p.id === 'supabase' ? await getToken() : null, signal: ctl.current.signal, onProgress: setProgress, chinese });
       if (settings.lastProvider !== p.id) saveSettings({ lastProvider: p.id });
@@ -354,10 +381,10 @@ export function CapturePage() {
   return (
     <>
       <ol className="chips" aria-label="步骤" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {(['pick', 'adjust', 'enhance', 'recognize'] as Step[]).filter(() => step !== 'statement').map((s, i) => (
+        {(['pick', 'adjust', 'enhance', 'recognize'] as Step[]).filter((s) => step !== 'statement' && (s === 'pick' || s === 'recognize' || s === step)).map((s, i) => (
           <li key={s}>
             <span className="chip" aria-current={step === s ? 'step' : undefined} style={step === s ? { background: 'var(--ink)', color: 'var(--card)', borderColor: 'var(--ink)', display: 'inline-flex', alignItems: 'center' } : { display: 'inline-flex', alignItems: 'center' }}>
-              {i + 1}. {({ pick: '选图', adjust: '裁切旋转', enhance: '增强', recognize: '识别', statement: '导入' } as Record<Step, string>)[s]}
+              {i + 1}. {({ pick: '选图', adjust: '调整范围', enhance: '增强', recognize: '识别', statement: '导入' } as Record<Step, string>)[s]}
             </span>
           </li>
         ))}
@@ -413,13 +440,21 @@ export function CapturePage() {
         <div className="stack">
           <div className="card stack">
             <div className="section-head">
-              <h2>拖动四个角，框住单据</h2>
-              <button className="link" onClick={() => setQuad(defaultQuad(rotated.width, rotated.height))}>
-                重置
+              <h2>调整识别范围</h2>
+              <button className="link" onClick={() => setQuad(fullQuad(rotated.width, rotated.height))}>
+                整张图
               </button>
             </div>
-            <p className="small muted">可以只框明细表或总计区域，把旁边的纸张和桌面排除在外。角点顺序：左上 → 右上 → 右下 → 左下。</p>
-            <QuadEditor canvas={rotated} quad={quad} onChange={setQuad} />
+            <div className="seg2" role="group" aria-label="框选方式">
+              <button type="button" aria-pressed={linked} onClick={() => { setLinked(true); setQuad((q) => (isAxisRect(q) ? q : boundingRect(q))); }}>
+                矩形框（四角联动）
+              </button>
+              <button type="button" aria-pressed={!linked} onClick={() => setLinked(false)}>
+                自由四角（纸张歪斜）
+              </button>
+            </div>
+            <p className="small muted">{linked ? '拖任意一个角，整个框一起变；拖框内可整体移动。' : '每个角单独拖动，用来拉正拍歪的纸张。'}</p>
+            <QuadEditor canvas={rotated} quad={quad} onChange={setQuad} linked={linked} />
             <div className="row">
               <button className="btn btn-sm" onClick={() => setAngle((a) => normAngle(a - 90))}>
                 <IRotate style={{ transform: 'scaleX(-1)' }} />
@@ -431,21 +466,26 @@ export function CapturePage() {
               </button>
               <span className="small muted num">当前 {angle}°</span>
             </div>
-            <div className="field">
-              <label htmlFor="fine">微调角度（纸张歪斜时用）</label>
-              <input id="fine" type="range" className="range" min={-180} max={180} step={0.5} value={angle} onChange={(e) => setAngle(Number(e.target.value))} />
-            </div>
+            <details className="more">
+              <summary>微调角度、图片增强</summary>
+              <div className="stack" style={{ marginTop: 8 }}>
+                <div className="field">
+                  <label htmlFor="fine">微调角度（纸张歪斜时用）</label>
+                  <input id="fine" type="range" className="range" min={-180} max={180} step={0.5} value={angle} onChange={(e) => setAngle(Number(e.target.value))} />
+                </div>
+                <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => applyCrop(false)} disabled={!!busy}>
+                  选择增强版本…
+                </button>
+              </div>
+            </details>
           </div>
           <div className="row end">
-            <button className="btn btn-ghost" onClick={() => { setStep('pick'); base.current = null; }}>
-              换一张
-            </button>
-            <button className="btn" onClick={() => applyCrop(false)} disabled={!!busy}>
-              调整增强
+            <button className="btn btn-ghost" onClick={() => (warped ? setStep('recognize') : (setStep('pick'), (base.current = null)))}>
+              {warped ? '取消' : '换一张'}
             </button>
             <button className="btn btn-primary" onClick={() => applyCrop(true)} disabled={!!busy}>
               <ISpark />
-              一键识别
+              按这个范围识别
             </button>
           </div>
         </div>
@@ -457,7 +497,7 @@ export function CapturePage() {
             <h2>选择识别用的版本</h2>
             <div className="variant-grid" role="group" aria-label="图片版本">
               {(['color', 'gray', 'binary'] as Variant[]).map((v) => (
-                <button key={v} className="variant" aria-pressed={variant === v} onClick={() => setVariant(v)}>
+                <button key={v} className="variant" aria-pressed={variant === v} onClick={() => { variantPicked.current = true; setVariant(v); }}>
                   {thumbs[v] && <img src={thumbs[v]} alt={VARIANT_LABEL[v]} />}
                   {VARIANT_LABEL[v]}
                 </button>
@@ -534,6 +574,18 @@ export function CapturePage() {
 
       {step === 'recognize' && (!pdfModel || aiOpen) && (
         <div className="stack">
+          {!isPdfLoaded.current && (thumbs[variant] || thumbs.color) && !progress && (
+            <div className="card row rangecard">
+              <img src={thumbs[variant] || thumbs.color} alt="识别用的图片" />
+              <span className="grow stack" style={{ gap: 2 }}>
+                <b className="small">{wholeImage ? '识别整张图片' : '识别框选的范围'}</b>
+                <span className="xs muted">单据只占一小块、或拍歪了，再调整范围。</span>
+              </span>
+              <button className="btn btn-sm" onClick={() => setStep('adjust')} disabled={!!busy}>
+                调整范围
+              </button>
+            </div>
+          )}
           <div className="card stack">
             <h2>{pdfModel ? '或用 AI 识别整页' : '选择识别方式'}</h2>
             {!providers && (
@@ -559,7 +611,7 @@ export function CapturePage() {
             ))}
             {providers?.some((p) => p.needsLogin) && (
               <div className="banner ok">
-                <span className="grow small">登录账号后就能用 AI 识别（邮箱验证码，不用密码）。</span>
+                <span className="grow small">登录账号后就能用 AI 识别。</span>
                 <button className="btn btn-sm btn-primary" onClick={() => go({ name: 'account' })}>
                   去登录
                 </button>
@@ -606,15 +658,17 @@ export function CapturePage() {
                   重试
                 </button>
               )}
-              <button className="btn btn-sm" onClick={() => setStep('enhance')}>
-                换个版本
-              </button>
+              {!isPdfLoaded.current && (
+                <button className="btn btn-sm" onClick={() => setStep('adjust')}>
+                  调整范围
+                </button>
+              )}
             </div>
           )}
 
           <div className="row end">
-            <button className="btn btn-ghost" onClick={() => setStep(pdfModel || isPdfLoaded.current ? 'pick' : 'enhance')} disabled={!!progress}>
-              返回
+            <button className="btn btn-ghost" onClick={() => setStep('pick')} disabled={!!progress}>
+              换一张
             </button>
             <button className="btn" onClick={manualWithImage} disabled={!!progress || !!busy}>
               对照图片手工录入
@@ -705,11 +759,13 @@ export function CapturePage() {
   );
 }
 
-function QuadEditor({ canvas, quad, onChange }: { canvas: HTMLCanvasElement; quad: Pt[]; onChange: (q: Pt[]) => void }) {
+function QuadEditor({ canvas, quad, onChange, linked = true }: { canvas: HTMLCanvasElement; quad: Pt[]; onChange: (q: Pt[]) => void; linked?: boolean }) {
   const holder = useRef<HTMLDivElement>(null);
   const disp = useRef<HTMLCanvasElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<number | null>(null);
+  /** 拖框内整体移动：记录上一次的指针位置 */
+  const moving = useRef<Pt | null>(null);
   const [loupe, setLoupe] = useState<Pt | null>(null);
 
   useEffect(() => {
@@ -733,7 +789,12 @@ function QuadEditor({ canvas, quad, onChange }: { canvas: HTMLCanvasElement; qua
 
   const nudge = (i: number, dx: number, dy: number) => {
     const step = Math.max(canvas.width, canvas.height) / 200;
-    onChange(quad.map((p, j) => (j === i ? { x: Math.max(0, Math.min(canvas.width, p.x + dx * step)), y: Math.max(0, Math.min(canvas.height, p.y + dy * step)) } : p)));
+    onChange(dragCorner(quad, i, { x: quad[i].x + dx * step, y: quad[i].y + dy * step }, linked, canvas.width, canvas.height));
+  };
+  const end = () => {
+    drag.current = null;
+    moving.current = null;
+    setLoupe(null);
   };
 
   return (
@@ -744,22 +805,44 @@ function QuadEditor({ canvas, quad, onChange }: { canvas: HTMLCanvasElement; qua
         viewBox={`0 0 ${canvas.width} ${canvas.height}`}
         preserveAspectRatio="none"
         onPointerMove={(e) => {
+          if (moving.current) {
+            const p = toPt(e);
+            onChange(moveQuad(quad, p.x - moving.current.x, p.y - moving.current.y, canvas.width, canvas.height));
+            moving.current = p;
+            return;
+          }
           if (drag.current === null) return;
           const p = toPt(e);
           setLoupe(p);
-          onChange(quad.map((q, j) => (j === drag.current ? p : q)));
+          onChange(dragCorner(quad, drag.current, p, linked, canvas.width, canvas.height));
         }}
-        onPointerUp={() => {
-          drag.current = null;
-          setLoupe(null);
-        }}
-        onPointerCancel={() => {
-          drag.current = null;
-          setLoupe(null);
-        }}
+        onPointerUp={end}
+        onPointerCancel={end}
       >
         <path d={`M0 0H${canvas.width}V${canvas.height}H0Z ${quad.length ? `M${quad.map((p) => `${p.x} ${p.y}`).join('L')}Z` : ''}`} fill="rgba(10,8,30,0.55)" fillRule="evenodd" />
-        {quad.length === 4 && <polygon points={quad.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={ok ? '#8a82f4' : '#ff5d73'} strokeWidth={R / 5} />}
+        {quad.length === 4 && (
+          <polygon
+            points={quad.map((p) => `${p.x},${p.y}`).join(' ')}
+            fill="rgba(138,130,244,0.08)"
+            stroke={ok ? '#8a82f4' : '#ff5d73'}
+            strokeWidth={R / 5}
+            style={{ cursor: 'move', touchAction: 'none' }}
+            onPointerDown={(e) => {
+              (e.target as Element).setPointerCapture?.(e.pointerId);
+              moving.current = toPt(e);
+            }}
+          />
+        )}
+        {linked && quad.length === 4 && (
+          <g stroke="rgba(255,255,255,0.35)" strokeWidth={R / 12} pointerEvents="none">
+            {[1, 2].map((k) => (
+              <g key={k}>
+                <line x1={quad[0].x + ((quad[1].x - quad[0].x) * k) / 3} y1={quad[0].y} x2={quad[0].x + ((quad[1].x - quad[0].x) * k) / 3} y2={quad[3].y} />
+                <line x1={quad[0].x} y1={quad[0].y + ((quad[3].y - quad[0].y) * k) / 3} x2={quad[1].x} y2={quad[0].y + ((quad[3].y - quad[0].y) * k) / 3} />
+              </g>
+            ))}
+          </g>
+        )}
         {quad.map((p, i) => (
           <g key={i}>
             <circle
@@ -784,7 +867,7 @@ function QuadEditor({ canvas, quad, onChange }: { canvas: HTMLCanvasElement; qua
               }}
             />
             <circle cx={p.x} cy={p.y} r={R * 0.6} className="handle" style={{ strokeWidth: R / 5, pointerEvents: 'none' }} />
-            <text x={p.x} y={p.y - R * 1.1} textAnchor="middle" fontSize={R * 0.9} fill="#fff" style={{ pointerEvents: 'none', fontWeight: 700 }}>
+            <text x={i === 0 || i === 3 ? p.x + R * 1.2 : p.x - R * 1.2} y={i < 2 ? p.y + R * 2.2 : p.y - R * 1.4} textAnchor={i === 0 || i === 3 ? 'start' : 'end'} fontSize={R * 0.9} fill="#fff" style={{ pointerEvents: 'none', fontWeight: 700, paintOrder: 'stroke', stroke: 'rgba(0,0,0,.55)', strokeWidth: R / 6 }}>
               {labels[i]}
             </text>
           </g>

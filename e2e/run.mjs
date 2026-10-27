@@ -350,8 +350,10 @@ try {
   await page.screenshot({ path: 'shot-camera-360.png' });
   await page.getByRole('button', { name: '按下快门' }).click();
   await page.getByRole('button', { name: '使用这张' }).click();
-  await page.getByText('拖动四个角，框住单据').waitFor();
-  ok('B04', '应用内相机：取景框拍照 → 预览确认 → 进入裁切（默认裁切为取景框）');
+  // 默认不框选：取景框内的图直接进入识别
+  await page.getByText('识别框选的范围').waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: '不同意' }).click({ timeout: 4000 }).catch(() => {});
+  ok('B04', '应用内相机：取景框拍照 → 预览确认 → 直接按取景框识别（不再默认进入裁切）');
 
   // 清除示例
   await page.goto(BASE + '#/');
@@ -430,20 +432,43 @@ try {
   // A03 识别流程
   await page.goto(BASE + '#/capture');
   await page.setInputFiles('input[type=file]:not([capture])', 'ticket.jpg');
-  await page.getByText('拖动四个角，框住单据').waitFor();
+  // 默认不框选：选图后直接进入识别并自动开始（第一次会弹出同意框）
+  await page.getByText('发送图片进行识别？').waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: '不同意' }).click();
+  await page.getByText('识别整张图片').waitFor();
+  await page.getByRole('button', { name: '调整范围' }).click();
+  await page.getByText('调整识别范围').waitFor();
   await noOverflow('裁切页');
+  // 矩形框：拖左上角，右上角的 y 和左下角的 x 跟着变
+  const handleBox = async (label) => page.getByRole('slider', { name: new RegExp(`^${label}角点`) }).boundingBox();
+  const tl = await handleBox('左上');
+  await page.mouse.move(tl.x + tl.width / 2, tl.y + tl.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(tl.x + tl.width / 2 + 30, tl.y + tl.height / 2 + 40, { steps: 6 });
+  await page.mouse.up();
+  const val = async (label) => (await page.getByRole('slider', { name: new RegExp(`^${label}角点`) }).getAttribute('aria-valuetext')).split(', ').map(Number);
+  const [tlx, tly] = await val('左上');
+  const [, try_] = await val('右上');
+  const [blx] = await val('左下');
+  assert.ok(tlx > 0 && tly > 0, '左上角应被拖动');
+  assert.equal(try_, tly, '矩形框：右上角的 y 应跟着左上角');
+  assert.equal(blx, tlx, '矩形框：左下角的 x 应跟着左上角');
   await page.screenshot({ path: 'shot-crop-360.png', fullPage: true });
+  await page.getByRole('button', { name: /自由四角/ }).click();
+  await page.getByText('每个角单独拖动').waitFor();
+  await page.getByRole('button', { name: /矩形框/ }).click();
+  await page.getByRole('button', { name: '整张图' }).click();
   await page.getByRole('button', { name: '右转 90°' }).click();
   await page.getByText('当前 90°').waitFor();
   await page.getByRole('button', { name: '左转 90°' }).click();
   await page.getByText('当前 0°').waitFor();
-  await page.getByRole('button', { name: '调整增强' }).click();
+  await page.getByText('微调角度、图片增强').click();
+  await page.getByRole('button', { name: '选择增强版本…' }).click();
   await page.getByText('选择识别用的版本').waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: '黑字白底版' }).click();
   await page.screenshot({ path: 'shot-enhance-360.png', fullPage: true });
   await page.getByRole('button', { name: '下一步：识别' }).click();
   await page.getByRole('button', { name: /云端识别服务/ }).waitFor();
-  await page.waitForFunction(() => !document.querySelector('.provider[aria-pressed="true"]') || true);
   await page.getByRole('button', { name: /云端识别服务/ }).click();
   await page.getByRole('button', { name: '开始识别' }).click();
   await page.getByText('发送图片进行识别？').waitFor();
@@ -628,8 +653,6 @@ try {
   fixture = fixtures.statement;
   await page.goto(BASE + '#/capture');
   await page.setInputFiles('input[type=file]:not([capture])', 'ticket.jpg');
-  await page.getByText('拖动四个角，框住单据').waitFor();
-  await page.getByRole('button', { name: '一键识别' }).click();
   await page.getByRole('button', { name: /云端识别服务/ }).waitFor({ timeout: 30000 });
   // 一键识别会自动弹出同意框：等一下再判断，避免和弹窗抢点击
   await page.getByText('发送图片进行识别？').waitFor({ timeout: 2500 }).catch(() => {});
@@ -704,9 +727,9 @@ try {
   await page.locator('.brow', { hasText: '#0042' }).getByRole('button', { name: /^标记已付/ }).click();
   await page.getByText('已标记付款').waitFor();
   await page.goto(BASE + '#/');
-  await page.getByRole('button', { name: '流水' }).click();
+  await page.locator('.tabbar').getByRole('button', { name: '报表' }).click();
   const fh = await page.locator('.flow-head').innerText();
-  assert.match(await page.locator('.weeklist').innerText(), /本周内/);
+  await page.getByRole('button', { name: /看 12 周现金流预测/ }).waitFor();
   assert.match(fh, /\d+月实付 · \d+ 笔/);
   assert.equal(await page.locator('.fbar').count(), 12);
   await page.screenshot({ path: 'shot-flow-360.png', fullPage: true });
@@ -724,6 +747,70 @@ try {
   await page.getByText('已恢复为未付').waitFor();
   await closeSheet();
   ok('B12', '每月流水：实付合计与环比、近 12 个月柱状图（点柱切换月份）、按商家/分类/账号汇总、按付款日明细、导出 CSV');
+
+  // 标签 + 全局搜索 + 报表中心（月报/年报、现金流、商家对账）
+  await page.goto(BASE + '#/bills/all');
+  await page.fill('#q', '');
+  sheet = await openBill('#0258');
+  await sheet.getByRole('button', { name: '编辑' }).click();
+  await page.fill('#f-tags', '店铺A');
+  await page.keyboard.press('Enter');
+  await page.locator('.tagbox .tagchip', { hasText: '#店铺A' }).waitFor();
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.getByText('已保存修改').waitFor();
+  await page.getByRole('button', { name: /搜索全部账单/ }).click();
+  const sd = page.getByRole('dialog', { name: '搜索' });
+  await sd.locator('#gsearch').fill('#店铺A');
+  await sd.locator('.brow', { hasText: '#0258' }).waitFor();
+  assert.equal(await sd.locator('.brow').count(), 1);
+  await sd.locator('#gsearch').fill('368,00');
+  await sd.getByText(/金额相同/).first().waitFor();
+  await sd.locator('#gsearch').fill('loja');
+  await sd.locator('.sres', { hasText: 'Loja Exemplo' }).first().click();
+  const md = page.getByRole('dialog', { name: 'Loja Exemplo' });
+  await md.getByText('平均付款').waitFor();
+  await md.getByRole('button', { name: '复制对账单' }).click();
+  await page.getByText('对账文字已复制').waitFor();
+  const recon = await page.evaluate(() => navigator.clipboard.readText());
+  assert.match(recon, /^Loja Exemplo 对账（截至 \d{2}\/\d{2}\/\d{4}）/);
+  assert.match(recon, /合计未付：R\$ [\d.,]+（\d+ 笔）/);
+  // 关掉商家详情回到搜索结果，再关掉搜索
+  await page.keyboard.press('Escape');
+  await sd.locator('#gsearch').waitFor();
+  await closeSheet();
+  await page.goto(BASE + '#/bills/q=%23%E5%BA%97%E9%93%BAA');
+  await page.locator('.brow', { hasText: '#0258' }).waitFor();
+  // 月报 / 年报
+  await page.goto(BASE + '#/report/' + spToday.slice(0, 7));
+  await page.getByRole('heading', { name: '每天付款' }).waitFor();
+  assert.match(await page.locator('.report-head').innerText(), /实付 · \d+ 笔/);
+  await noOverflow('月报');
+  await page.screenshot({ path: 'shot-report-360.png', fullPage: true });
+  await page.getByRole('button', { name: '年报', exact: true }).click();
+  await page.getByRole('heading', { name: '每月付款' }).waitFor();
+  assert.match(page.url(), /#\/report\/\d{4}$/);
+  assert.equal(await page.locator('.rchart.year .rbar').count(), 12);
+  await page.getByRole('button', { name: '分享摘要' }).click();
+  await page.getByText(/年报摘要已复制/).waitFor();
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^账期助手 · \d{4} 年年报\n实付 R\$/);
+  // 现金流：填可用资金后逐周算余额
+  await page.getByRole('button', { name: '现金流', exact: true }).click();
+  await page.getByText('未来 4 周要付').waitFor();
+  await page.fill('#cash', '1,00');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.getByText(/资金不够/).waitFor();
+  await page.fill('#cash', '1.000.000,00');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.getByText(/都够付/).waitFor();
+  await noOverflow('现金流');
+  await page.screenshot({ path: 'shot-cashflow-360.png', fullPage: true });
+  // 商家对账总览
+  await page.getByRole('button', { name: '商家对账', exact: true }).click();
+  await page.locator('.mline').first().waitFor();
+  assert.match(await page.locator('.agelegend').innerText(), /未到期[\s\S]*逾期 60 天以上/);
+  await noOverflow('商家对账');
+  await page.screenshot({ path: 'shot-reconcile-360.png', fullPage: true });
+  ok('B26', '整合信息：账单标签；全局搜索（#标签、金额、商家）→ 商家对账详情一键复制对账单；月报 / 年报（排行、每日/每月柱图、分享摘要）；现金流（按周、可用资金余额预警）；商家对账总览（欠款、账龄、走势）');
 
   // 外观：光明 / 深色切换
   await page.goto(BASE + '#/');
@@ -853,7 +940,7 @@ try {
   await page.getByRole('tab', { name: '注册' }).click();
   await page.getByRole('button', { name: '注册，免费试用 30 天' }).click();
   await page.getByText('注册成功，已登录 ana@example.com').waitFor({ timeout: 15000 });
-  await page.getByText('0 / 5 次').waitFor({ timeout: 15000 });
+  await page.getByText('0 / 10 次').waitFor({ timeout: 15000 });
   await page.getByText('试用', { exact: true }).first().waitFor();
   await page.getByText(/免费试用到 .*（还剩 30 天）/).waitFor();
   const acctRows = await pg.query(`select count(*)::int as n from zq_records where space = 'u:11111111-1111-4111-8111-111111111111' and kind = 'bill'`);
@@ -864,8 +951,6 @@ try {
   await page.getByText('AI 识别 · Gemini').first().waitFor({ timeout: 15000 });
   await page.goto(BASE + '#/capture');
   await page.setInputFiles('input[type=file]:not([capture])', 'ticket.jpg');
-  await page.getByText('拖动四个角，框住单据').waitFor();
-  await page.getByRole('button', { name: '一键识别' }).click();
   await page.getByText('发送图片进行识别？').waitFor({ timeout: 30000 });
   await page.getByText(/由AI 识别 · Gemini读取文字/).waitFor();
   const gBefore = geminiCalls;
@@ -879,8 +964,8 @@ try {
   await page.getByText(/行与「Loja Exemplo」的历史记录一致/).waitFor();
   await page.screenshot({ path: 'shot-ai-review-360.png', fullPage: true });
   await page.goto(BASE + '#/account');
-  await page.getByText('1 / 5 次').waitFor({ timeout: 15000 });
-  ok('B22', '账号：邮箱+密码注册登录（不发邮件）与邮箱验证码两种方式（错码/错密码提示），本机账单自动上传到账号并改为账号同步；AI 识别按次计（试用 5 次）；识别结果按商家历史免逐行核对');
+  await page.getByText('1 / 10 次').waitFor({ timeout: 15000 });
+  ok('B22', '账号：邮箱+密码注册登录（不发邮件）与邮箱验证码两种方式（错码/错密码提示），本机账单自动上传到账号并改为账号同步；AI 识别按次计（试用 10 次）；识别结果按商家历史免逐行核对');
   // 试用期没有导出（T2）：点导出弹出订阅说明
   await page.goto(BASE + '#/data');
   await page.getByRole('button', { name: '导出账单记录（CSV）' }).click();
@@ -906,14 +991,14 @@ try {
   for (let i = 0; i < 100 && !mpReturn; i++) await page.waitForTimeout(100);
   await page.waitForLoadState('load');
   assert.match(mpReturn, /^http:\/\/localhost:9910\/\?mp=1$/);
-  assert.equal(mpBody.auto_recurring.transaction_amount, 199.99);
+  assert.equal(mpBody.auto_recurring.transaction_amount, 199);
   assert.equal(mpBody.auto_recurring.frequency, 12);
   await page.getByText(/T2（年付）有效期至/).waitFor({ timeout: 15000 });
   await page.getByText('0 / 50 次').waitFor(); // 订阅后按自然月计次（试用期的次数单独计）
   await page.goto(BASE + '#/data');
   await page.getByRole('button', { name: '导出账单记录（CSV）' }).click();
   await page.getByText('已导出账单记录').waitFor();
-  ok('B23', '套餐：试用 30 天 + AI 5 次；试用期导出需 T2；到期只读（首页提示、新增与识别换成订阅说明）；Mercado Pago 订阅 T2 年付（R$ 199,99/12 个月）后恢复全部功能、AI 50 次/月、可导出 CSV');
+  ok('B23', '套餐：试用 30 天 + AI 10 次；试用期导出需 T2；到期只读（首页提示、新增与识别换成订阅说明）；Mercado Pago 订阅 T2 年付（R$ 199,00/12 个月）后恢复全部功能、AI 50 次/月、可导出 CSV');
 
   // 公开部署（网站根目录有 zq-config.json）：打开就是介绍 + 注册；普通用户看不到部署相关的技术设置
   const ctx3 = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, timezoneId: 'America/Sao_Paulo', locale: 'zh-CN', isMobile: true, hasTouch: true });
@@ -922,7 +1007,7 @@ try {
   const p3 = await ctx3.newPage();
   p3.on('pageerror', (e) => errors.push('设备3: ' + e.message));
   await p3.goto(BASE);
-  await p3.getByText('新账号免费试用 30 天，含 5 次 AI 识别').waitFor({ timeout: 15000 });
+  await p3.getByText('新账号免费试用 30 天，含 10 次 AI 识别').waitFor({ timeout: 15000 });
   await p3.waitForTimeout(1500);
   await p3.screenshot({ path: 'shot-welcome-390.png', fullPage: true });
   await p3.fill('#acc-email', 'cris@example.com');
@@ -937,7 +1022,7 @@ try {
   assert.ok(await p3.locator('.tour-hole').isVisible(), '应高亮目标按钮');
   await p3.waitForTimeout(1500);
   await p3.screenshot({ path: 'shot-tour-390.png' });
-  for (const t of ['拍照识别', '账单', '每月流水', '设置']) {
+  for (const t of ['拍照识别', '账单', '报表', '设置']) {
     await tour.getByRole('button', { name: '下一步' }).click();
     await tour.getByRole('heading', { name: t, exact: true }).waitFor();
   }
@@ -1008,7 +1093,7 @@ try {
   await p3.goto(BASE + '#/account');
   await p3.getByRole('button', { name: '退出登录' }).click();
   await p3.getByRole('dialog').getByRole('button', { name: '退出' }).click();
-  await p3.getByText('新账号免费试用 30 天，含 5 次 AI 识别').waitFor({ timeout: 10000 });
+  await p3.getByText('新账号免费试用 30 天，含 10 次 AI 识别').waitFor({ timeout: 10000 });
   assert.equal(await p3.inputValue('#acc-email'), 'cris@example.com');
   assert.equal(await p3.getByRole('tab', { name: '登录' }).getAttribute('aria-selected'), 'true');
   await p3.fill('#acc-pw', 'segredo456');

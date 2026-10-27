@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { PLANS, TRIAL } from '../../shared/plans.mjs';
+import { PLANS, TRIAL, AI_PACK } from '../../shared/plans.mjs';
+import { isNative } from '../native/platform';
 import { formatBRL } from '../lib/money';
 import { useStore } from '../store';
 import { ICamera, IList, IChart, IBell, IShield, IPhone, ICheck, IStore, IHelp } from '../ui/icons';
@@ -40,9 +41,10 @@ const SECTIONS: Section[] = [
     body: (
       <ul className="steps">
         <li>单据铺平、四边都拍进去，光线均匀，别有手指或阴影挡住金额和日期。</li>
-        <li>多页订单可以一次选多张图片，或直接上传 PDF。</li>
+        <li>拍完直接识别整张图（相机取景框内）。单据只占一小块或拍歪了，在识别页点「调整范围」：拖一个角整个框一起变，纸张有透视时切到「自由四角」。想每次都先框选，可在「设置 → AI 识别与隐私」打开。</li>
+        <li>多页订单可以直接上传 PDF。</li>
         <li>boleto 优先拍条码那一行（linha digitável），金额和到期日最准。</li>
-        <li>手写单改过的数字，核对时会提示；你改过一次，同一商家下次会自动学会。</li>
+        <li>AI 会自己检查「数量 × 单价 = 小计」和合计：对不上会自动再看一遍；对得上的行不用你逐行核对，只需看标黄的地方。你改过一次的写法，同一商家下次会自动学会。</li>
         <li>上传前会先征得你同意；图片只用来识别，不会公开。</li>
       </ul>
     ),
@@ -88,10 +90,12 @@ const SECTIONS: Section[] = [
   {
     id: 'flow',
     icon: <IChart />,
-    title: '流水与导出',
+    title: '报表、搜索与标签',
     body: (
       <ul className="steps">
-        <li>「流水」按月汇总应付、已付、商家占比，左右切换月份。</li>
+        <li>底栏「报表」：流水（每次付款）、月报 / 年报（排行、构成、进货最多的型号，可分享或存 PDF）、现金流（未来 12 周要付多少，填上可用资金会提示哪周不够）、商家对账（每家欠多少、逾期多久，一键复制对账单发给对方）。</li>
+        <li>右上角放大镜（电脑按 /）搜全部：商家、单号、金额（如 290,00）、型号、备注、#标签。</li>
+        <li>账单可以加标签（如「店铺A」「年货」「待报销」），按标签搜索和汇总。</li>
         <li>JSON 备份所有人都能用；CSV / Excel 导出属于 {PLANS.t2.name}。</li>
       </ul>
     ),
@@ -145,7 +149,8 @@ const SECTIONS: Section[] = [
         <li>
           <b>{PLANS.t2.name}</b> {brl(PLANS.t2.month)}/月 或 {brl(PLANS.t2.year)}/年：再加 CSV / Excel 导出 + AI 识别 {PLANS.t2.ai} 次/月。
         </li>
-        <li>试用结束没订阅时，账单仍可查看和备份，但不能新增或修改。付款经 Mercado Pago，可随时取消自动续费。</li>
+        <li>AI 次数不够时可以买加量包（{AI_PACK.qty} 次 {brl(AI_PACK.price)}），不过期。</li>
+        <li>试用结束没订阅时，账单仍可查看和备份，但不能新增或修改。{isNative() ? '订阅在 App 里通过商店付款，可随时取消。' : '网页可用信用卡自动续费或 PIX 一次付清一年，也可以在手机 App 里订阅，同一账号通用。'}</li>
       </ul>
     ),
   },

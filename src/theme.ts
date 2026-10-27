@@ -26,7 +26,16 @@ export function applyTheme(p: ThemePref = getThemePref()) {
   if (p === 'system') delete root.dataset.theme;
   else root.dataset.theme = p;
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', resolvedTheme(p) === 'dark' ? '#1d1a4a' : '#2f2a86');
+  const dark = resolvedTheme(p) === 'dark';
+  meta?.setAttribute('content', dark ? '#140f2b' : '#f1ecff');
+  themeHooks.forEach((f) => f(dark));
+}
+
+/** 原生 App 用来同步状态栏颜色 */
+const themeHooks = new Set<(dark: boolean) => void>();
+export function onThemeApplied(f: (dark: boolean) => void) {
+  themeHooks.add(f);
+  f(resolvedTheme() === 'dark');
 }
 
 export function setThemePref(p: ThemePref) {

@@ -17,3 +17,11 @@ export interface Entitlement {
 }
 export declare function entitlement(profile: { plan?: string | null; period?: string | null; plan_until?: string | null; trial_until?: string | null } | null, opts?: { email?: string; owners?: string[]; now?: Date; plans?: Record<PlanId, PlanDef>; trial?: { days: number; ai: number } }): Entitlement;
 export declare function priceOf(plan: string, period: string, plans?: Record<PlanId, PlanDef>): number | null;
+export declare const AI_PACK: { qty: number; price: number };
+export declare const STORE: {
+  apple: Record<'t1.month' | 't1.year' | 't2.month' | 't2.year' | 'ai_pack', string>;
+  google: { t1: string; t2: string; basePlan: Record<Period, string>; ai_pack: string };
+};
+export declare function planOfProduct(store: 'apple' | 'google', productId: string, basePlanId?: string | null): { plan: PlanId; period: Period } | null;
+export interface SubRow { id?: string; source?: string; plan: string; period?: string; until: string | null; status: string; auto_renew?: boolean }
+export declare function bestSub<T extends SubRow>(subs: T[] | null | undefined, now?: Date): T | null;
