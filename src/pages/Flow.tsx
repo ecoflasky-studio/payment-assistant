@@ -6,7 +6,6 @@ import { changePct, flowCSV, flowSeries, forecast, ledgerByDay, monthFlow, share
 import { Modal } from '../ui/feedback';
 import { BillCard } from '../ui/BillCard';
 import { BillRow } from '../ui/BillList';
-import { formatBR } from '../lib/dates';
 import { compactBRL } from '../lib/monthly';
 import { MonthNav } from '../ui/Calendar';
 import { ReportTabs } from './Insights';
@@ -295,7 +294,7 @@ function ShareRow({ x, by, total, merchant, onOpen }: { x: Share; by: By; total:
     </span>
   );
   return (
-    <li className={`share${onOpen ? ' clickable' : ''}`} onClick={onOpen} role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined} onKeyDown={onOpen ? (e) => e.key === 'Enter' && onOpen() : undefined}>
+    <li className={`share${onOpen ? ' clickable' : ''}`} onClick={onOpen} tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `${x.label}：查看账单` : undefined} onKeyDown={onOpen ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen()) : undefined}>
       {mark}
       <div className="share-main">
         <div className="row between" style={{ gap: 8, flexWrap: 'nowrap' }}>

@@ -103,3 +103,24 @@ export function googleCalendarUrl(title: string, dueISO: string, nextISO: string
   const p = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${dueISO.replace(/-/g, '')}/${nextISO.replace(/-/g, '')}`, details, ctz: 'America/Sao_Paulo' });
   return `https://calendar.google.com/calendar/render?${p.toString()}`;
 }
+
+/**
+ * 复制按需加载的大段文本（如部署脚本）：先用 ClipboardItem 接 Promise，保住 Safari 的用户手势；
+ * 不支持时等加载完再复制。返回复制的文本长度，失败返回 0。
+ */
+export async function copyLazy(load: () => Promise<string>): Promise<number> {
+  const p = load();
+  try {
+    const CI = (globalThis as any).ClipboardItem;
+    if (CI && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new CI({ 'text/plain': p.then((t) => new Blob([t], { type: 'text/plain' })) })]);
+      return (await p).length;
+    }
+  } catch {}
+  try {
+    const t = await p;
+    return (await copyText(t)) ? t.length : 0;
+  } catch {
+    return 0;
+  }
+}

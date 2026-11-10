@@ -2,7 +2,7 @@
  * 报表中心：月报 / 年报、现金流预测、商家对账总览，以及全局搜索。
  * 计算都在 lib/insights.ts（纯函数），这里只负责展示。
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Route } from '../store';
 import { useFeedback, Modal } from '../ui/feedback';
 import { formatBRL, centsToInput, parseBRL } from '../lib/money';
@@ -634,7 +634,9 @@ export function SearchSheet({ onClose }: { onClose: () => void }) {
   const [bill, setBill] = useState<Bill | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const res = useMemo(() => searchAll(q, bills, merchants, today), [q, bills, merchants, today]);
+  // 账单很多时输入不卡：结果晚一帧算
+  const dq = useDeferredValue(q);
+  const res = useMemo(() => searchAll(dq, bills, merchants, today), [dq, bills, merchants, today]);
   const tags = useMemo(() => tagStats(bills, today).slice(0, 8), [bills, today]);
   useEffect(() => {
     const t = setTimeout(() => input.current?.focus(), 60);

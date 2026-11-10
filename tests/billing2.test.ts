@@ -286,3 +286,24 @@ describe('删除账号', () => {
     expect((await pg.query(`select count(*)::int n from zq_records where space = $1`, [`u:${U1}`])).rows[0]).toEqual({ n: 0 });
   });
 });
+
+describe('接口防滥用', () => {
+  it('交易 ID / 购买令牌格式不对直接拒绝；通知令牌错误 401；同一 IP 频繁调用 429', async () => {
+    const bad = await call('/iap/verify', { token: 'jwt-u2', body: { store: 'apple', transactionId: '../../x' } });
+    expect(bad.status).toBe(400);
+    expect((await call('/iap/verify', { token: 'jwt-u2', body: { store: 'google', productId: 'zq_t1/../', purchaseToken: 't' } })).status).toBe(400);
+    expect((await call('/iap/google?token=rtdn-secreX', { body: {} })).status).toBe(401);
+    expect((await call('/iap/google', { body: {} })).status).toBe(401);
+    const codes: number[] = [];
+    for (let i = 0; i < 7; i++) codes.push((await call('/account/delete', { token: 'jwt-u2', body: { confirm: 'wrong' } })).status);
+    expect(codes[0]).toBe(400);
+    expect(codes.at(-1)).toBe(429);
+  });
+});
+
+describe('错误报告接口', () => {
+  it('不用登录；空内容 400；正常 200', async () => {
+    expect((await call('/report', { body: {} })).status).toBe(400);
+    expect((await call('/report', { body: { message: 'TypeError: x', stack: 'at a.js:1:2', where: 'home', version: '1.0.0+1', platform: 'web' } })).status).toBe(200);
+  });
+});

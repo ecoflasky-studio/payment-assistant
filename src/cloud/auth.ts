@@ -7,6 +7,7 @@
  *      POST /auth/v1/otp     发验证码（新邮箱自动注册）
  *      POST /auth/v1/verify  验证码换会话
  *   POST /auth/v1/token?grant_type=refresh_token  续期
+ *   PUT  /auth/v1/user   设置 / 修改密码（忘记密码时：先用验证码登录，再设新密码）
  */
 export interface Project {
   url: string;
@@ -31,11 +32,11 @@ export class AuthError extends Error {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const base = (p: Project) => p.url.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
 
-async function call(p: Project, path: string, body: unknown, fetchImpl: FetchLike, bearer?: string) {
+async function call(p: Project, path: string, body: unknown, fetchImpl: FetchLike, bearer?: string, method = 'POST') {
   let r: Response;
   try {
     r = await fetchImpl(`${base(p)}/auth/v1/${path}`, {
-      method: 'POST',
+      method,
       headers: { 'content-type': 'application/json', apikey: p.key.trim(), ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
       body: JSON.stringify(body),
     });
@@ -53,6 +54,8 @@ async function call(p: Project, path: string, body: unknown, fetchImpl: FetchLik
     if (/invalid login credentials/i.test(msg)) throw new AuthError('bad_password', '邮箱或密码不正确');
     if (/email not confirmed/i.test(msg)) throw new AuthError('not_confirmed', '这个邮箱还没确认：请管理员在 Supabase → Authentication → Sign In / Providers → Email 关闭「Confirm email」，或在 Users 里手动确认这个用户');
     if (/already registered|already exists|user_already_exists/i.test(msg)) throw new AuthError('exists', '这个邮箱已经注册过了，请直接登录');
+    if (/same_password|different from the old/i.test(msg)) throw new AuthError('same_password', '新密码不能和旧密码一样');
+    if (/reauthenticat/i.test(msg)) throw new AuthError('reauth', '修改密码需要重新验证：请退出后用邮箱验证码登录，再来设置');
     if (/password/i.test(msg) && /(short|least|weak|characters)/i.test(msg)) throw new AuthError('weak_password', `密码太简单：${msg}`);
     if (/error sending (confirmation|magic link)? ?email|sending.*email/i.test(msg) && path === 'signup') throw new AuthError('confirm_on', '注册时要发确认邮件但发不出去：请在 Supabase → Authentication → Sign In / Providers → Email 关闭「Confirm email」后再注册');
     if (/expired|invalid|otp/i.test(msg) && path === 'verify') throw new AuthError('bad_code', '验证码不正确或已过期，请重新获取');
@@ -97,6 +100,12 @@ export async function signUpPassword(p: Project, email: string, password: string
   // 开着「Confirm email」时只返回用户、没有会话
   if (!j?.access_token) throw new AuthError('confirm_on', '注册成功，但这个项目要求先点确认邮件：请管理员在 Supabase → Authentication → Sign In / Providers → Email 关闭「Confirm email」，或在 Users 里手动确认后再登录');
   return toSession(p, j);
+}
+
+/** 设置新密码（已登录状态） */
+export async function setPassword(p: Project, accessToken: string, password: string, fetchImpl: FetchLike = fetch): Promise<void> {
+  if (password.length < 8) throw new AuthError('weak_password', '密码至少 8 位');
+  await call(p, 'user', { password }, fetchImpl, accessToken, 'PUT');
 }
 
 export async function refreshSession(s: Session, fetchImpl: FetchLike = fetch): Promise<Session> {

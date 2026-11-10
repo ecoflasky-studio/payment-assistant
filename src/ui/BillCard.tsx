@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Bill } from '../lib/types';
 import { billStatus, STATUS_ICON, STATUS_LABEL } from '../lib/status';
-import { formatBR, relativeDue, addDays } from '../lib/dates';
+import { formatBR, relativeDue, addDays, todayISO } from '../lib/dates';
 import { formatBRL, formatQuantity } from '../lib/money';
 import { useStore } from '../store';
 import { useActions } from '../actions';
@@ -117,7 +117,7 @@ export function BillCard({
           {bill.accountLabelSnapshot || '未指定账号'}
         </span>
         <span className="num">开单 {formatBR(bill.billDate)}</span>
-        {bill.paidAt ? <span className="num">付款 {new Date(bill.paidAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span> : <span>提前 {bill.reminderDays} 天提醒</span>}
+        {bill.paidAt ? <span className="num">付款 {formatBR(todayISO(new Date(bill.paidAt)))}</span> : <span>提前 {bill.reminderDays} 天提醒</span>}
       </div>
       {!!bill.tags?.length && (
         <div className="tagline" aria-label="标签">

@@ -67,3 +67,6 @@ export const buyOnce = (t: SupaTarget, token: string, kind: 'pix_year' | 'ai_pac
 export const verifyPurchases = (t: SupaTarget, token: string, store: 'apple' | 'google', purchases: { productId: string; transactionId?: string; purchaseToken?: string }[]) =>
   fnCall<{ results: { kind?: string; status?: string; error?: string; credited?: boolean }[]; me: AccountInfo }>(t, token, '/iap/verify', { body: { store, purchases } });
 export const deleteAccountRemote = (t: SupaTarget, token: string, confirm: string) => fnCall<{ ok: true; cancelInStore: ('apple' | 'google')[] }>(t, token, '/account/delete', { body: { confirm } });
+
+/** 错误报告（不带登录信息、不含账单内容） */
+export const sendErrorReport = (t: SupaTarget, report: unknown) => fnCall<{ ok: boolean }>(t, null, '/report', { body: report });

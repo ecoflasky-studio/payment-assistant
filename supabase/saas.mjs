@@ -84,7 +84,28 @@ export function saasConfig(env) {
   };
 }
 
+/** 常量时间比较（通知令牌等），避免逐字符试探 */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
+  let diff = a.length ^ b.length;
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+/** 每个 IP 每分钟最多调用几次（只防滥用；函数实例重启会清零） */
+const RATE = { '/report': 10, '/billing/checkout': 10, '/billing/once': 10, '/billing/cancel': 10, '/iap/verify': 20, '/account/delete': 5, '/push/test': 5, '/push/subscribe': 20 };
+
 export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, now = () => new Date() } = {}) {
+  const hits = new Map();
+  function rateLimited(key, limit) {
+    const t = Date.now();
+    const arr = (hits.get(key) || []).filter((x) => t - x < 60_000);
+    arr.push(t);
+    hits.set(key, arr);
+    if (hits.size > 5000) hits.clear();
+    return arr.length > limit;
+  }
   /* ---------- PostgREST（service role） ---------- */
   function dbHeaders(c, extra = {}) {
     const h = { apikey: c.secret, 'content-type': 'application/json', ...extra };
@@ -520,11 +541,12 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
     const results = [];
     for (const it of list) {
       try {
+        if (!it || typeof it !== 'object') throw new StoreError(400, '购买记录格式不对');
         if (b.store === 'apple' || it.store === 'apple') {
-          if (!it.transactionId) throw new StoreError(400, '缺少交易 ID');
+          if (!/^\d{1,32}$/.test(String(it.transactionId ?? ''))) throw new StoreError(400, '缺少交易 ID');
           results.push(await syncApple(c, String(it.transactionId), user.id));
         } else if (b.store === 'google' || it.store === 'google') {
-          if (!it.purchaseToken || !it.productId) throw new StoreError(400, '缺少购买令牌');
+          if (!it.purchaseToken || !it.productId || String(it.purchaseToken).length > 2048 || !/^[\w.]{1,150}$/.test(String(it.productId))) throw new StoreError(400, '缺少购买令牌');
           results.push(await syncGoogle(c, { productId: String(it.productId), purchaseToken: String(it.purchaseToken) }, user.id));
         } else throw new StoreError(400, '未知商店');
       } catch (e) {
@@ -554,7 +576,7 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
   /** Google Play 实时开发者通知（Pub/Sub 推送；网址里带 ?token=GOOGLE_RTDN_TOKEN） */
   async function googleNotify(c, request) {
     const url = new URL(request.url);
-    if (!c.google.rtdnToken || url.searchParams.get('token') !== c.google.rtdnToken) throw new ApiError(401, 'bad token');
+    if (!safeEqual(url.searchParams.get('token') ?? '', c.google.rtdnToken)) throw new ApiError(401, 'bad token');
     const b = await request.json().catch(() => ({}));
     let msg = null;
     try {
@@ -804,7 +826,7 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
   async function cron(c, request) {
     const token = request.headers.get('x-cron-token') || '';
     const want = await kvGet(c, 'cron_token');
-    if (!want || token !== want) throw new ApiError(401, 'bad cron token');
+    if (!safeEqual(token, want ?? '')) throw new ApiError(401, 'bad cron token');
     const today = todayISO(now());
     const reconciled = (await reconcileSubscriptions(c).catch(() => 0)) + (await reconcileStores(c).catch(() => 0));
     const subs = (await db(c, 'zq_push_subs?select=*')) ?? [];
@@ -830,6 +852,16 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
     return { users, sent };
   }
 
+  /** 应用的错误报告：客户端已抹掉账单内容，这里再清一遍后只写进函数日志（Supabase → Edge Functions → Logs，搜 [client]） */
+  async function clientError(request) {
+    const b = await request.json().catch(() => ({}));
+    const clean = (v, n) => String(v ?? '').replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>').replace(/\d{4,}/g, '#').replace(/[\u0000-\u0009\u000b-\u001f]/g, '').slice(0, n);
+    const msg = clean(b.message, 300);
+    if (!msg) throw new ApiError(400, 'empty');
+    log(`[client] v=${clean(b.version, 30)} p=${clean(b.platform, 10)} at=${clean(b.where, 40)} ${msg}\n${clean(b.stack, 1200)}`);
+    return { ok: true };
+  }
+
   /** 路由：返回 Response，或 null（交给识别处理器） */
   async function route(request, env, sub, cors) {
     const c = saasConfig(env);
@@ -849,9 +881,12 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
       'POST /push/unsubscribe': () => unsubscribe(c, request),
       'POST /push/test': () => pushTest(c, request),
       'POST /push/cron': () => cron(c, request),
+      'POST /report': () => clientError(request),
     };
     const h = handlers[`${request.method} ${sub}`];
     if (!h) return null;
+    const ip = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
+    if (RATE[sub] && rateLimited(`${ip}|${sub}`, RATE[sub])) return json(429, { error: '操作太频繁，请一分钟后再试' });
     try {
       return json(200, await h());
     } catch (e) {

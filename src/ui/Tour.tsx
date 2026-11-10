@@ -163,7 +163,7 @@ export function Tour({ autoStart }: { autoStart: boolean }) {
       {rect ? <div key="hole" className="tour-hole" style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }} /> : <div key="dim" className="tour-dim" />}
       <div key={i} className={`tour-bubble ${pos.side}`} style={{ top: pos.top, left: pos.left }}>
         <div className="tour-dots" aria-hidden="true">
-          {visible.map((s, k) => (
+          {visible.map((_, k) => (
             <i key={k} className={k === idx ? 'on' : ''} />
           ))}
         </div>

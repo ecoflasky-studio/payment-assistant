@@ -38,7 +38,7 @@ export function GroupModeSeg({ mode, onChange }: { mode: GroupMode; onChange: (m
 import type { Bill } from '../lib/types';
 import type { BillGroup } from '../lib/groups';
 import { billStatus, STATUS_LABEL } from '../lib/status';
-import { formatBR, relativeDue } from '../lib/dates';
+import { formatBR, relativeDue, todayISO } from '../lib/dates';
 import { formatBRL } from '../lib/money';
 import { billTitle, categoryOf, isExpense } from '../lib/expense';
 import { describeRepeat } from '../lib/recurrence';
@@ -90,7 +90,7 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
     }, 160);
   };
   const shortDate = (iso: string) => (iso.slice(0, 4) === today.slice(0, 4) ? formatBR(iso).slice(0, 5) : formatBR(iso));
-  const paidText = bill.paidAt ? `${new Date(bill.paidAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })} 已付` : '';
+  const paidText = bill.paidAt ? `${formatBR(todayISO(new Date(bill.paidAt))).slice(0, 5)} 已付` : '';
   const when = bill.paidAt ? paidText : relativeDue(bill.dueDate, today);
   const order = bill.orderNumber ? `#${bill.orderNumber}` : null;
   // 商家卡片：左边日期块就是到期日；标题写距离到期多久，下面写开单日（不再重复商家名和到期日）
@@ -154,7 +154,7 @@ function GroupCard({ g, rowLimit, onOpen, selectable, selected, onToggle, onHead
   const overdueN = g.bills.filter((b) => !b.paidAt && b.dueDate < today).length;
   return (
     <section className={`gcard tone-${g.tone}${slot != null ? ` by-merchant mc-${slot}` : ''}`} aria-label={`${g.label}，${g.bills.length} 笔，${formatBRL(g.total)}`}>
-      <header className={`gc-head${onHead && !selectable ? ' clickable' : ''}`} onClick={onHead && !selectable ? () => onHead(g) : undefined} role={onHead && !selectable ? 'button' : undefined} tabIndex={onHead && !selectable ? 0 : undefined} onKeyDown={onHead && !selectable ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onHead(g)) : undefined}>
+      <div className={`gc-head${onHead && !selectable ? ' clickable' : ''}`} onClick={onHead && !selectable ? () => onHead(g) : undefined} role={onHead && !selectable ? 'button' : undefined} tabIndex={onHead && !selectable ? 0 : undefined} onKeyDown={onHead && !selectable ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onHead(g)) : undefined}>
         {g.sameTitle && <MerchantAvatar merchant={m} name={g.label} bill={first} size="lg" />}
         <div className="gc-title">
           <span className="glabel">
@@ -175,7 +175,7 @@ function GroupCard({ g, rowLimit, onOpen, selectable, selected, onToggle, onHead
             onChange={() => g.bills.forEach((b) => (allSel ? selected?.has(b.id) : !selected?.has(b.id)) && onToggle?.(b.id))}
           />
         )}
-      </header>
+      </div>
       <div className="gc-body">
         {shown.map((b) => (
           <BillRow key={b.id} bill={b} sameTitle={g.sameTitle} onOpen={onOpen} selectable={selectable} selected={selected?.has(b.id)} onToggle={() => onToggle?.(b.id)} />

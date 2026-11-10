@@ -14,7 +14,8 @@
     "build:artifact": "npm run build:worker && vite build --mode artifact",
     "build:app": "npm run build:worker && vite build --mode app",
     "cap:sync": "npm run build:app && cap sync",
-    "assets": "node scripts/app-assets.mjs"
+    "assets": "node scripts/app-assets.mjs",
+    "bench": "vite-node scripts/bench.ts"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "10.0.0",

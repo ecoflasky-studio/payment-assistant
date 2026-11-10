@@ -79,6 +79,13 @@ async function sbHandle(method, url, headers, body) {
       sessions.set(token, { id, email: b.email });
       return j(200, { access_token: token, refresh_token: `r-${id}`, expires_in: 3600, user: { id, email: b.email } });
     }
+    if (p === 'user' && method === 'PUT') {
+      if (!sessions.has(bearer)) return j(401, { msg: 'invalid JWT' });
+      const em = sessions.get(bearer).email;
+      if (pwUsers.get(em) === b.password) return j(422, { code: 'same_password', msg: 'New password should be different from the old password.' });
+      pwUsers.set(em, b.password);
+      return j(200, sessions.get(bearer));
+    }
     if (p === 'user') return sessions.has(bearer) ? j(200, sessions.get(bearer)) : j(401, { msg: 'invalid JWT' });
     if (p === 'logout') return j(204, undefined);
     return j(404, { msg: 'not found' });
@@ -937,6 +944,10 @@ try {
   await page.fill('#acc-pw', 'segredo123');
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.getByText('邮箱或密码不正确').waitFor();
+  // 忘记密码：转到验证码登录，并说明登录后去哪里设新密码
+  await page.getByRole('button', { name: '忘记密码？' }).click();
+  await page.getByText('先用邮件验证码登录，登录后在「账号与套餐 → 登录密码」设置新密码').waitFor();
+  await page.getByRole('button', { name: '用密码登录' }).click();
   await page.getByRole('tab', { name: '注册' }).click();
   await page.getByRole('button', { name: '注册，免费试用 30 天' }).click();
   await page.getByText('注册成功，已登录 ana@example.com').waitFor({ timeout: 15000 });
@@ -948,6 +959,7 @@ try {
   await page.screenshot({ path: 'shot-account-360.png', fullPage: true });
   await page.goto(BASE + '#/settings');
   await page.getByText('已用账号同步').waitFor();
+  await page.getByText(/账期助手 v1\.0\.0（\w+）/).waitFor();
   await page.getByText('AI 识别 · Gemini').first().waitFor({ timeout: 15000 });
   await page.goto(BASE + '#/capture');
   await page.setInputFiles('input[type=file]:not([capture])', 'ticket.jpg');
@@ -965,6 +977,20 @@ try {
   await page.screenshot({ path: 'shot-ai-review-360.png', fullPage: true });
   await page.goto(BASE + '#/account');
   await page.getByText('1 / 10 次').waitFor({ timeout: 15000 });
+  // 修改登录密码（忘记密码时用验证码登录后在这里设）
+  await page.getByText('登录密码', { exact: true }).click();
+  await page.fill('#pw-new', 'segredo123');
+  await page.fill('#pw-new2', 'segredo123');
+  await page.getByRole('button', { name: '保存新密码' }).click();
+  await page.getByText('新密码不能和旧密码一样').waitFor();
+  await page.fill('#pw-new', 'novaSenha456');
+  await page.fill('#pw-new2', 'novaSenha45');
+  await page.getByText('两次输入不一样').waitFor();
+  await page.fill('#pw-new2', 'novaSenha456');
+  await page.getByRole('button', { name: '保存新密码' }).click();
+  await page.getByText('新密码已保存').waitFor();
+  assert.equal(pwUsers.get('ana@example.com'), 'novaSenha456');
+  ok('B27', '忘记密码：登录页转验证码登录并说明去处；账号页可设置 / 修改登录密码（和旧密码相同、两次不一致都有提示）');
   ok('B22', '账号：邮箱+密码注册登录（不发邮件）与邮箱验证码两种方式（错码/错密码提示），本机账单自动上传到账号并改为账号同步；AI 识别按次计（试用 10 次）；识别结果按商家历史免逐行核对');
   // 试用期没有导出（T2）：点导出弹出订阅说明
   await page.goto(BASE + '#/data');

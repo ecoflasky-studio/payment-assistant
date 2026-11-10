@@ -1,7 +1,7 @@
 /** 从表格（CSV / 从 Excel 复制的内容）批量导入账单 */
 import type { Bill, Merchant, PaymentAccount, Settings } from './types';
 import { parseBRL } from './money';
-import { parseBRDate, isValidISO } from './dates';
+import { parseBRDate } from './dates';
 import { computeDueDates } from './terms';
 import { recompute } from './bill';
 import { TOTAL_ONLY_DESC } from './ocr/protocol';

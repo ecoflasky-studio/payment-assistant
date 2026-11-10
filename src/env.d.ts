@@ -14,3 +14,5 @@ declare module '*.sql?raw' {
 }
 declare module 'pdfjs-dist/legacy/build/pdf.mjs';
 declare module 'pdfjs-dist/legacy/build/pdf.worker.min.mjs';
+declare const __APP_VERSION__: string;
+declare const __BUILD_ID__: string;

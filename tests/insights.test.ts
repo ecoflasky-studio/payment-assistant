@@ -109,3 +109,12 @@ describe('现金流预测', () => {
     expect(cashPlan(bills, T, 6, 20000).shortWeek).toBe(-1);
   });
 });
+
+describe('大量账单的性能', () => {
+  it('todayISO 缓存不影响结果：跨午夜、跨分钟都正确', async () => {
+    const { todayISO } = await import('../src/lib/dates');
+    expect(todayISO(new Date('2026-10-28T02:59:59Z'))).toBe('2026-10-27'); // 圣保罗 23:59
+    expect(todayISO(new Date('2026-10-28T03:00:00Z'))).toBe('2026-10-28');
+    expect(todayISO(new Date('2026-10-28T02:59:01Z'))).toBe('2026-10-27');
+  });
+});

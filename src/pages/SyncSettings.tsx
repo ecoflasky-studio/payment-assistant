@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { useFeedback } from '../ui/feedback';
-import { copyText } from '../lib/platform';
+import { copyText, copyLazy } from '../lib/platform';
 import { configProblem, decodeConfig, encodeConfig, newSecret, newSpace, normalizeUrl, testConnection, SyncError, type SyncConfig } from '../sync/engine';
-import setupSql from '../../supabase/setup.sql?raw';
 import { ICloud, ICopy, IUpload, IDownload } from '../ui/icons';
 
 export function syncLabel(s: ReturnType<typeof useStore>['sync']): string {
@@ -252,7 +251,7 @@ export function SyncSettings() {
           <li>
             左侧 <b>SQL Editor</b> → <b>New query</b>，粘贴下面复制的脚本，点 <b>Run</b>。脚本可以重复运行。
             <div className="row" style={{ marginTop: 6 }}>
-              <button className="btn btn-sm btn-soft" onClick={async () => fb.toast((await copyText(setupSql)) ? '建表脚本已复制' : '复制失败')}>
+              <button className="btn btn-sm btn-soft" onClick={async () => fb.toast((await copyLazy(() => import('../../supabase/setup.sql?raw').then((m) => m.default))) ? '建表脚本已复制' : '复制失败')}>
                 <ICopy />
                 复制建表脚本
               </button>

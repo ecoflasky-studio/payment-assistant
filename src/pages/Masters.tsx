@@ -23,13 +23,13 @@ export function Masters() {
   return (
     <>
       <div className="seg" role="tablist" aria-label="固定资料" style={{ alignSelf: 'flex-start' }}>
-        <button role="tab" aria-selected={tab === 'm'} aria-pressed={tab === 'm'} onClick={() => setTab('m')}>
+        <button role="tab" aria-selected={tab === 'm'} onClick={() => setTab('m')}>
           商家
         </button>
-        <button role="tab" aria-selected={tab === 'p'} aria-pressed={tab === 'p'} onClick={() => setTab('p')}>
+        <button role="tab" aria-selected={tab === 'p'} onClick={() => setTab('p')}>
           缴费单位
         </button>
-        <button role="tab" aria-selected={tab === 'a'} aria-pressed={tab === 'a'} onClick={() => setTab('a')}>
+        <button role="tab" aria-selected={tab === 'a'} onClick={() => setTab('a')}>
           付款账号
         </button>
       </div>
@@ -40,7 +40,7 @@ export function Masters() {
 
 function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
   const word = type === 'payee' ? '缴费单位' : '商家';
-  const { merchants, accounts, bills, settings, saveSettings, requireFeature } = useStore();
+  const { merchants, accounts, bills, settings, saveSettings } = useStore();
   const [edit, setEdit] = useState<Merchant | 'new' | null>(null);
   const [stats, setStats] = useState<Merchant | null>(null);
   const [q, setQ] = useState('');
@@ -54,8 +54,19 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
         .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'zh')),
     [mine, q, showOff],
   );
-  const count = (id: string) => bills.filter((b) => b.merchantId === id).length;
-  const unpaid = (id: string) => bills.filter((b) => b.merchantId === id && !b.paidAt).reduce((s, b) => s + b.totalCents, 0);
+  const perMerchant = useMemo(() => {
+    const m = new Map<string, { n: number; open: number }>();
+    for (const b of bills) {
+      if (!b.merchantId) continue;
+      const s = m.get(b.merchantId) ?? { n: 0, open: 0 };
+      s.n++;
+      if (!b.paidAt) s.open += b.totalCents;
+      m.set(b.merchantId, s);
+    }
+    return m;
+  }, [bills]);
+  const count = (id: string) => perMerchant.get(id)?.n ?? 0;
+  const unpaid = (id: string) => perMerchant.get(id)?.open ?? 0;
   return (
     <section className="card stack">
       <div className="row between">
@@ -362,7 +373,7 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
 }
 
 function AccountList() {
-  const { accounts, bills, settings, saveSettings, requireFeature } = useStore();
+  const { accounts, bills, settings, saveSettings } = useStore();
   const fb = useFeedback();
   const [edit, setEdit] = useState<PaymentAccount | 'new' | null>(null);
   const [reveal, setReveal] = useState<string | null>(null);
@@ -446,7 +457,6 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
     optionalPixHint: initial?.optionalPixHint ?? '',
   });
   const [err, setErr] = useState<string | null>(null);
-  const [color, setColor] = useState<number>(initial ? colorSlot(initial) : nextSlot(merchants));
   const affected = initial ? bills.filter((b) => b.accountId === initial.id).length : 0;
   const up = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
 
@@ -561,7 +571,7 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
 
 /** 商家对账：金额、账期表现、最近账单 */
 function MerchantSheet({ merchant, onClose, onEdit }: { merchant: Merchant; onClose: () => void; onEdit: () => void }) {
-  const { bills, today, go, requireFeature } = useStore();
+  const { bills, today, go } = useStore();
   const fb = useFeedback();
   const s = merchantStats(bills, merchant.id, today);
   const [open, setOpen] = useState<string | null>(null);

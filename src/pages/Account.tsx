@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useStore, type Feature } from '../store';
 import { useFeedback, Modal } from '../ui/feedback';
-import { sendCode, verifyCode, isEmail, AuthError, signInPassword, signUpPassword } from '../cloud/auth';
-import { startCheckout, cancelSubscription, pushKey, pushSubscribe, pushUnsubscribe, pushTest, PLAN_LABEL, ApiError } from '../cloud/api';
-import { PLANS, TRIAL, type PlanId, type Period } from '../../shared/plans.mjs';
+import { sendCode, verifyCode, isEmail, AuthError, signInPassword, signUpPassword, setPassword } from '../cloud/auth';
+import { cancelSubscription, pushKey, pushSubscribe, pushUnsubscribe, pushTest, PLAN_LABEL, ApiError } from '../cloud/api';
+import { PLANS, TRIAL, type PlanId } from '../../shared/plans.mjs';
 import { formatBRL } from '../lib/money';
 import { IBell, ICloud, IShield, ICheck, IFace, ILock, IHelp } from '../ui/icons';
 import { Logo } from '../ui/Logo';
@@ -57,7 +57,7 @@ const readLastEmail = () => {
 };
 
 export function LoginForm({ compact = false }: { compact?: boolean }) {
-  const { cloud, auth, signIn, sync } = useStore();
+  const { cloud, auth, signIn, sync, go } = useStore();
   const fb = useFeedback();
   const { busy, run } = useRunner();
   const last = readLastEmail();
@@ -65,6 +65,7 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [method, setMethod] = useState<'password' | 'code'>('password');
+  const [forgot, setForgot] = useState(false);
   // 这台设备登录过 → 默认「登录」；第一次来 → 默认「注册」
   const [mode, setMode] = useState<'signup' | 'login'>(last ? 'login' : 'signup');
   const [code, setCode] = useState('');
@@ -109,7 +110,8 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
           <span className="authtabs-ink" data-pos={mode} aria-hidden="true" />
         </div>
       )}
-      {method === 'code' && <h2 className="authtitle">邮箱验证码登录</h2>}
+      {method === 'code' && <h2 className="authtitle">{forgot ? '忘记密码' : '邮箱验证码登录'}</h2>}
+      {method === 'code' && forgot && <p className="small muted">先用邮件验证码登录，登录后在「账号与套餐 → 登录密码」设置新密码。</p>}
       <div className="field">
         <label htmlFor="acc-email">邮箱</label>
         <input id="acc-email" className="input" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
@@ -141,9 +143,23 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
           <p className="xs muted rememberline">
             <IShield width={14} height={14} /> 这台设备会被记住，至少半年不用再登录
           </p>
-          <button type="button" className="linkbtn small" style={{ alignSelf: 'center' }} onClick={() => setMethod('code')}>
-            用邮箱验证码登录
-          </button>
+          <div className="row" style={{ justifyContent: 'center', gap: 18 }}>
+            <button type="button" className="linkbtn small" onClick={() => setMethod('code')}>
+              用邮箱验证码登录
+            </button>
+            {mode === 'login' && (
+              <button
+                type="button"
+                className="linkbtn small"
+                onClick={() => {
+                  setForgot(true);
+                  setMethod('code');
+                }}
+              >
+                忘记密码？
+              </button>
+            )}
+          </div>
         </>
       ) : (
         <>
@@ -181,7 +197,11 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                     const s = await verifyCode(cloud, email, code);
                     remember(s.user.email);
                     await signIn(s);
-                    fb.toast(`已登录 ${s.user.email}，账单开始同步`);
+                    if (forgot) {
+                      fb.toast('已登录，现在设置新密码');
+                      go({ name: 'account' });
+                      setTimeout(() => document.getElementById('h-pw')?.closest('details')?.setAttribute('open', ''), 400);
+                    } else fb.toast(`已登录 ${s.user.email}，账单开始同步`);
                   })
                 }
               >
@@ -190,7 +210,15 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
               </button>
             )}
           </div>
-          <button type="button" className="linkbtn small" style={{ alignSelf: 'center' }} onClick={() => setMethod('password')}>
+          <button
+            type="button"
+            className="linkbtn small"
+            style={{ alignSelf: 'center' }}
+            onClick={() => {
+              setForgot(false);
+              setMethod('password');
+            }}
+          >
             用密码登录
           </button>
         </>
@@ -434,8 +462,58 @@ export function AccountPage() {
 
       <DeviceSection />
       <PushSection />
+      <PasswordSection />
       <DeleteAccount />
     </>
+  );
+}
+
+/** 登录密码：设置或修改（忘记密码时先用验证码登录再来这里） */
+function PasswordSection() {
+  const { cloud, getToken } = useStore();
+  const fb = useFeedback();
+  const { busy, run } = useRunner();
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [show, setShow] = useState(false);
+  const ok = pw.length >= 8 && pw === pw2;
+  const save = () =>
+    run('保存中…', async () => {
+      if (!cloud) throw new ApiError(0, '没有连接服务');
+      const token = await getToken();
+      if (!token) throw new ApiError(401, '请重新登录');
+      await setPassword(cloud, token, pw);
+      setPw('');
+      setPw2('');
+      fb.toast('新密码已保存，下次可以用密码登录');
+    });
+  return (
+    <section className="card stack" aria-labelledby="h-pw">
+      <details className="more">
+        <summary id="h-pw">登录密码</summary>
+        <div className="stack" style={{ marginTop: 8 }}>
+          <p className="small muted">设置或修改密码。用验证码登录的账号也可以在这里加一个密码。</p>
+          <div className="field">
+            <label htmlFor="pw-new">新密码</label>
+            <input id="pw-new" className="input" type={show ? 'text' : 'password'} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="至少 8 位" />
+          </div>
+          <div className="field">
+            <label htmlFor="pw-new2">再输一次</label>
+            <input id="pw-new2" className="input" type={show ? 'text' : 'password'} autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ok && save()} />
+            {pw2 && pw !== pw2 && <span className="hint">两次输入不一样</span>}
+          </div>
+          <div className="row">
+            <button className="btn btn-primary" disabled={!!busy || !ok} onClick={save}>
+              {busy ? <span className="spin" /> : null}
+              保存新密码
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setShow((v) => !v)}>
+              {show ? '隐藏' : '显示'}
+            </button>
+          </div>
+        </div>
+      </details>
+    </section>
   );
 }
 

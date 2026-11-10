@@ -1,21 +1,32 @@
-import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Component, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { StoreProvider, useStore, type Route } from './store';
 import { FeedbackProvider } from './ui/feedback';
 import { Dashboard, PickImageButton } from './pages/Dashboard';
 import { Bills } from './pages/Bills';
-import { EditorPage } from './pages/Editor';
-import { CapturePage } from './pages/Capture';
-import { Masters } from './pages/Masters';
-import { SettingsPage } from './pages/Settings';
-import { DataPage } from './pages/DataPage';
 import { AccountPage, PaywallModal, ReadOnlyPage, Welcome } from './pages/Account';
 import { LockScreen } from './pages/Lock';
 import { Logo } from './ui/Logo';
-import { FlowPage } from './pages/Flow';
 import { HelpPage } from './pages/Help';
-import { ReportPage, CashflowPage, ReconcilePage, SearchSheet } from './pages/Insights';
+import { lazyPage, prefetch } from './lazy';
+
+const loadEditor = () => import('./pages/Editor');
+const loadCapture = () => import('./pages/Capture');
+const loadInsights = () => import('./pages/Insights');
+const EditorPage = lazyPage(loadEditor, 'EditorPage');
+const CapturePage = lazyPage(loadCapture, 'CapturePage');
+const Masters = lazyPage(() => import('./pages/Masters'), 'Masters');
+const SettingsPage = lazyPage(() => import('./pages/Settings'), 'SettingsPage');
+const DataPage = lazyPage(() => import('./pages/DataPage'), 'DataPage');
+const FlowPage = lazyPage(() => import('./pages/Flow'), 'FlowPage');
+const ReportPage = lazyPage(loadInsights, 'ReportPage');
+const CashflowPage = lazyPage(loadInsights, 'CashflowPage');
+const ReconcilePage = lazyPage(loadInsights, 'ReconcilePage');
+const SearchSheet = lazyPage(loadInsights, 'SearchSheet');
+prefetch([loadEditor, loadCapture, loadInsights]);
 import { Tour, shouldAutoStart, tourDone } from './ui/Tour';
-import { initNative } from './native/platform';
+import { initNative, platform } from './native/platform';
+import { configureErrorReports, installGlobalHandlers, reportError } from './lib/errorReport';
+import { sendErrorReport } from './cloud/api';
 import { onReminderTap } from './native/reminders';
 import { useReminders } from './reminders';
 import { IHome, IList, IPlus, IStore, ISettings, ICamera, IEdit, IImage, IBolt, ICloud } from './ui/icons';
@@ -44,7 +55,13 @@ const TITLES: Record<Route['name'], string> = {
 };
 
 function Shell() {
-  const { ready, fatal, route, go, back, storageError, sync, syncNow, gate, auth, requireFeature, lock } = useStore();
+  const { ready, fatal, route, go, back, storageError, sync, syncNow, gate, auth, requireFeature, lock, cloud, settings } = useStore();
+  const routeRef = useRef(route.name);
+  routeRef.current = route.name;
+  useEffect(() => {
+    installGlobalHandlers();
+    configureErrorReports({ send: cloud && !__SINGLE__ ? (r) => sendErrorReport(cloud, r) : null, enabled: settings.errorReports !== false, where: () => routeRef.current, platform: platform() });
+  }, [cloud, settings.errorReports]);
   const openAdd = () => requireFeature('edit') && setAddOpen(true);
   const rem = useReminders();
   const [, setTheme, theme] = useTheme();
@@ -63,8 +80,6 @@ function Shell() {
   }, []);
 
   // 原生 App：状态栏、启动图、安卓返回键、点提醒通知打开账单
-  const routeRef = useRef(route.name);
-  routeRef.current = route.name;
   useEffect(() => {
     void initNative(() => {
       if (document.querySelector('.modal-bg')) {
@@ -202,7 +217,9 @@ function Shell() {
             </div>
           ) : (
             <div className="page" key={route.name}>
-              <Page route={route} rem={rem} />
+              <Suspense fallback={<PageLoading />}>
+                <Page route={route} rem={rem} />
+              </Suspense>
             </div>
           )}
         </main>
@@ -229,7 +246,11 @@ function Shell() {
         ))}
       </nav>
       <PaywallModal />
-      {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} />}
+      {searchOpen && (
+        <Suspense fallback={null}>
+          <SearchSheet onClose={() => setSearchOpen(false)} />
+        </Suspense>
+      )}
       <Tour autoStart={ready && shouldAutoStart({ saas: gate.saas, signedIn: !!auth.session, locked: lock.locked, route: route.name, done: tourDone() })} />
       {addOpen && (
         <Modal title="新增账单" onClose={() => setAddOpen(false)}>
@@ -255,6 +276,14 @@ function Shell() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="card empty" aria-busy="true">
+      <span className="spin" />
     </div>
   );
 }
@@ -304,6 +333,9 @@ class Boundary extends Component<{ children: ReactNode }, { err: Error | null }>
   state = { err: null as Error | null };
   static getDerivedStateFromError(err: Error) {
     return { err };
+  }
+  componentDidCatch(err: Error) {
+    reportError(err);
   }
   render() {
     if (this.state.err) {

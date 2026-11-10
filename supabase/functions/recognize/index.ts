@@ -449,10 +449,20 @@ function createHandler({ prompt, log: log2 = () => {
 
 // src/lib/dates.ts
 var TZ = "America/Sao_Paulo";
+var dayFmt = null;
+var dayCache = /* @__PURE__ */ new Map();
 function todayISO(now = /* @__PURE__ */ new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
-  const get = (t) => parts.find((p) => p.type === t).value;
-  return `${get("year")}-${get("month")}-${get("day")}`;
+  const t = now.getTime();
+  const key = Math.floor(t / 6e4);
+  const hit = dayCache.get(key);
+  if (hit) return hit;
+  dayFmt ??= new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+  const parts = dayFmt.formatToParts(now);
+  const get = (k) => parts.find((p) => p.type === k).value;
+  const out = `${get("year")}-${get("month")}-${get("day")}`;
+  if (dayCache.size > 2e4) dayCache.clear();
+  dayCache.set(key, out);
+  return out;
 }
 function isoToUTCms(iso) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -877,8 +887,25 @@ function saasConfig(env) {
     }
   };
 }
+function safeEqual2(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || !a || !b) return false;
+  let diff = a.length ^ b.length;
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+var RATE = { "/report": 10, "/billing/checkout": 10, "/billing/once": 10, "/billing/cancel": 10, "/iap/verify": 20, "/account/delete": 5, "/push/test": 5, "/push/subscribe": 20 };
 function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
 }, now = () => /* @__PURE__ */ new Date() } = {}) {
+  const hits = /* @__PURE__ */ new Map();
+  function rateLimited(key, limit) {
+    const t = Date.now();
+    const arr = (hits.get(key) || []).filter((x) => t - x < 6e4);
+    arr.push(t);
+    hits.set(key, arr);
+    if (hits.size > 5e3) hits.clear();
+    return arr.length > limit;
+  }
   function dbHeaders(c, extra = {}) {
     const h = { apikey: c.secret, "content-type": "application/json", ...extra };
     if (c.secret.startsWith("eyJ")) h.authorization = `Bearer ${c.secret}`;
@@ -1271,11 +1298,12 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     const results = [];
     for (const it of list) {
       try {
+        if (!it || typeof it !== "object") throw new StoreError(400, "购买记录格式不对");
         if (b.store === "apple" || it.store === "apple") {
-          if (!it.transactionId) throw new StoreError(400, "缺少交易 ID");
+          if (!/^\d{1,32}$/.test(String(it.transactionId ?? ""))) throw new StoreError(400, "缺少交易 ID");
           results.push(await syncApple(c, String(it.transactionId), user.id));
         } else if (b.store === "google" || it.store === "google") {
-          if (!it.purchaseToken || !it.productId) throw new StoreError(400, "缺少购买令牌");
+          if (!it.purchaseToken || !it.productId || String(it.purchaseToken).length > 2048 || !/^[\w.]{1,150}$/.test(String(it.productId))) throw new StoreError(400, "缺少购买令牌");
           results.push(await syncGoogle(c, { productId: String(it.productId), purchaseToken: String(it.purchaseToken) }, user.id));
         } else throw new StoreError(400, "未知商店");
       } catch (e) {
@@ -1301,7 +1329,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
   }
   async function googleNotify(c, request) {
     const url = new URL(request.url);
-    if (!c.google.rtdnToken || url.searchParams.get("token") !== c.google.rtdnToken) throw new ApiError(401, "bad token");
+    if (!safeEqual2(url.searchParams.get("token") ?? "", c.google.rtdnToken)) throw new ApiError(401, "bad token");
     const b = await request.json().catch(() => ({}));
     let msg = null;
     try {
@@ -1529,7 +1557,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
   async function cron(c, request) {
     const token = request.headers.get("x-cron-token") || "";
     const want = await kvGet(c, "cron_token");
-    if (!want || token !== want) throw new ApiError(401, "bad cron token");
+    if (!safeEqual2(token, want ?? "")) throw new ApiError(401, "bad cron token");
     const today = todayISO(now());
     const reconciled = await reconcileSubscriptions(c).catch(() => 0) + await reconcileStores(c).catch(() => 0);
     const subs = await db(c, "zq_push_subs?select=*") ?? [];
@@ -1554,6 +1582,15 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     log2(`[push] cron ${today} users=${users} sent=${sent} reconciled=${reconciled}`);
     return { users, sent };
   }
+  async function clientError(request) {
+    const b = await request.json().catch(() => ({}));
+    const clean = (v, n) => String(v ?? "").replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "<email>").replace(/\d{4,}/g, "#").replace(/[\u0000-\u0009\u000b-\u001f]/g, "").slice(0, n);
+    const msg = clean(b.message, 300);
+    if (!msg) throw new ApiError(400, "empty");
+    log2(`[client] v=${clean(b.version, 30)} p=${clean(b.platform, 10)} at=${clean(b.where, 40)} ${msg}
+${clean(b.stack, 1200)}`);
+    return { ok: true };
+  }
   async function route(request, env, sub, cors2) {
     const c = saasConfig(env);
     const json = (status, obj2) => new Response(JSON.stringify(obj2), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors2 } });
@@ -1571,10 +1608,13 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
       "POST /push/subscribe": () => subscribe(c, request),
       "POST /push/unsubscribe": () => unsubscribe(c, request),
       "POST /push/test": () => pushTest(c, request),
-      "POST /push/cron": () => cron(c, request)
+      "POST /push/cron": () => cron(c, request),
+      "POST /report": () => clientError(request)
     };
     const h = handlers[`${request.method} ${sub}`];
     if (!h) return null;
+    const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+    if (RATE[sub] && rateLimited(`${ip}|${sub}`, RATE[sub])) return json(429, { error: "操作太频繁，请一分钟后再试" });
     try {
       return json(200, await h());
     } catch (e) {
@@ -1616,7 +1656,7 @@ function supabaseEnv(all) {
   const token = [get("ACCESS_TOKEN"), ...keys].filter(Boolean).join(",");
   return { ...all, ACCESS_TOKEN: token, ALLOWED_ORIGINS: get("ALLOWED_ORIGINS") || "*" };
 }
-var ROUTES = ["/billing/checkout", "/billing/cancel", "/billing/webhook", "/billing/once", "/iap/verify", "/iap/apple", "/iap/google", "/account/delete", "/push/key", "/push/subscribe", "/push/unsubscribe", "/push/test", "/push/cron", "/me"];
+var ROUTES = ["/billing/checkout", "/billing/cancel", "/billing/webhook", "/billing/once", "/iap/verify", "/iap/apple", "/iap/google", "/account/delete", "/push/key", "/push/subscribe", "/push/unsubscribe", "/push/test", "/push/cron", "/report", "/me"];
 function cors(req, env) {
   const origin = req.headers.get("origin");
   if (!origin) return {};

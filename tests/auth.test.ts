@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { signInPassword, signUpPassword, sendCode, AuthError } from '../src/cloud/auth';
+import { signInPassword, signUpPassword, sendCode, AuthError, setPassword } from '../src/cloud/auth';
 
 const P = { url: 'https://p.supabase.co/', key: 'sb_publishable_x_0123456789abcdef' };
 const reply = (status: number, body: unknown) => async () => new Response(JSON.stringify(body), { status });
@@ -34,5 +34,18 @@ describe('邮箱 + 密码登录（不发邮件）', () => {
     const e = await sendCode(P, 'a@b.co', reply(500, { msg: 'Error sending magic link email' })).catch((x) => x);
     expect(e).toBeInstanceOf(AuthError);
     expect(e.message).toMatch(/SMTP/);
+  });
+});
+
+describe('设置新密码（忘记密码：验证码登录后再设）', () => {
+  it('PUT /auth/v1/user 带登录令牌；太短、和旧密码相同都有中文提示', async () => {
+    let seen: any = null;
+    await setPassword(P, 'tok', 'novaSenha1', async (u, i) => {
+      seen = { u, method: i!.method, auth: (i!.headers as any).authorization, body: JSON.parse(String(i!.body)) };
+      return new Response(JSON.stringify({ id: 'u1' }), { status: 200 });
+    });
+    expect(seen).toEqual({ u: 'https://p.supabase.co/auth/v1/user', method: 'PUT', auth: 'Bearer tok', body: { password: 'novaSenha1' } });
+    await expect(setPassword(P, 'tok', 'curta', reply(200, {}))).rejects.toThrow(/至少 8 位/);
+    await expect(setPassword(P, 'tok', 'novaSenha1', reply(422, { code: 'same_password', msg: 'New password should be different from the old password.' }))).rejects.toThrow(/不能和旧密码一样/);
   });
 });

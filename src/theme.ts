@@ -25,7 +25,10 @@ export function applyTheme(p: ThemePref = getThemePref()) {
   const root = document.documentElement;
   if (p === 'system') delete root.dataset.theme;
   else root.dataset.theme = p;
-  const meta = document.querySelector('meta[name="theme-color"]');
+  // 用户手动选了光明 / 深色时，以它为准（去掉按系统切换的 media 条件）
+  const metas = document.querySelectorAll('meta[name="theme-color"]');
+  metas.forEach((m, i) => (i ? m.remove() : m.removeAttribute('media')));
+  const meta = metas[0];
   const dark = resolvedTheme(p) === 'dark';
   meta?.setAttribute('content', dark ? '#140f2b' : '#f1ecff');
   themeHooks.forEach((f) => f(dark));

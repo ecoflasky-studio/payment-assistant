@@ -39,7 +39,7 @@ export function supabaseEnv(all) {
   return { ...all, ACCESS_TOKEN: token, ALLOWED_ORIGINS: get('ALLOWED_ORIGINS') || '*' };
 }
 
-const ROUTES = ['/billing/checkout', '/billing/cancel', '/billing/webhook', '/billing/once', '/iap/verify', '/iap/apple', '/iap/google', '/account/delete', '/push/key', '/push/subscribe', '/push/unsubscribe', '/push/test', '/push/cron', '/me'];
+const ROUTES = ['/billing/checkout', '/billing/cancel', '/billing/webhook', '/billing/once', '/iap/verify', '/iap/apple', '/iap/google', '/account/delete', '/push/key', '/push/subscribe', '/push/unsubscribe', '/push/test', '/push/cron', '/report', '/me'];
 
 function cors(req, env) {
   const origin = req.headers.get('origin');

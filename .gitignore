@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 e2e/*.png
 e2e/e2e-result.txt
 dist-app
+store/raw

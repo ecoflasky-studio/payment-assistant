@@ -59,15 +59,29 @@ export function formatBR(iso: string | null | undefined): string {
 }
 
 /** 圣保罗时区下的"今天" */
+// 新建 Intl.DateTimeFormat 很慢（每次约 0.05 ms），几千张账单时会卡：只建一次
+let dayFmt: Intl.DateTimeFormat | null = null;
+const dayCache = new Map<number, string>();
 export function todayISO(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
-  const get = (t: string) => parts.find((p) => p.type === t)!.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
+  const t = now.getTime();
+  // 同一分钟内结果相同：按分钟缓存（旧数据的 paidAt 常被反复换算）
+  const key = Math.floor(t / 60000);
+  const hit = dayCache.get(key);
+  if (hit) return hit;
+  dayFmt ??= new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const parts = dayFmt.formatToParts(now);
+  const get = (k: string) => parts.find((p) => p.type === k)!.value;
+  const out = `${get('year')}-${get('month')}-${get('day')}`;
+  if (dayCache.size > 20000) dayCache.clear();
+  dayCache.set(key, out);
+  return out;
 }
 
+let hourFmt: Intl.DateTimeFormat | null = null;
 /** 圣保罗时区的小时（0-23） */
 export function hourInSP(now: Date = new Date()): number {
-  const h = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(now);
+  hourFmt ??= new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' });
+  const h = hourFmt.format(now);
   return Number(h);
 }
 

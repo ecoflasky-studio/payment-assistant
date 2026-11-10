@@ -149,6 +149,8 @@ export interface Settings {
   monthlyBudgetCents?: number | null;
   /** 识别前先手动框选范围（默认关：直接用整张图或相机取景框） */
   cropFirst?: boolean;
+  /** 出错时发送匿名错误报告（不含账单内容；默认开） */
+  errorReports?: boolean;
   /** 现金流预测用的可用资金（分），空 = 不算余额 */
   cashOnHandCents?: number | null;
   updatedAt: string;

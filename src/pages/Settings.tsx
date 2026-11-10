@@ -7,9 +7,10 @@ import { useFeedback } from '../ui/feedback';
 import { useActions } from '../actions';
 import { notifyState, requestNotify, showNotification, type NotifyState } from '../lib/platform';
 import { listProviders, normalizeFn, supaFnUrl, type ProviderInfo } from '../lib/ocr/providers';
-import { copyText } from '../lib/platform';
-import workerCode from '../../worker/dist/zhangqi-worker.js?raw';
-import supabaseFnCode from '../../supabase/functions/recognize/index.ts?raw';
+import { copyLazy } from '../lib/platform';
+import { APP_VERSION, BUILD_ID } from '../lib/errorReport';
+import { isNative, platform, openExternal } from '../native/platform';
+import { legalUrl } from './Billing';
 import { IBell, ICal, IDatabase, IHelp, IShield, ICloud } from '../ui/icons';
 import { PLAN_LABEL } from '../cloud/api';
 import type { useReminders } from '../reminders';
@@ -239,7 +240,10 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
               <div className="row" style={{ marginTop: 6 }}>
                 <button
                   className="btn btn-sm btn-soft"
-                  onClick={async () => fb.toast((await copyText(supabaseFnCode)) ? `已复制识别函数代码（${Math.round(supabaseFnCode.length / 1024)} KB）` : '复制失败，请从项目 supabase/functions/recognize 目录获取', { bad: false })}
+                  onClick={async () => {
+                    const n = await copyLazy(() => import('../../supabase/functions/recognize/index.ts?raw').then((m) => m.default));
+                    fb.toast(n ? `已复制识别函数代码（${Math.round(n / 1024)} KB）` : '复制失败，请从项目 supabase/functions/recognize 目录获取', { bad: false });
+                  }}
                 >
                   复制识别函数代码
                 </button>
@@ -278,7 +282,10 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
             </button>
             <button
               className="btn btn-sm btn-soft"
-              onClick={async () => fb.toast((await copyText(workerCode)) ? `已复制 Worker 代码（${Math.round(workerCode.length / 1024)} KB）` : '复制失败，请从项目 worker/dist 目录获取', { bad: false })}
+              onClick={async () => {
+                const n = await copyLazy(() => import('../../worker/dist/zhangqi-worker.js?raw').then((m) => m.default));
+                fb.toast(n ? `已复制 Worker 代码（${Math.round(n / 1024)} KB）` : '复制失败，请从项目 worker/dist 目录获取', { bad: false });
+              }}
             >
               复制 Cloudflare Worker 代码
             </button>
@@ -299,6 +306,14 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
             识别前先框选范围
             <br />
             <span className="xs muted">默认关闭：拍完直接识别整张图（相机取景框内）；需要时可在识别页点「调整范围」。</span>
+          </span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.errorReports !== false} onChange={(e) => saveSettings({ errorReports: e.target.checked })} />
+          <span>
+            出错时发送匿名错误报告
+            <br />
+            <span className="xs muted">只包含出错位置和版本号，金额、单号、商家等账单内容会先被抹掉，帮助我们更快修复问题。</span>
           </span>
         </label>
         <p className="xs muted">默认不上传任何票据。只有你同意后，才会发送当前这 1 张图片。</p>
@@ -330,7 +345,27 @@ export function SettingsPage({ rem }: { rem: ReturnType<typeof useReminders> }) 
         </span>
         <span aria-hidden="true">›</span>
       </button>
+      <AboutLine />
     </>
+  );
+}
+
+/** 版本号与法律文件（客服排查问题时报版本号） */
+function AboutLine() {
+  const { publicConfig } = useStore();
+  const site = publicConfig?.site;
+  return (
+    <p className="xs muted about" style={{ textAlign: 'center', margin: '4px 0 12px' }}>
+      账期助手 v{APP_VERSION}（{BUILD_ID}）{isNative() ? ` · ${platform() === 'ios' ? 'iOS' : 'Android'}` : ''}
+      <br />
+      <button type="button" className="linkbtn xs" onClick={() => void openExternal(legalUrl('privacy', site))}>
+        隐私政策
+      </button>
+      {' · '}
+      <button type="button" className="linkbtn xs" onClick={() => void openExternal(legalUrl('terms', site))}>
+        使用条款
+      </button>
+    </p>
   );
 }
 

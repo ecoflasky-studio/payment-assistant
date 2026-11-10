@@ -32,7 +32,7 @@ jobs:
       - run: npm ci
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.120.0 # 固定版本，升级前先在测试项目试
       - name: 构建网站
         run: npm run build
       - name: 配置 Supabase（建表、登录、识别函数、密钥、定时推送）并写入网站配置
@@ -45,6 +45,7 @@ jobs:
           MP_WEBHOOK_SECRET: ${{ secrets.MP_WEBHOOK_SECRET }}
           OWNER_EMAILS: ${{ secrets.OWNER_EMAILS }}
           APP_ID: ${{ vars.APP_ID }}
+          SITE_URL: ${{ vars.SITE_URL }}
           APPLE_ISSUER_ID: ${{ secrets.APPLE_ISSUER_ID }}
           APPLE_IAP_KEY_ID: ${{ secrets.APPLE_IAP_KEY_ID }}
           APPLE_IAP_PRIVATE_KEY: ${{ secrets.APPLE_IAP_PRIVATE_KEY }}

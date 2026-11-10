@@ -32,7 +32,7 @@ export function legalUrl(kind: 'privacy' | 'terms', site?: string) {
   const file = `legal/${kind}.html`;
   if (site) return site + file;
   if (typeof location !== 'undefined' && /^https?:/.test(location.protocol)) return new URL(file, location.href).toString();
-  return `https://ecoflasky-studio.github.io/payment-assistant/${file}`;
+  return `https://zqzh.com.br/${file}`;
 }
 
 function useBuy() {

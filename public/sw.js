@@ -1,15 +1,24 @@
 /* 账期助手 Service Worker：离线应用壳 + 显示通知。
  * 注意：没有服务端调度器时，Service Worker 不能在未来某个时间准点唤醒提醒。 */
-const CACHE = 'zqzs-v8';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+// 构建时写入：版本号 + 本次所有页面脚本与样式（见 vite.config.ts 的 swManifest）
+const BUILD = '__BUILD__';
+const ASSETS = [] /*__ASSETS__*/;
+const CACHE = 'zqzs-' + BUILD;
+const RUNTIME = 'zqzs-runtime'; // OCR 语言包、PDF 解析等大文件：跨版本保留
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(SHELL).then(() => Promise.all(ASSETS.map((a) => c.add(a).catch(() => {})))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== RUNTIME).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
   );
 });
 
@@ -35,7 +44,8 @@ self.addEventListener('fetch', (e) => {
     );
     return;
   }
-  // 静态资源（含 OCR 语言包、字体）：缓存优先
+  // 静态资源：缓存优先。带哈希的构建文件进本版本缓存；语言包、PDF 解析等大文件进长期缓存
+  const big = url.origin !== location.origin || /pdf|tesseract|traineddata/i.test(url.pathname);
   e.respondWith(
     caches.match(req).then(
       (hit) =>
@@ -43,7 +53,7 @@ self.addEventListener('fetch', (e) => {
         fetch(req).then((res) => {
           if (res.ok) {
             const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
+            caches.open(big ? RUNTIME : CACHE).then((c) => c.put(req, copy));
           }
           return res;
         }),

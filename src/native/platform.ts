@@ -3,6 +3,7 @@
  * 网页版不会加载原生插件（都是动态 import），体积几乎不变。
  */
 import { Capacitor } from '@capacitor/core';
+import { onThemeApplied } from '../theme';
 
 export type Platform = 'ios' | 'android' | 'web';
 
@@ -38,7 +39,6 @@ export async function openExternal(url: string) {
 export async function initNative(onBack: () => boolean) {
   if (!isNative()) return;
   const [{ StatusBar, Style }, { SplashScreen }, { App }] = await Promise.all([import('@capacitor/status-bar'), import('@capacitor/splash-screen'), import('@capacitor/app')]);
-  const { onThemeApplied } = await import('../theme');
   onThemeApplied((dark) => {
     void StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light }).catch(() => {});
     if (platform() === 'android') void StatusBar.setBackgroundColor({ color: dark ? '#140f2b' : '#f1ecff' }).catch(() => {});

@@ -100,7 +100,7 @@ export function searchAll(query: string, bills: Bill[], merchants: Merchant[], t
       }
     }
     const fields: [string, string, number][] = [
-      ['商家', fold([billTitle(b), b.merchantNameSnapshot, ...(m ? [m.name, ...m.aliases] : [])].join(' ')), 40],
+      ['商家', fold([billTitle(b), b.merchantNameSnapshot, ...(m ? [m.name, ...(m.aliases ?? [])] : [])].join(' ')), 40],
       ['单号', fold(b.orderNumber ?? ''), 50],
       ['标签', fold(tags.join(' ')), 45],
       ['型号', fold(b.items.map((i) => i.description).join(' ')), 25],
@@ -192,10 +192,18 @@ export interface MerchantRow {
 
 export function merchantOverview(bills: Bill[], merchants: Merchant[], today: string, type: 'supplier' | 'payee' | 'all' = 'supplier'): MerchantRow[] {
   const months = Array.from({ length: 6 }, (_, i) => shiftMonth(today.slice(0, 7), i - 5));
+  // 先按商家分组一次，避免「商家数 × 账单数」次遍历
+  const byMerchant = new Map<string, Bill[]>();
+  for (const b of live(bills)) {
+    if (!b.merchantId) continue;
+    const l = byMerchant.get(b.merchantId);
+    if (l) l.push(b);
+    else byMerchant.set(b.merchantId, [b]);
+  }
   return merchants
     .filter((m) => type === 'all' || (m.type ?? 'supplier') === type)
     .map((merchant) => {
-      const own = live(bills).filter((b) => b.merchantId === merchant.id);
+      const own = byMerchant.get(merchant.id) ?? [];
       const open = own.filter((b) => !b.paidAt);
       const settled = own.filter((b) => b.paidAt);
       const pay = settled.map((b) => paymentsOf(b).slice(-1)[0]).filter(Boolean);

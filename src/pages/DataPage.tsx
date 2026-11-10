@@ -329,7 +329,7 @@ export function DataPage() {
         <h2>存储空间</h2>
         {info ? (
           <>
-            <div className="progress" aria-label="已用空间">
+            <div className="progress" role="progressbar" aria-label="已用空间" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct * 100)}>
               <div style={{ width: `${Math.max(2, pct * 100)}%`, animation: 'none', background: pct > 0.8 ? 'var(--overdue)' : 'var(--brand)' }} />
             </div>
             <span className="small">
