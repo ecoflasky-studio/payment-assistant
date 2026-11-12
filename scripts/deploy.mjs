@@ -98,9 +98,22 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   const auth = { mailer_autoconfirm: true, external_email_enabled: true, password_min_length: 8, mailer_otp_exp: 600 };
   if (codeMail) Object.assign(auth, { mailer_subjects_magic_link: subject, mailer_templates_magic_link_content: codeMail, mailer_subjects_confirmation: subject, mailer_templates_confirmation_content: codeMail });
   if (site) Object.assign(auth, { site_url: site, uri_allow_list: site });
+  const MAIL_KEYS = ['mailer_subjects_magic_link', 'mailer_templates_magic_link_content', 'mailer_subjects_confirmation', 'mailer_templates_confirmation_content'];
+  let mailOk = !!codeMail;
   try {
-    await api('PATCH', `/projects/${ref}/config/auth`, auth);
-    ok(`邮箱 + 密码注册即登录（不发确认邮件）${codeMail ? '；验证码邮件改为中葡英三语' : ''}${site ? `；网站地址 ${site}` : ''}`);
+    try {
+      await api('PATCH', `/projects/${ref}/config/auth`, auth);
+    } catch (e) {
+      // 免费版 + Supabase 自带邮件时不允许改邮件模板：先不改模板，其他设置照常；配好自己的 SMTP 后再运行就会生效
+      if (!codeMail || !/entitlement_required|email_templates|custom SMTP/i.test(e.message)) throw e;
+      for (const k of MAIL_KEYS) delete auth[k];
+      await api('PATCH', `/projects/${ref}/config/auth`, auth);
+      mailOk = false;
+      const note = '验证码邮件模板没改：Supabase 免费版要先配好自己的 SMTP（见《上架指南》5b，推荐 Resend），配好后重新运行「一键部署」就会换成中葡英三语模板。';
+      log(`  ! ${note}`);
+      warnings.push(note);
+    }
+    ok(`邮箱 + 密码注册即登录（不发确认邮件）${mailOk ? '；验证码邮件改为中葡英三语' : ''}${site ? `；网站地址 ${site}` : ''}`);
   } catch (e) {
     // 这一步只是改两个开关，令牌权限不够时可以在控制台手动做，不中断整个部署
     if (!e.permission) throw e;
