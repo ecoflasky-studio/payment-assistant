@@ -2,6 +2,7 @@
  * 整合信息：全局搜索、标签、账龄、商家对账总览、月报/年报、现金流预测。
  * 全部是纯函数（金额为整数分），页面只负责展示。
  */
+import { tr, lang, monthShort } from '../i18n';
 import type { Bill, Merchant } from './types';
 import { addDays, diffDays, shiftMonth } from './dates';
 import { billTitle, categoryLabel, isExpense } from './expense';
@@ -90,23 +91,23 @@ export function searchAll(query: string, bills: Bill[], merchants: Merchant[], t
     if (money !== null && money > 0) {
       const amounts = [b.totalCents, openCents(b), ...b.items.map((i) => i.subtotalCents), ...paymentsOf(b).map((p) => p.cents)];
       if (amounts.includes(money)) {
-        scored.push({ bill: b, score: b.totalCents === money ? 90 : 70, why: b.totalCents === money ? '金额相同' : '包含这个金额' });
+        scored.push({ bill: b, score: b.totalCents === money ? 90 : 70, why: b.totalCents === money ? tr('金额相同') : tr('包含这个金额') });
         continue;
       }
       // 只输入整数时，也匹配整数部分（"290" → 290,00 / 290,50）
       if (/^\d+$/.test(q) && amounts.some((a) => Math.floor(a / 100) === Number(q))) {
-        scored.push({ bill: b, score: 60, why: '金额接近' });
+        scored.push({ bill: b, score: 60, why: tr('金额接近') });
         continue;
       }
     }
     const fields: [string, string, number][] = [
-      ['商家', fold([billTitle(b), b.merchantNameSnapshot, ...(m ? [m.name, ...(m.aliases ?? [])] : [])].join(' ')), 40],
-      ['单号', fold(b.orderNumber ?? ''), 50],
-      ['标签', fold(tags.join(' ')), 45],
-      ['型号', fold(b.items.map((i) => i.description).join(' ')), 25],
-      ['备注', fold(b.notes ?? ''), 20],
-      ['分类', fold(isExpense(b) ? categoryLabel(b.category ?? '') : ''), 15],
-      ['付款码', (b.paymentCode ?? '').replace(/\D/g, ''), 10],
+      [tr('商家'), fold([billTitle(b), b.merchantNameSnapshot, ...(m ? [m.name, ...(m.aliases ?? [])] : [])].join(' ')), 40],
+      [tr('单号'), fold(b.orderNumber ?? ''), 50],
+      [tr('标签'), fold(tags.join(' ')), 45],
+      [tr('型号'), fold(b.items.map((i) => i.description).join(' ')), 25],
+      [tr('备注'), fold(b.notes ?? ''), 20],
+      [tr('分类'), fold(isExpense(b) ? categoryLabel(b.category ?? '') : ''), 15],
+      [tr('付款码'), (b.paymentCode ?? '').replace(/\D/g, ''), 10],
     ];
     let score = 0;
     let why = '';
@@ -230,7 +231,7 @@ export function merchantOverview(bills: Bill[], merchants: Merchant[], today: st
 
 export type Period = { kind: 'month'; ym: string } | { kind: 'year'; y: string };
 
-export const periodLabel = (p: Period) => (p.kind === 'month' ? `${p.ym.slice(0, 4)} 年 ${Number(p.ym.slice(5))} 月` : `${p.y} 年`);
+export const periodLabel = (p: Period) => (p.kind === 'month' ? (lang() === 'zh' ? tr('{0} 年 {1} 月', p.ym.slice(0, 4), Number(p.ym.slice(5))) : `${monthShort(Number(p.ym.slice(5)))} ${p.ym.slice(0, 4)}`) : tr('{0} 年', p.y));
 const inPeriod = (iso: string, p: Period) => (p.kind === 'month' ? iso.slice(0, 7) === p.ym : iso.slice(0, 4) === p.y);
 export const prevPeriod = (p: Period): Period => (p.kind === 'month' ? { kind: 'month', ym: shiftMonth(p.ym, -1) } : { kind: 'year', y: String(Number(p.y) - 1) });
 /** 去年同期 */
@@ -326,7 +327,7 @@ export function buildReport(bills: Bill[], p: Period): Report {
   if (p.kind === 'year') {
     series = Array.from({ length: 12 }, (_, i) => {
       const ym = `${p.y}-${String(i + 1).padStart(2, '0')}`;
-      return { key: ym, label: `${i + 1}月`, cents: sum(events.filter((e) => e.date.slice(0, 7) === ym).map((e) => e.cents)) };
+      return { key: ym, label: monthShort(i + 1), cents: sum(events.filter((e) => e.date.slice(0, 7) === ym).map((e) => e.cents)) };
     });
   } else {
     const days = new Date(Date.UTC(Number(p.ym.slice(0, 4)), Number(p.ym.slice(5)), 0)).getUTCDate();
@@ -351,7 +352,7 @@ export function buildReport(bills: Bill[], p: Period): Report {
     stillOpenCents: sum(due.filter((b) => !b.paidAt).map(openCents)),
     avgPayDays: payDays.length ? Math.round(sum(payDays) / payDays.length) : null,
     byMerchant: rank((b) => (isExpense(b) ? null : { key: b.merchantId ?? `n:${b.merchantNameSnapshot}`, label: billTitle(b), merchantId: b.merchantId })),
-    byCategory: rank((b) => (isExpense(b) ? { key: b.category ?? 'other', label: categoryLabel(b.category ?? 'other') } : { key: '__supplier', label: '商家货款' })),
+    byCategory: rank((b) => (isExpense(b) ? { key: b.category ?? 'other', label: categoryLabel(b.category ?? 'other') } : { key: '__supplier', label: tr('商家货款') })),
     byTag,
     topItems: [...items.values()].sort((a, b) => b.cents - a.cents).slice(0, 8),
     series,
@@ -365,17 +366,17 @@ export function buildReport(bills: Bill[], p: Period): Report {
 export function reportText(r: Report, fmt: (c: number) => string): string {
   const pct = (a: number, b: number) => (b ? `${a >= b ? '+' : ''}${Math.round(((a - b) / b) * 100)}%` : '—');
   const lines = [
-    `账期助手 · ${periodLabel(r.period)}${r.period.kind === 'month' ? '月报' : '年报'}`,
-    `实付 ${fmt(r.paidCents)}（${r.payCount} 笔；比上期 ${pct(r.paidCents, r.prevPaidCents)}，比去年同期 ${pct(r.paidCents, r.lastYearPaidCents)}）`,
-    `  商家货款 ${fmt(r.supplierPaid)} · 日常缴费 ${fmt(r.expensePaid)}`,
-    `新开账期 ${fmt(r.billedCents)}（${r.billedCount} 笔）`,
-    `到期 ${r.dueCount} 笔，按时付清 ${r.onTimeCount} 笔${r.stillOpenCents ? `，仍未付 ${fmt(r.stillOpenCents)}` : ''}`,
+    tr('账期助手 · {0}{1}', periodLabel(r.period), r.period.kind === 'month' ? tr('月报') : tr('年报')),
+    tr('实付 {0}（{1} 笔；比上期 {2}，比去年同期 {3}）', fmt(r.paidCents), r.payCount, pct(r.paidCents, r.prevPaidCents), pct(r.paidCents, r.lastYearPaidCents)),
+    tr('  商家货款 {0} · 日常缴费 {1}', fmt(r.supplierPaid), fmt(r.expensePaid)),
+    tr('新开账期 {0}（{1} 笔）', fmt(r.billedCents), r.billedCount),
+    tr('到期 {0} 笔，按时付清 {1} 笔{2}', r.dueCount, r.onTimeCount, r.stillOpenCents ? tr('，仍未付 {0}', fmt(r.stillOpenCents)) : ''),
   ];
-  if (r.avgPayDays !== null) lines.push(`平均开单后 ${r.avgPayDays} 天付清`);
-  if (r.byMerchant.length) lines.push('', '付款最多的商家：', ...r.byMerchant.slice(0, 5).map((x, i) => `${i + 1}. ${x.label} ${fmt(x.cents)}`));
+  if (r.avgPayDays !== null) lines.push(tr('平均开单后 {0} 天付清', r.avgPayDays));
+  if (r.byMerchant.length) lines.push('', tr('付款最多的商家：'), ...r.byMerchant.slice(0, 5).map((x, i) => `${i + 1}. ${x.label} ${fmt(x.cents)}`));
   const cats = r.byCategory.filter((x) => x.key !== '__supplier');
-  if (cats.length) lines.push('', '日常缴费：', ...cats.slice(0, 6).map((x) => `- ${x.label} ${fmt(x.cents)}`));
-  if (r.byTag.length) lines.push('', '按标签：', ...r.byTag.slice(0, 6).map((x) => `- ${x.label} ${fmt(x.cents)}`));
+  if (cats.length) lines.push('', tr('日常缴费：'), ...cats.slice(0, 6).map((x) => `- ${x.label} ${fmt(x.cents)}`));
+  if (r.byTag.length) lines.push('', tr('按标签：'), ...r.byTag.slice(0, 6).map((x) => `- ${x.label} ${fmt(x.cents)}`));
   return lines.join('\n');
 }
 
@@ -464,15 +465,15 @@ export function reconcileText(merchantName: string, bills: Bill[], merchantId: s
   const own = live(bills).filter((b) => b.merchantId === merchantId);
   const open = own.filter((b) => !b.paidAt).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const recent = own.flatMap((b) => paymentsOf(b).map((p) => ({ p, b }))).sort((a, b) => b.p.date.localeCompare(a.p.date)).slice(0, 5);
-  const lines = [`${merchantName} 对账（截至 ${br(today)}）`, ''];
+  const lines = [tr('{0} 对账（截至 {1}）', merchantName, br(today)), ''];
   if (open.length) {
-    lines.push('未付：');
-    for (const b of open) lines.push(`- ${br(b.billDate)} 开单${b.orderNumber ? ` #${b.orderNumber}` : ''}，${br(b.dueDate)} 到期：${fmt(openCents(b))}${paidCents(b) ? `（已付 ${fmt(paidCents(b))}）` : ''}${b.dueDate < today ? ' · 已逾期' : ''}`);
-    lines.push(`合计未付：${fmt(sum(open.map(openCents)))}（${open.length} 笔）`);
-  } else lines.push('目前没有未付账单。');
+    lines.push(tr('未付：'));
+    for (const b of open) lines.push(tr('- {0} 开单{1}，{2} 到期：{3}{4}{5}', br(b.billDate), b.orderNumber ? ` #${b.orderNumber}` : '', br(b.dueDate), fmt(openCents(b)), paidCents(b) ? tr('（已付 {0}）', fmt(paidCents(b))) : '', b.dueDate < today ? tr(' · 已逾期') : ''));
+    lines.push(tr('合计未付：{0}（{1} 笔）', fmt(sum(open.map(openCents))), open.length));
+  } else lines.push(tr('目前没有未付账单。'));
   if (recent.length) {
-    lines.push('', '最近付款：');
-    for (const { p, b } of recent) lines.push(`- ${br(p.date)} ${fmt(p.cents)}${b.orderNumber ? `（#${b.orderNumber}）` : ''}`);
+    lines.push('', tr('最近付款：'));
+    for (const { p, b } of recent) lines.push(`- ${br(p.date)} ${fmt(p.cents)}${b.orderNumber ? tr('（#{0}）', b.orderNumber) : ''}`);
   }
   return lines.join('\n');
 }

@@ -1,4 +1,5 @@
 /** 画布图像处理：解码、旋转、透视矫正、增强（浏览器端） */
+import { tr } from '../../i18n';
 import { homography, warpSize, type Pt } from './geometry';
 
 export const ACCEPT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -11,20 +12,20 @@ export class ImageError extends Error {}
 
 export async function decodeImage(file: File | Blob): Promise<HTMLCanvasElement> {
   const type = file.type || '';
-  if (type && !ACCEPT_TYPES.includes(type)) throw new ImageError(`不支持的图片类型：${type}。请使用 JPG、PNG 或 WebP`);
-  if (file.size > MAX_FILE_BYTES) throw new ImageError(`图片过大（${(file.size / 1048576).toFixed(1)} MB），上限 25 MB`);
+  if (type && !ACCEPT_TYPES.includes(type)) throw new ImageError(tr('不支持的图片类型：{0}。请使用 JPG、PNG 或 WebP', type));
+  if (file.size > MAX_FILE_BYTES) throw new ImageError(tr('图片过大（{0} MB），上限 25 MB', (file.size / 1048576).toFixed(1)));
   let bmp: ImageBitmap;
   try {
     bmp = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions);
   } catch {
     if (/heic|heif/.test(type) || /\.hei[cf]$/i.test((file as File).name ?? '')) {
-      throw new ImageError('此浏览器无法解码 HEIC 图片。请在手机相机设置中改为「兼容性最佳」(JPG)，或先截图再上传');
+      throw new ImageError(tr('此浏览器无法解码 HEIC 图片。请在手机相机设置中改为「兼容性最佳」(JPG)，或先截图再上传'));
     }
-    throw new ImageError('图片无法解码，文件可能已损坏');
+    throw new ImageError(tr('图片无法解码，文件可能已损坏'));
   }
   if (bmp.width * bmp.height > MAX_PIXELS) {
     bmp.close();
-    throw new ImageError('图片像素过多（上限 4000 万像素）');
+    throw new ImageError(tr('图片像素过多（上限 4000 万像素）'));
   }
   const s = Math.min(1, WORK_MAX_SIDE / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
@@ -104,7 +105,7 @@ export function warpQuad(src: HTMLCanvasElement, quad: Pt[], maxSide = 2400): HT
 }
 
 export type Variant = 'color' | 'gray' | 'binary';
-export const VARIANT_LABEL: Record<Variant, string> = { color: '原色矫正版', gray: '灰度增强版', binary: '黑字白底版' };
+export const VARIANT_LABEL: Record<Variant, string> = { color: tr('原色矫正版'), gray: tr('灰度增强版'), binary: tr('黑字白底版') };
 
 function cloneCanvas(src: HTMLCanvasElement): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -191,7 +192,7 @@ export function enhance(src: HTMLCanvasElement, variant: Variant, opts: { suppre
 }
 
 export function canvasToBlob(c: HTMLCanvasElement, type = 'image/jpeg', quality = 0.9): Promise<Blob> {
-  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new ImageError('图片编码失败'))), type, quality));
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new ImageError(tr('图片编码失败')))), type, quality));
 }
 
 /** 生成用于识别/存储的图片：长边上限，JPEG */

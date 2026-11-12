@@ -6,6 +6,7 @@
  * 冲突规则：同一条记录以 updatedAt 较新者为准；删除用墓碑（deletedAt）同步。
  * 票据图片不上传（只在拍摄的设备上）。
  */
+import { tr } from '../i18n';
 import type { Repository } from '../db/repo';
 import type { Bill, Merchant, PaymentAccount, Settings } from '../lib/types';
 import { isSampleId } from '../sample';
@@ -61,11 +62,11 @@ export function normalizeUrl(u: string): string {
 }
 
 export function configProblem(c: Partial<SyncConfig> | null | undefined): string | null {
-  if (!c?.url || !/^https?:\/\/[^/]+/.test(normalizeUrl(c.url))) return '请填写 Project URL（形如 https://xxxx.supabase.co）';
-  if (!c.key || c.key.trim().length < 20) return '请填写 publishable key（Settings → API Keys）';
+  if (!c?.url || !/^https?:\/\/[^/]+/.test(normalizeUrl(c.url))) return tr('请填写 Project URL（形如 https://xxxx.supabase.co）');
+  if (!c.key || c.key.trim().length < 20) return tr('请填写 publishable key（Settings → API Keys）');
   if (c.account) return null;
-  if (!c.space || c.space.trim().length < 6) return '同步空间名至少 6 个字符';
-  if (!c.secret || c.secret.length < 12) return '同步口令至少 12 个字符';
+  if (!c.space || c.space.trim().length < 6) return tr('同步空间名至少 6 个字符');
+  if (!c.secret || c.secret.length < 12) return tr('同步口令至少 12 个字符');
   return null;
 }
 
@@ -86,7 +87,7 @@ export function encodeConfig(c: SyncConfig): string {
 export function decodeConfig(text: string): SyncConfig {
   const t = text.trim();
   const i = t.indexOf(PREFIX);
-  if (i < 0) throw new SyncError('bad_config', '不是账期助手的同步配置（应以 ZQSYNC1: 开头）');
+  if (i < 0) throw new SyncError('bad_config', tr('不是账期助手的同步配置（应以 ZQSYNC1: 开头）'));
   try {
     const raw = atob(t.slice(i + PREFIX.length).split(/\s/)[0]);
     const j = JSON.parse(new TextDecoder().decode(Uint8Array.from(raw, (ch) => ch.charCodeAt(0))));
@@ -95,18 +96,18 @@ export function decodeConfig(text: string): SyncConfig {
     if (p) throw new Error(p);
     return c;
   } catch (e: any) {
-    throw new SyncError('bad_config', `同步配置无法识别：${e?.message ?? e}`);
+    throw new SyncError('bad_config', tr('同步配置无法识别：{0}', e?.message ?? e));
   }
 }
 
 const ERR: [RegExp, string, string][] = [
-  [/ZQ_LOGIN|JWT expired/i, 'login', '登录已过期，请重新登录（设置 → 账号）'],
-  [/ZQ_BAD_SECRET/, 'bad_secret', '同步口令不正确（和别的设备上的不一致）'],
-  [/ZQ_NO_SPACE/, 'no_space', '云端还没有这个同步空间'],
-  [/ZQ_BAD_INPUT/, 'bad_input', '同步空间名或口令太短'],
-  [/ZQ_BAD_ROWS/, 'bad_rows', '上传的数据格式不正确'],
-  [/PGRST202|Could not find the function|function .* does not exist/i, 'no_setup', '数据库还没初始化：请先在 Supabase 的 SQL Editor 运行建表脚本'],
-  [/Invalid API key|No API key|JWT|apikey/i, 'bad_key', 'publishable key 不正确'],
+  [/ZQ_LOGIN|JWT expired/i, 'login', tr('登录已过期，请重新登录（设置 → 账号）')],
+  [/ZQ_BAD_SECRET/, 'bad_secret', tr('同步口令不正确（和别的设备上的不一致）')],
+  [/ZQ_NO_SPACE/, 'no_space', tr('云端还没有这个同步空间')],
+  [/ZQ_BAD_INPUT/, 'bad_input', tr('同步空间名或口令太短')],
+  [/ZQ_BAD_ROWS/, 'bad_rows', tr('上传的数据格式不正确')],
+  [/PGRST202|Could not find the function|function .* does not exist/i, 'no_setup', tr('数据库还没初始化：请先在 Supabase 的 SQL Editor 运行建表脚本')],
+  [/Invalid API key|No API key|JWT|apikey/i, 'bad_key', tr('publishable key 不正确')],
 ];
 
 export async function rpc<T>(cfg: Pick<SyncConfig, 'url' | 'key' | 'bearer'>, fn: string, args: Record<string, unknown>, fetchImpl: FetchLike = fetch): Promise<T> {
@@ -118,7 +119,7 @@ export async function rpc<T>(cfg: Pick<SyncConfig, 'url' | 'key' | 'bearer'>, fn
       body: JSON.stringify(args),
     });
   } catch {
-    throw new SyncError('network', typeof navigator !== 'undefined' && navigator.onLine === false ? '当前离线，联网后会自动同步' : '连不上 Supabase（检查 Project URL 或网络）');
+    throw new SyncError('network', typeof navigator !== 'undefined' && navigator.onLine === false ? tr('当前离线，联网后会自动同步') : tr('连不上 Supabase（检查 Project URL 或网络）'));
   }
   const text = await r.text();
   if (!r.ok) {
@@ -127,11 +128,11 @@ export async function rpc<T>(cfg: Pick<SyncConfig, 'url' | 'key' | 'bearer'>, fn
       const j = JSON.parse(text);
       msg = [j.message, j.code, j.hint, j.details].filter(Boolean).join(' ');
     } catch {}
-    if ((cfg as SyncConfig).bearer && (r.status === 401 || r.status === 403) && !/ZQ_/.test(msg)) throw new SyncError('login', '登录已过期，请重新登录（设置 → 账号）');
+    if ((cfg as SyncConfig).bearer && (r.status === 401 || r.status === 403) && !/ZQ_/.test(msg)) throw new SyncError('login', tr('登录已过期，请重新登录（设置 → 账号）'));
     for (const [re, code, zh] of ERR) if (re.test(msg)) throw new SyncError(code, zh);
-    if (r.status === 401 || r.status === 403) throw new SyncError('bad_key', 'publishable key 不正确或没有权限');
-    if (r.status === 404) throw new SyncError('bad_url', 'Project URL 不正确');
-    throw new SyncError('server', `Supabase 返回错误（${r.status}）：${msg.slice(0, 120)}`);
+    if (r.status === 401 || r.status === 403) throw new SyncError('bad_key', tr('publishable key 不正确或没有权限'));
+    if (r.status === 404) throw new SyncError('bad_url', tr('Project URL 不正确'));
+    throw new SyncError('server', tr('Supabase 返回错误（{0}）：{1}', r.status, msg.slice(0, 120)));
   }
   return (text ? JSON.parse(text) : null) as T;
 }

@@ -3,6 +3,7 @@
  *  - 每笔未付账单：提醒日（到期前 N 天）09:00 一条，到期当天 09:00 一条
  *  - iOS 最多保留 64 条待发通知，这里只排最近的 60 条
  */
+import { tr } from '../i18n';
 import type { Bill } from '../lib/types';
 import { addDays } from '../lib/dates';
 import { formatBRL } from '../lib/money';
@@ -34,8 +35,8 @@ export function planReminders(bills: Bill[], today: string, nowMs: number, max =
     const title = billTitle(b);
     const days = Math.max(0, b.reminderDays ?? 3);
     const pre = addDays(b.dueDate, -days);
-    if (days > 0 && pre >= today) out.push({ id: hash(`${b.id}|pre`), at: at9(pre), title: `${days} 天后到期：${title}`, body: `${amt} · ${b.dueDate.split('-').reverse().join('/')} 到期`, billId: b.id });
-    if (b.dueDate >= today) out.push({ id: hash(`${b.id}|due`), at: at9(b.dueDate), title: `今天到期：${title}`, body: `${amt}${b.orderNumber ? ` · #${b.orderNumber}` : ''}，付完记得在账期助手里标记已付`, billId: b.id });
+    if (days > 0 && pre >= today) out.push({ id: hash(`${b.id}|pre`), at: at9(pre), title: tr('{0} 天后到期：{1}', days, title), body: tr('{0} · {1} 到期', amt, b.dueDate.split('-').reverse().join('/')), billId: b.id });
+    if (b.dueDate >= today) out.push({ id: hash(`${b.id}|due`), at: at9(b.dueDate), title: tr('今天到期：{0}', title), body: tr('{0}{1}，付完记得在账期助手里标记已付', amt, b.orderNumber ? ` · #${b.orderNumber}` : ''), billId: b.id });
   }
   return out.filter((n) => Date.parse(n.at) > nowMs).sort((a, b) => a.at.localeCompare(b.at)).slice(0, max);
 }

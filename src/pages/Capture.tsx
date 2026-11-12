@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { dragCorner, moveQuad, boundingRect, isAxisRect } from '../lib/image/geometry';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
@@ -40,7 +41,8 @@ function defaultQuad(w: number, h: number): Pt[] {
 }
 
 export function CapturePage() {
-  const { go, settings, saveSettings, merchants, accounts, bills, cloud, getToken, auth, refreshAccount } = useStore();
+  const { go, settings, saveSettings, merchants, accounts, bills, cloud, getToken, auth, refreshAccount, gate, ent } = useStore();
+  const isAdmin = !gate.saas || ent?.plan === 'owner';
   const supa = cloud;
   const fb = useFeedback();
   const [step, setStep] = useState<Step>('pick');
@@ -87,7 +89,7 @@ export function CapturePage() {
     if (angleRef.current !== 0) skipRotate.current = true;
     isPdfLoaded.current = isPdf(f);
     if (isPdf(f)) {
-      setBusy('正在读取 PDF…');
+      setBusy(tr('正在读取 PDF…'));
       try {
         const r = await readPdf(f);
         base.current = r.canvas;
@@ -102,14 +104,14 @@ export function CapturePage() {
         detectCodes(r.canvas).then((c) => token === loadToken.current && (codes.current = c));
         await buildVariants(r.canvas, false);
       } catch {
-        setErr('PDF 打不开（可能加密或已损坏）。可以截图后上传图片。');
+        setErr(tr('PDF 打不开（可能加密或已损坏）。可以截图后上传图片。'));
         setStep('pick');
       } finally {
         setBusy(null);
       }
       return;
     }
-    setBusy('正在读取图片…');
+    setBusy(tr('正在读取图片…'));
     try {
       const c = await decodeImage(f);
       detectCodes(c).then((r) => token === loadToken.current && (codes.current = r));
@@ -132,7 +134,7 @@ export function CapturePage() {
         await buildVariants(w, false);
       }
     } catch (e) {
-      setErr(e instanceof ImageError ? e.message : '图片读取失败，请换一张');
+      setErr(e instanceof ImageError ? e.message : tr('图片读取失败，请换一张'));
       setStep('pick');
     } finally {
       setBusy(null);
@@ -164,7 +166,7 @@ export function CapturePage() {
 
   /* ---------- 增强版本 ---------- */
   const buildVariants = useCallback(async (src: HTMLCanvasElement, suppress: boolean) => {
-    setBusy('生成增强版本…');
+    setBusy(tr('生成增强版本…'));
     await new Promise((r) => setTimeout(r, 30));
     try {
       const out: Record<Variant, string> = { color: '', gray: '', binary: '' };
@@ -193,7 +195,7 @@ export function CapturePage() {
       return;
     }
     setErr(null);
-    setBusy('透视矫正中…');
+    setBusy(tr('透视矫正中…'));
     await new Promise((r) => setTimeout(r, 30));
     try {
       const w = warpQuad(rotated, quad, 2400);
@@ -203,7 +205,7 @@ export function CapturePage() {
       autoRun.current = quick;
       await buildVariants(w, blue);
     } catch (e: any) {
-      setErr(e?.message ?? '矫正失败');
+      setErr(e?.message ?? tr('矫正失败'));
       setBusy(null);
     }
   };
@@ -271,7 +273,7 @@ export function CapturePage() {
     }
     setRecErr(null);
     ctl.current = new AbortController();
-    setProgress('准备图片…');
+    setProgress(tr('准备图片…'));
     try {
       const { processed, original } = await images(p.id !== 'local');
       const hints = p.id === 'local' ? '' : buildHints(merchants, bills);
@@ -288,7 +290,7 @@ export function CapturePage() {
     } catch (e: any) {
       if (e instanceof RecognizeError) {
         if (e.code !== 'cancelled') setRecErr({ code: e.code, message: e.message });
-      } else setRecErr({ code: 'unknown', message: e?.message ?? '识别失败' });
+      } else setRecErr({ code: 'unknown', message: e?.message ?? tr('识别失败') });
     } finally {
       setProgress(null);
       ctl.current = null;
@@ -303,7 +305,7 @@ export function CapturePage() {
   const finish = async (o: ModelOutput, label: string, rawText: string | null, imgs: { processed: Blob; original?: Blob }, ocrText: string | null) => {
     const hasMoney = (o.amountDue?.cents ?? null) !== null || !!o.paymentLine || !!o.pixCode;
     if (!o.items.length && !o.merchant.value && !o.unparsedLines.length && !hasMoney && !o.statement?.entries.length && !codes.current.length) {
-      setRecErr({ code: 'empty', message: '没有识别到任何内容。请换用增强版本、重新裁切到单据区域，或换一个识别方式。' });
+      setRecErr({ code: 'empty', message: tr('没有识别到任何内容。请换用增强版本、重新裁切到单据区域，或换一个识别方式。') });
       return;
     }
     if (o.docType === 'statement' && o.statement && o.statement.entries.length) {
@@ -341,24 +343,24 @@ export function CapturePage() {
     }
     if (!o.items.length && state.amountMode !== 'total') state.rows = [{ key: uuid(), qtyText: '', desc: '', unitText: '' }];
     setPendingRecognition({ state, image: imgs.processed, original: imgs.original } as any);
-    if (!o.items.length && state.amountMode !== 'total') fb.toast('只识别出部分信息，明细需要手工补全', { bad: true });
+    if (!o.items.length && state.amountMode !== 'total') fb.toast(tr('只识别出部分信息，明细需要手工补全'), { bad: true });
     go({ name: 'review' }, true);
   };
 
   /** PDF 文字直接生成草稿（不上传、不用 AI） */
   const usePdfText = async () => {
     if (!pdfModel) return;
-    setBusy('准备…');
+    setBusy(tr('准备…'));
     try {
       const { processed, original } = await images();
-      await finish(pdfModel, 'PDF 文字', pdfText.current, { processed, original }, null);
+      await finish(pdfModel, tr('PDF 文字'), pdfText.current, { processed, original }, null);
     } finally {
       setBusy(null);
     }
   };
 
   const manualWithImage = async () => {
-    setBusy('准备图片…');
+    setBusy(tr('准备图片…'));
     try {
       const { processed, original } = await images();
       const state: EditorState = {
@@ -368,7 +370,7 @@ export function CapturePage() {
         notes: '',
         dueBeforeConfirmed: false,
         rows: [0, 1, 2].map(() => ({ key: uuid(), qtyText: '', desc: '', unitText: '' })),
-        ocr: { provider: '手工对照录入', merchantRaw: null, merchantConfidence: 1, merchantCandidates: [], orderConfidence: 1, orderRaw: null, billDateRaw: null, billDateConfidence: 1, printedTotalRaw: null, unparsedLines: [], modelWarnings: [], candidate: null },
+        ocr: { provider: tr('手工对照录入'), merchantRaw: null, merchantConfidence: 1, merchantCandidates: [], orderConfidence: 1, orderRaw: null, billDateRaw: null, billDateConfidence: 1, printedTotalRaw: null, unparsedLines: [], modelWarnings: [], candidate: null },
       };
       setPendingRecognition({ state, image: processed, original } as any);
       go({ name: 'review' }, true);
@@ -380,11 +382,11 @@ export function CapturePage() {
   /* ---------- 渲染 ---------- */
   return (
     <>
-      <ol className="chips" aria-label="步骤" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+      <ol className="chips" aria-label={tr('步骤')} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {(['pick', 'adjust', 'enhance', 'recognize'] as Step[]).filter((s) => step !== 'statement' && (s === 'pick' || s === 'recognize' || s === step)).map((s, i) => (
           <li key={s}>
             <span className="chip" aria-current={step === s ? 'step' : undefined} style={step === s ? { background: 'var(--ink)', color: 'var(--card)', borderColor: 'var(--ink)', display: 'inline-flex', alignItems: 'center' } : { display: 'inline-flex', alignItems: 'center' }}>
-              {i + 1}. {({ pick: '选图', adjust: '调整范围', enhance: '增强', recognize: '识别', statement: '导入' } as Record<Step, string>)[s]}
+              {i + 1}. {({ pick: tr('选图'), adjust: tr('调整范围'), enhance: tr('增强'), recognize: tr('识别'), statement: tr('导入') } as Record<Step, string>)[s]}
             </span>
           </li>
         ))}
@@ -392,7 +394,7 @@ export function CapturePage() {
 
       {err && (
         <div className="banner bad" role="alert">
-          <span className="grow">{err}</span>
+          <span className="grow">{tx(err)}</span>
         </div>
       )}
       {busy && (
@@ -408,30 +410,30 @@ export function CapturePage() {
 
       {step === 'pick' && !busy && (
         <div className="card stack">
-          <h2>拍下或选择单据</h2>
-          <p className="muted small">订单、Boleto 银行单、水电账单、税费单（FGTS / DAS）、工资单、对账单截图都可以；支持照片和 PDF。尽量平铺、光线均匀、让单据占满画面。</p>
+          <h2>{tr('拍下或选择单据')}</h2>
+          <p className="muted small">{tr('订单、Boleto 银行单、水电账单、税费单（FGTS / DAS）、工资单、对账单截图都可以；支持照片和 PDF。尽量平铺、光线均匀、让单据占满画面。')}</p>
           <div className="grid2">
             {cameraSupported() ? (
               <button className="btn btn-primary btn-lg" onClick={() => setCamOpen(true)}>
                 <ICamera />
-                拍照
+                {tr('拍照')}
               </button>
             ) : (
               <label className="btn btn-primary btn-lg">
                 <ICamera />
-                拍照
+                {tr('拍照')}
                 <input type="file" accept={ACCEPT} capture="environment" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) load(f); }} />
               </label>
             )}
             <label className="btn btn-lg">
               <IImage />
-              相册 / PDF
+              {tr('相册 / PDF')}
               <input type="file" accept={ACCEPT} className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) load(f); }} />
             </label>
           </div>
           <button className="btn btn-ghost" onClick={() => go({ name: 'new' }, true)}>
             <IEdit />
-            不用图片，直接手工录入
+            {tr('不用图片，直接手工录入')}
           </button>
         </div>
       )}
@@ -440,52 +442,52 @@ export function CapturePage() {
         <div className="stack">
           <div className="card stack">
             <div className="section-head">
-              <h2>调整识别范围</h2>
+              <h2>{tr('调整识别范围')}</h2>
               <button className="link" onClick={() => setQuad(fullQuad(rotated.width, rotated.height))}>
-                整张图
+                {tr('整张图')}
               </button>
             </div>
-            <div className="seg2" role="group" aria-label="框选方式">
+            <div className="seg2" role="group" aria-label={tr('框选方式')}>
               <button type="button" aria-pressed={linked} onClick={() => { setLinked(true); setQuad((q) => (isAxisRect(q) ? q : boundingRect(q))); }}>
-                矩形框（四角联动）
+                {tr('矩形框（四角联动）')}
               </button>
               <button type="button" aria-pressed={!linked} onClick={() => setLinked(false)}>
-                自由四角（纸张歪斜）
+                {tr('自由四角（纸张歪斜）')}
               </button>
             </div>
-            <p className="small muted">{linked ? '拖任意一个角，整个框一起变；拖框内可整体移动。' : '每个角单独拖动，用来拉正拍歪的纸张。'}</p>
+            <p className="small muted">{linked ? tr('拖任意一个角，整个框一起变；拖框内可整体移动。') : tr('每个角单独拖动，用来拉正拍歪的纸张。')}</p>
             <QuadEditor canvas={rotated} quad={quad} onChange={setQuad} linked={linked} />
             <div className="row">
               <button className="btn btn-sm" onClick={() => setAngle((a) => normAngle(a - 90))}>
                 <IRotate style={{ transform: 'scaleX(-1)' }} />
-                左转 90°
+                {tr('左转 90°')}
               </button>
               <button className="btn btn-sm" onClick={() => setAngle((a) => normAngle(a + 90))}>
                 <IRotate />
-                右转 90°
+                {tr('右转 90°')}
               </button>
-              <span className="small muted num">当前 {angle}°</span>
+              <span className="small muted num">{tr('当前')} {angle}°</span>
             </div>
             <details className="more">
-              <summary>微调角度、图片增强</summary>
+              <summary>{tr('微调角度、图片增强')}</summary>
               <div className="stack" style={{ marginTop: 8 }}>
                 <div className="field">
-                  <label htmlFor="fine">微调角度（纸张歪斜时用）</label>
+                  <label htmlFor="fine">{tr('微调角度（纸张歪斜时用）')}</label>
                   <input id="fine" type="range" className="range" min={-180} max={180} step={0.5} value={angle} onChange={(e) => setAngle(Number(e.target.value))} />
                 </div>
                 <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => applyCrop(false)} disabled={!!busy}>
-                  选择增强版本…
+                  {tr('选择增强版本…')}
                 </button>
               </div>
             </details>
           </div>
           <div className="row end">
             <button className="btn btn-ghost" onClick={() => (warped ? setStep('recognize') : (setStep('pick'), (base.current = null)))}>
-              {warped ? '取消' : '换一张'}
+              {warped ? tr('取消') : tr('换一张')}
             </button>
             <button className="btn btn-primary" onClick={() => applyCrop(true)} disabled={!!busy}>
               <ISpark />
-              按这个范围识别
+              {tr('按这个范围识别')}
             </button>
           </div>
         </div>
@@ -494,8 +496,8 @@ export function CapturePage() {
       {step === 'enhance' && warped && !busy && (
         <div className="stack">
           <div className="card stack">
-            <h2>选择识别用的版本</h2>
-            <div className="variant-grid" role="group" aria-label="图片版本">
+            <h2>{tr('选择识别用的版本')}</h2>
+            <div className="variant-grid" role="group" aria-label={tr('图片版本')}>
               {(['color', 'gray', 'binary'] as Variant[]).map((v) => (
                 <button key={v} className="variant" aria-pressed={variant === v} onClick={() => { variantPicked.current = true; setVariant(v); }}>
                   {thumbs[v] && <img src={thumbs[v]} alt={VARIANT_LABEL[v]} />}
@@ -513,19 +515,19 @@ export function CapturePage() {
                 }}
               />
               <span>
-                <b>淡化蓝色表格线</b>
+                <b>{tr('淡化蓝色表格线')}</b>
                 <br />
-                <span className="small muted">只去掉浅蓝色格线，深色笔迹保留；如果数字被淡化请关闭。</span>
+                <span className="small muted">{tr('只去掉浅蓝色格线，深色笔迹保留；如果数字被淡化请关闭。')}</span>
               </span>
             </label>
-            <p className="small muted">原始照片会一并保存，复核时随时可以切换查看。</p>
+            <p className="small muted">{tr('原始照片会一并保存，复核时随时可以切换查看。')}</p>
           </div>
           <div className="row end">
             <button className="btn btn-ghost" onClick={() => setStep('adjust')}>
-              返回裁切
+              {tr('返回裁切')}
             </button>
             <button className="btn btn-primary" onClick={() => setStep('recognize')}>
-              下一步：识别
+              {tr('下一步：识别')}
             </button>
           </div>
         </div>
@@ -545,29 +547,29 @@ export function CapturePage() {
 
       {step === 'recognize' && pdfModel && (
         <div className="card stack pdfquick">
-          <h2>PDF 里已读到这些信息</h2>
+          <h2>{tr('PDF 里已读到这些信息')}</h2>
           <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
-            {pdfModel.merchant.value && <li>收款方：{pdfModel.merchant.value}</li>}
-            {pdfModel.amountDue?.cents != null && <li>金额：{formatBRL(pdfModel.amountDue.cents)}</li>}
-            {pdfModel.dueDate?.iso && <li>到期：{formatBR(pdfModel.dueDate.iso)}</li>}
-            {pdfModel.paymentLine && <li>数字线已校验</li>}
-            {pdfModel.pixCode && <li>含 PIX 复制码</li>}
+            {pdfModel.merchant.value && <li>{tr('收款方：')}{pdfModel.merchant.value}</li>}
+            {pdfModel.amountDue?.cents != null && <li>{tr('金额：')}{formatBRL(pdfModel.amountDue.cents)}</li>}
+            {pdfModel.dueDate?.iso && <li>{tr('到期：')}{formatBR(pdfModel.dueDate.iso)}</li>}
+            {pdfModel.paymentLine && <li>{tr('数字线已校验')}</li>}
+            {pdfModel.pixCode && <li>{tr('含 PIX 复制码')}</li>}
           </ul>
           <button className="btn btn-primary" onClick={usePdfText} disabled={!!busy || !!progress}>
-            直接用 PDF 内容生成账单（不上传）
+            {tr('直接用 PDF 内容生成账单（不上传）')}
           </button>
-          <span className="xs muted">PDF 文字比照片识别更准{aiOpen ? '；也可以在下方用 AI 识别整页' : ''}。</span>
+          <span className="xs muted">{tr('PDF 文字比照片识别更准')}{aiOpen ? tr('；也可以在下方用 AI 识别整页') : ''}{tr('。')}</span>
         </div>
       )}
 
       {step === 'recognize' && pdfModel && !aiOpen && (
         <div className="row end">
           <button className="btn btn-ghost" onClick={() => setStep('pick')} disabled={!!busy}>
-            返回
+            {tr('返回')}
           </button>
           <button className="btn btn-soft" onClick={() => setAiOpen(true)} disabled={!!busy}>
             <ISpark />
-            改用 AI 识别整页…
+            {tr('改用 AI 识别整页…')}
           </button>
         </div>
       )}
@@ -576,21 +578,21 @@ export function CapturePage() {
         <div className="stack">
           {!isPdfLoaded.current && (thumbs[variant] || thumbs.color) && !progress && (
             <div className="card row rangecard">
-              <img src={thumbs[variant] || thumbs.color} alt="识别用的图片" />
+              <img src={thumbs[variant] || thumbs.color} alt={tr('识别用的图片')} />
               <span className="grow stack" style={{ gap: 2 }}>
-                <b className="small">{wholeImage ? '识别整张图片' : '识别框选的范围'}</b>
-                <span className="xs muted">单据只占一小块、或拍歪了，再调整范围。</span>
+                <b className="small">{wholeImage ? tr('识别整张图片') : tr('识别框选的范围')}</b>
+                <span className="xs muted">{tr('单据只占一小块、或拍歪了，再调整范围。')}</span>
               </span>
               <button className="btn btn-sm" onClick={() => setStep('adjust')} disabled={!!busy}>
-                调整范围
+                {tr('调整范围')}
               </button>
             </div>
           )}
           <div className="card stack">
-            <h2>{pdfModel ? '或用 AI 识别整页' : '选择识别方式'}</h2>
+            <h2>{pdfModel ? tr('或用 AI 识别整页') : tr('选择识别方式')}</h2>
             {!providers && (
               <span className="row small muted">
-                <span className="spin" /> 检查可用的识别方式…
+                <span className="spin" /> {tr('检查可用的识别方式…')}
               </span>
             )}
             {providers?.map((p) => (
@@ -598,29 +600,29 @@ export function CapturePage() {
                 <span className="radio" aria-hidden="true" />
                 <span className="stack" style={{ gap: 2 }}>
                   <b>
-                    {p.label} {(p.id === 'supabase' || p.id === 'claude') && p.available && <span className="pill brand">推荐 · 手写更准</span>}
+                    {p.label} {(p.id === 'supabase' || p.id === 'claude') && p.available && <span className="pill brand">{tr('推荐 · 手写更准')}</span>}
                   </b>
                   <span className="small muted">{p.cost}</span>
-                  {p.reason && <span className="small err">{p.reason}</span>}
-                  {p.sendsImage && p.available && <span className="xs muted">会发送：你选中的这 1 张处理后图片{p.id === 'supabase' ? '和你的常用商家/型号（帮助辨认手写）' : ''}</span>}
+                  {p.reason && <span className="small err">{tx(p.reason)}</span>}
+                  {p.sendsImage && p.available && <span className="xs muted">{tr('会发送：你选中的这 1 张处理后图片')}{p.id === 'supabase' ? tr('和你的常用商家/型号（帮助辨认手写）') : ''}</span>}
                   {p.id === 'supabase' && p.available && auth.account && auth.account.usage.limit >= 0 && (
-                    <span className="xs muted">{auth.account.usage.period === 'trial' ? '试用期' : '本月'} AI 识别已用 {auth.account.usage.ai} / {auth.account.usage.limit} 次</span>
+                    <span className="xs muted">{auth.account.usage.period === 'trial' ? tr('试用期') : tr('本月')} {tr('AI 识别已用')} {auth.account.usage.ai} / {auth.account.usage.limit} {tr('次')}</span>
                   )}
                 </span>
               </button>
             ))}
             {providers?.some((p) => p.needsLogin) && (
               <div className="banner ok">
-                <span className="grow small">登录账号后就能用 AI 识别。</span>
+                <span className="grow small">{tr('登录账号后就能用 AI 识别。')}</span>
                 <button className="btn btn-sm btn-primary" onClick={() => go({ name: 'account' })}>
-                  去登录
+                  {tr('去登录')}
                 </button>
               </div>
             )}
             {provider === 'local' && (
               <label className="check">
                 <input type="checkbox" checked={chinese} onChange={(e) => setChinese(e.target.checked)} />
-                <span className="small">同时识别中文（语言包约 20 MB，首次较慢）</span>
+                <span className="small">{tr('同时识别中文（语言包约 20 MB，首次较慢）')}</span>
               </label>
             )}
           </div>
@@ -641,26 +643,26 @@ export function CapturePage() {
                 <div />
               </div>
               <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => ctl.current?.abort()}>
-                取消识别
+                {tr('取消识别')}
               </button>
             </div>
           )}
 
           {recErr && (
             <div className="banner bad" role="alert">
-              <span className="grow">{recErr.message}</span>
+              <span className="grow">{tx(recErr.message)}</span>
               {recErr.code === 'quota' || recErr.code === 'login' ? (
                 <button className="btn btn-sm btn-primary" onClick={() => go({ name: 'account' })}>
-                  {recErr.code === 'quota' ? '查看套餐' : '去登录'}
+                  {recErr.code === 'quota' ? tr('查看套餐') : tr('去登录')}
                 </button>
               ) : (
                 <button className="btn btn-sm" onClick={() => { const p = providers?.find((x) => x.id === provider); if (p) run(p); }}>
-                  重试
+                  {tr('重试')}
                 </button>
               )}
               {!isPdfLoaded.current && (
                 <button className="btn btn-sm" onClick={() => setStep('adjust')}>
-                  调整范围
+                  {tr('调整范围')}
                 </button>
               )}
             </div>
@@ -668,10 +670,10 @@ export function CapturePage() {
 
           <div className="row end">
             <button className="btn btn-ghost" onClick={() => setStep('pick')} disabled={!!progress}>
-              换一张
+              {tr('换一张')}
             </button>
             <button className="btn" onClick={manualWithImage} disabled={!!progress || !!busy}>
-              对照图片手工录入
+              {tr('对照图片手工录入')}
             </button>
             <button
               className="btn btn-primary"
@@ -682,7 +684,7 @@ export function CapturePage() {
               }}
             >
               <ISpark />
-              开始识别
+              {tr('开始识别')}
             </button>
           </div>
         </div>
@@ -702,43 +704,43 @@ export function CapturePage() {
         />
       )}
 
-      {step === 'recognize' && (!pdfModel || aiOpen) && providers && !providers.some((p) => p.available && p.id !== 'local') && (
+      {step === 'recognize' && (!pdfModel || aiOpen) && providers && !providers.some((p) => p.available && p.id !== 'local') && isAdmin && (
         <div className="card stack">
-          <h3>开启 AI 识别，手写和中文也能读</h3>
+          <h3>{tr('开启 AI 识别，手写和中文也能读')}</h3>
           <p className="small">
-            现在只有本机 OCR（手写较弱）。在你同步用的 Supabase 里部署一个识别函数、填上 Gemini 密钥（约 5 分钟），之后所有导入了同步配置的设备都能直接用。
+            {tr('现在只有本机 OCR（手写较弱）。在你同步用的 Supabase 里部署一个识别函数、填上 Gemini 密钥（约 5 分钟），之后所有导入了同步配置的设备都能直接用。')}
           </p>
-          <button className="btn btn-soft" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'settings' })}>
-            去开启
+          <button className="btn btn-soft" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'set-dev' })}>
+            {tr('去开启')}
           </button>
         </div>
       )}
 
       {consent && (
-        <Modal title="发送图片进行识别？" onClose={() => setConsent(null)}>
+        <Modal title={tr('发送图片进行识别？')} onClose={() => setConsent(null)}>
           <div className="stack small">
             <p className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
               <IShield width={22} height={22} style={{ flexShrink: 0, color: 'var(--brand)' }} />
               <span>
-                <b>发送内容：</b>你刚才处理后的这 1 张单据图片，不含其他账单或资料。
+                <b>{tr('发送内容：')}</b>{tr('你刚才处理后的这 1 张单据图片，不含其他账单或资料。')}
               </span>
             </p>
             <p>
-              <b>用途：</b>由{consent.label}读取文字，生成待复核的草稿；结果不会自动入账。
+              <b>{tr('用途：')}</b>{tr('由')}{consent.label}{tr('读取文字，生成待复核的草稿；结果不会自动入账。')}
             </p>
             <p>
-              <b>费用：</b>
-              {consent.cost}。
+              <b>{tr('费用：')}</b>
+              {consent.cost}{tr('。')}
             </p>
-            <p className="muted">不同意也没关系：可以用「本机 OCR」或「对照图片手工录入」，图片不会离开设备。</p>
+            <p className="muted">{tr('不同意也没关系：可以用「本机 OCR」或「对照图片手工录入」，图片不会离开设备。')}</p>
             <label className="check">
               <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-              <span>以后不再询问（可在「设置」里撤销）</span>
+              <span>{tr('以后不再询问（可在「设置」里撤销）')}</span>
             </label>
           </div>
           <div className="row end">
             <button className="btn btn-ghost" onClick={() => setConsent(null)}>
-              不同意
+              {tr('不同意')}
             </button>
             <button
               className="btn btn-primary"
@@ -750,7 +752,7 @@ export function CapturePage() {
                 await run(p);
               }}
             >
-              同意并识别
+              {tr('同意并识别')}
             </button>
           </div>
         </Modal>
@@ -785,7 +787,7 @@ function QuadEditor({ canvas, quad, onChange, linked = true }: { canvas: HTMLCan
   };
   const R = Math.max(canvas.width, canvas.height) / 45;
   const ok = checkQuad(quad).ok;
-  const labels = ['左上', '右上', '右下', '左下'];
+  const labels = [tr('左上'), tr('右上'), tr('右下'), tr('左下')];
 
   const nudge = (i: number, dx: number, dy: number) => {
     const step = Math.max(canvas.width, canvas.height) / 200;
@@ -852,7 +854,7 @@ function QuadEditor({ canvas, quad, onChange, linked = true }: { canvas: HTMLCan
               className="handle-hit"
               role="slider"
               tabIndex={0}
-              aria-label={`${labels[i]}角点，用方向键微调`}
+              aria-label={tr('{0}角点，用方向键微调', labels[i])}
               aria-valuetext={`${Math.round(p.x)}, ${Math.round(p.y)}`}
               onPointerDown={(e) => {
                 (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -876,7 +878,7 @@ function QuadEditor({ canvas, quad, onChange, linked = true }: { canvas: HTMLCan
       </svg>
       {!ok && quad.length === 4 && (
         <div className="xs" style={{ position: 'absolute', left: 8, bottom: 8, background: '#b3203a', color: '#fff', padding: '4px 8px', borderRadius: 8 }}>
-          {checkQuad(quad).error}
+          {tx(checkQuad(quad).error)}
         </div>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { useEffect, useState } from 'react';
 import { useStore, type Feature } from '../store';
 import { useFeedback, Modal } from '../ui/feedback';
@@ -36,7 +37,7 @@ function useRunner() {
     try {
       return await fn();
     } catch (e) {
-      fb.toast(e instanceof AuthError || e instanceof ApiError ? e.message : `出错：${(e as Error).message}`, { bad: true });
+      fb.toast(e instanceof AuthError || e instanceof ApiError ? e.message : tr('出错：{0}', (e as Error).message), { bad: true });
       return undefined;
     } finally {
       setBusy(null);
@@ -85,41 +86,41 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
     } catch {}
   };
   const doPassword = () =>
-    run(mode === 'signup' ? '注册中…' : '登录中…', async () => {
+    run(mode === 'signup' ? tr('注册中…') : tr('登录中…'), async () => {
       const s = mode === 'signup' ? await signUpPassword(cloud, email, password) : await signInPassword(cloud, email, password);
       remember(s.user.email);
       await signIn(s);
       setPassword('');
       if (mode === 'signup') fb.celebrate();
-      fb.toast(mode === 'signup' ? `注册成功，已登录 ${s.user.email}` : `已登录 ${s.user.email}，账单开始同步`);
+      fb.toast(mode === 'signup' ? tr('注册成功，已登录 {0}', s.user.email) : tr('已登录 {0}，账单开始同步', s.user.email));
     });
   const canSubmit = isEmail(email) && (mode === 'signup' ? password.length >= 8 : !!password);
 
   return (
     <div className="stack loginform">
-      {auth.error && <div className="banner bad small">{auth.error}</div>}
-      {!compact && sync.config && !sync.config.account && <p className="xs muted">登录后会改用账号同步，本机所有账单会上传到账号（示例数据不上传）。</p>}
+      {auth.error && <div className="banner bad small">{tx(auth.error)}</div>}
+      {!compact && sync.config && !sync.config.account && <p className="xs muted">{tr('登录后会改用账号同步，本机所有账单会上传到账号（示例数据不上传）。')}</p>}
       {method === 'password' && (
-        <div className="authtabs" role="tablist" aria-label="登录或注册">
+        <div className="authtabs" role="tablist" aria-label={tr('登录或注册')}>
           <button role="tab" aria-selected={mode === 'login'} onClick={() => setMode('login')}>
-            登录
+            {tr('登录')}
           </button>
           <button role="tab" aria-selected={mode === 'signup'} onClick={() => setMode('signup')}>
-            注册
+            {tr('注册')}
           </button>
           <span className="authtabs-ink" data-pos={mode} aria-hidden="true" />
         </div>
       )}
-      {method === 'code' && <h2 className="authtitle">{forgot ? '忘记密码' : '邮箱验证码登录'}</h2>}
-      {method === 'code' && forgot && <p className="small muted">先用邮件验证码登录，登录后在「账号与套餐 → 登录密码」设置新密码。</p>}
+      {method === 'code' && <h2 className="authtitle">{forgot ? tr('忘记密码') : tr('邮箱验证码登录')}</h2>}
+      {method === 'code' && forgot && <p className="small muted">{tr('先用邮件验证码登录，登录后在「账号与套餐 → 登录密码」设置新密码。')}</p>}
       <div className="field">
-        <label htmlFor="acc-email">邮箱</label>
+        <label htmlFor="acc-email">{tr('邮箱')}</label>
         <input id="acc-email" className="input" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
       </div>
       {method === 'password' ? (
         <>
           <div className="field">
-            <label htmlFor="acc-pw">密码</label>
+            <label htmlFor="acc-pw">{tr('密码')}</label>
             <div className="datefield">
               <input
                 id="acc-pw"
@@ -129,23 +130,23 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && canSubmit && doPassword()}
-                placeholder={mode === 'signup' ? '设置密码，至少 8 位' : '你的密码'}
+                placeholder={mode === 'signup' ? tr('设置密码，至少 8 位') : tr('你的密码')}
               />
-              <button type="button" className="btn datebtn" aria-label={showPw ? '隐藏密码' : '显示密码'} onClick={() => setShowPw((v) => !v)}>
-                {showPw ? '藏' : '看'}
+              <button type="button" className="btn datebtn" aria-label={showPw ? tr('隐藏密码') : tr('显示密码')} onClick={() => setShowPw((v) => !v)}>
+                {showPw ? tr('藏') : tr('看')}
               </button>
             </div>
           </div>
           <button className="btn btn-primary btn-lg btn-block" disabled={!!busy || !canSubmit} onClick={doPassword}>
             {busy ? <span className="spin" /> : null}
-            {mode === 'signup' ? `注册，免费试用 ${TRIAL.days} 天` : '登录'}
+            {mode === 'signup' ? tr('注册，免费试用 {0} 天', TRIAL.days) : tr('登录')}
           </button>
           <p className="xs muted rememberline">
-            <IShield width={14} height={14} /> 这台设备会被记住，至少半年不用再登录
+            <IShield width={14} height={14} /> {tr('这台设备会被记住，至少半年不用再登录')}
           </p>
           <div className="row" style={{ justifyContent: 'center', gap: 18 }}>
             <button type="button" className="linkbtn small" onClick={() => setMethod('code')}>
-              用邮箱验证码登录
+              {tr('用邮箱验证码登录')}
             </button>
             {mode === 'login' && (
               <button
@@ -156,7 +157,7 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                   setMethod('code');
                 }}
               >
-                忘记密码？
+                {tr('忘记密码？')}
               </button>
             )}
           </div>
@@ -165,9 +166,9 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
         <>
           {sent && (
             <div className="field">
-              <label htmlFor="acc-code">邮件里的验证码</label>
-              <input id="acc-code" className="input mono num" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="6 位数字" />
-              <span className="hint">没收到？看看垃圾邮件；{cooldown > 0 ? `${cooldown} 秒后可重发` : '可以重新发送'}。</span>
+              <label htmlFor="acc-code">{tr('邮件里的验证码')}</label>
+              <input id="acc-code" className="input mono num" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder={tr('6 位数字')} />
+              <span className="hint">{tr('没收到？看看垃圾邮件；')}{cooldown > 0 ? tr('{0} 秒后可重发', cooldown) : tr('可以重新发送')}{tr('。')}</span>
             </div>
           )}
           <div className="row">
@@ -176,16 +177,16 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                 className={`btn ${sent ? '' : 'btn-primary'}`}
                 disabled={!!busy || !isEmail(email)}
                 onClick={() =>
-                  run('发送中…', async () => {
+                  run(tr('发送中…'), async () => {
                     await sendCode(cloud, email);
                     setSent(true);
                     setCooldown(60);
-                    fb.toast('验证码已发送到邮箱');
+                    fb.toast(tr('验证码已发送到邮箱'));
                   })
                 }
               >
                 {busy === '发送中…' ? <span className="spin" /> : null}
-                {sent ? '重新发送' : '发送验证码'}
+                {sent ? tr('重新发送') : tr('发送验证码')}
               </button>
             ) : null}
             {sent && (
@@ -193,20 +194,20 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
                 className="btn btn-primary"
                 disabled={!!busy || code.length < 6}
                 onClick={() =>
-                  run('登录中…', async () => {
+                  run(tr('登录中…'), async () => {
                     const s = await verifyCode(cloud, email, code);
                     remember(s.user.email);
                     await signIn(s);
                     if (forgot) {
-                      fb.toast('已登录，现在设置新密码');
+                      fb.toast(tr('已登录，现在设置新密码'));
                       go({ name: 'account' });
                       setTimeout(() => document.getElementById('h-pw')?.closest('details')?.setAttribute('open', ''), 400);
-                    } else fb.toast(`已登录 ${s.user.email}，账单开始同步`);
+                    } else fb.toast(tr('已登录 {0}，账单开始同步', s.user.email));
                   })
                 }
               >
                 {busy === '登录中…' ? <span className="spin" /> : null}
-                登录
+                {tr('登录')}
               </button>
             )}
           </div>
@@ -219,7 +220,7 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
               setMethod('password');
             }}
           >
-            用密码登录
+            {tr('用密码登录')}
           </button>
         </>
       )}
@@ -230,9 +231,9 @@ export function LoginForm({ compact = false }: { compact?: boolean }) {
 /* ---------------- 套餐 ---------------- */
 
 const FEATURE_TEXT: Record<Feature, { title: string; body: string }> = {
-  edit: { title: '试用已结束', body: '账单仍然可以查看、标记已付。新增、编辑、识别单据需要订阅 T1 或 T2。数据都还在，订阅后立即恢复。' },
-  push: { title: '关屏推送是 T1 / T2 的功能', body: '订阅后，每天 09:00 把要付和已逾期的账单推送到手机，不用打开应用。' },
-  export: { title: '导出记录是 T2 的功能', body: '订阅 T2 后可以把账单和流水导出为 CSV（Excel 可直接打开），方便记账和对账。' },
+  edit: { title: tr('试用已结束'), body: tr('账单仍然可以查看、标记已付。新增、编辑、识别单据需要订阅 T1 或 T2。数据都还在，订阅后立即恢复。') },
+  push: { title: tr('关屏推送是 T1 / T2 的功能'), body: tr('订阅后，每天 09:00 把要付和已逾期的账单推送到手机，不用打开应用。') },
+  export: { title: tr('导出记录是 T2 的功能'), body: tr('订阅 T2 后可以把账单和流水导出为 CSV（Excel 可直接打开），方便记账和对账。') },
 };
 
 /** 没有权限时的订阅弹窗（由 App 根据 store.paywall 显示） */
@@ -246,7 +247,7 @@ export function PaywallModal() {
       <Pricing />
       <div className="row end">
         <button className="btn btn-ghost" onClick={closePaywall}>
-          以后再说
+          {tr('以后再说')}
         </button>
         <button
           className="btn btn-soft"
@@ -255,7 +256,7 @@ export function PaywallModal() {
             go({ name: 'account' });
           }}
         >
-          账号与套餐
+          {tr('账号与套餐')}
         </button>
       </div>
     </Modal>
@@ -273,7 +274,7 @@ export function ReadOnlyPage() {
       <p className="small">{FEATURE_TEXT.edit.body}</p>
       <Pricing />
       <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'bills' })}>
-        查看账单
+        {tr('查看账单')}
       </button>
     </section>
   );
@@ -288,10 +289,10 @@ export function PlanBanner() {
     return (
       <div className="banner bad">
         <span className="grow small">
-          <b>试用已结束</b>，账单只读。订阅后立即恢复全部功能。
+          <b>{tr('试用已结束')}</b>{tr('，账单只读。订阅后立即恢复全部功能。')}
         </span>
         <button className="btn btn-sm btn-primary" onClick={() => go({ name: 'account' })}>
-          订阅
+          {tr('订阅')}
         </button>
       </div>
     );
@@ -300,11 +301,11 @@ export function PlanBanner() {
   return (
     <div className={`banner ${left <= 7 ? 'warn' : 'ok'}`}>
       <span className="grow small">
-        免费试用还剩 <b>{left} 天</b>
-        {u && u.limit > 0 ? ` · AI 识别剩 ${Math.max(0, u.limit - u.ai)} 次` : ''}
+        {tr('免费试用还剩')} <b>{left} {tr('天')}</b>
+        {u && u.limit > 0 ? tr(' · AI 识别剩 {0} 次', Math.max(0, u.limit - u.ai)) : ''}
       </span>
       <button className="btn btn-sm" onClick={() => go({ name: 'account' })}>
-        查看套餐
+        {tr('查看套餐')}
       </button>
     </div>
   );
@@ -327,7 +328,7 @@ export function AccountPage() {
       if (!a) return;
       const ok = a.plan === 't1' || a.plan === 't2';
       if (ok) fb.celebrate();
-      fb.toast(ok ? `已开通 ${PLAN_LABEL[a.plan as PlanId]}，感谢支持！` : '正在等待 Mercado Pago 确认付款，几分钟后点「刷新」');
+      fb.toast(ok ? tr('已开通 {0}，感谢支持！', PLAN_LABEL[a.plan as PlanId]) : tr('正在等待 Mercado Pago 确认付款，几分钟后点「刷新」'));
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -335,11 +336,11 @@ export function AccountPage() {
     return (
       <section className="card stack">
         <h2 className="row">
-          <ICloud width={20} height={20} /> 账号
+          <ICloud width={20} height={20} /> {tr('账号')}
         </h2>
-        <p className="small">这个网站还没有连接账号服务。管理员请按 README「一键部署」完成初始化。</p>
-        <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'settings' })}>
-          去设置
+        <p className="small">{tr('这个网站还没有连接账号服务。管理员请按 README「一键部署」完成初始化。')}</p>
+        <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'set-dev' })}>
+          {tr('去设置')}
         </button>
       </section>
     );
@@ -349,9 +350,9 @@ export function AccountPage() {
     return (
       <section className="card stack" aria-labelledby="h-login">
         <h2 id="h-login" className="row">
-          <ICloud width={20} height={20} /> 登录账号
+          <ICloud width={20} height={20} /> {tr('登录账号')}
         </h2>
-        <p className="small">登录后账单在你所有设备间自动同步。新账号免费试用 {TRIAL.days} 天，含 {TRIAL.ai} 次 AI 识别。</p>
+        <p className="small">{tr('登录后账单在你所有设备间自动同步。新账号免费试用')} {TRIAL.days} {tr('天，含')} {TRIAL.ai} {tr('次 AI 识别。')}</p>
         <LoginForm />
       </section>
     );
@@ -371,24 +372,24 @@ export function AccountPage() {
           </h2>
           <span className={`pill ${plan === 'expired' ? 'overdue' : plan === 'trial' ? 'dueSoon' : 'paid'}`}>{PLAN_LABEL[plan]}</span>
         </div>
-        {auth.error && <div className="banner bad small">{auth.error}</div>}
+        {auth.error && <div className="banner bad small">{tx(auth.error)}</div>}
         <p className="small">
-          {plan === 'trial' && <>免费试用到 <b>{fmtDate(ent?.trialUntil ?? null)}</b>（还剩 {ent?.daysLeft ?? '?'} 天）。</>}
-          {plan === 'expired' && <>试用已结束，账单只读。订阅后立即恢复。</>}
+          {plan === 'trial' && <>{tr('免费试用到')} <b>{fmtDate(ent?.trialUntil ?? null)}</b>{tr('（还剩')} {ent?.daysLeft ?? '?'} {tr('天）。')}</>}
+          {plan === 'expired' && <>{tr('试用已结束，账单只读。订阅后立即恢复。')}</>}
           {(plan === 't1' || plan === 't2') && (
             <>
-              {PLAN_LABEL[plan]}（{ent?.period === 'year' ? '年付' : '月付'}）有效期至 <b>{fmtDate(ent?.planUntil ?? null)}</b>
-              {acc?.autoRenew ? '，到期自动续费。' : acc?.source === 'pix' ? '（PIX 年付，不自动续费）。' : sub === 'cancelled' || acc?.autoRenew === false ? '，已取消自动续费。' : '。'}
-              {acc?.source && (!isNative() || acc.source === (platform() === 'ios' ? 'apple' : 'google')) && <span className="xs muted"> 来自{sourceLabel(acc.source)}。</span>}
+              {PLAN_LABEL[plan]}{tr('（')}{ent?.period === 'year' ? tr('年付') : tr('月付')}{tr('）有效期至')} <b>{fmtDate(ent?.planUntil ?? null)}</b>
+              {acc?.autoRenew ? tr('，到期自动续费。') : acc?.source === 'pix' ? tr('（PIX 年付，不自动续费）。') : sub === 'cancelled' || acc?.autoRenew === false ? tr('，已取消自动续费。') : tr('。')}
+              {acc?.source && (!isNative() || acc.source === (platform() === 'ios' ? 'apple' : 'google')) && <span className="xs muted"> {tr('来自')}{sourceLabel(acc.source)}{tr('。')}</span>}
             </>
           )}
-          {plan === 'owner' && <>管理员：全部功能、不限次数。</>}
+          {plan === 'owner' && <>{tr('管理员：全部功能、不限次数。')}</>}
         </p>
         {usage && usage.limit !== 0 && (
           <div className="stack" style={{ gap: 4 }}>
             <div className="row between small">
-              <span>{usage.period === 'trial' ? '试用期 AI 识别' : '本月 AI 识别'}</span>
-              <b className="num">{usage.limit < 0 ? `${usage.ai} 次（不限）` : `${usage.ai} / ${usage.limit} 次`}</b>
+              <span>{usage.period === 'trial' ? tr('试用期 AI 识别') : tr('本月 AI 识别')}</span>
+              <b className="num">{usage.limit < 0 ? tr('{0} 次（不限）', usage.ai) : tr('{0} / {1} 次', usage.ai, usage.limit)}</b>
             </div>
             {usage.limit > 0 && (
               <div className={`meter${pct >= 90 ? ' bad' : ''}`} role="progressbar" aria-valuenow={usage.ai} aria-valuemin={0} aria-valuemax={usage.limit}>
@@ -397,20 +398,20 @@ export function AccountPage() {
             )}
             {!!usage.bonus && (
               <div className="row between small">
-                <span>AI 加量包剩余</span>
-                <b className="num">{usage.bonus} 次</b>
+                <span>{tr('AI 加量包剩余')}</span>
+                <b className="num">{usage.bonus} {tr('次')}</b>
               </div>
             )}
-            <span className="xs muted">{usage.period === 'trial' ? '试用期共 ' + TRIAL.ai + ' 次。' : '每月 1 日重置。'}用完后自动用加量包。识别失败不计次数；PDF 直接读文字、本机 OCR 都不占次数。</span>
+            <span className="xs muted">{usage.period === 'trial' ? tr('试用期共 ') + TRIAL.ai + tr(' 次。') : tr('每月 1 日重置。')}{tr('用完后自动用加量包。识别失败不计次数；PDF 直接读文字、本机 OCR 都不占次数。')}</span>
           </div>
         )}
         <div className="row">
-          <button className="btn btn-sm" disabled={!!busy} onClick={() => run('刷新…', refreshAccount)}>
-            刷新
+          <button className="btn btn-sm" disabled={!!busy} onClick={() => run(tr('刷新…'), refreshAccount)}>
+            {tr('刷新')}
           </button>
           {isNative() && acc?.autoRenew && acc.source === (platform() === 'ios' ? 'apple' : 'google') && (
             <button className="btn btn-sm btn-ghost" onClick={() => void manageSubscriptions().catch(() => {})}>
-              管理订阅
+              {tr('管理订阅')}
             </button>
           )}
           {!isNative() && sub === 'authorized' && (acc?.source ?? 'mp') === 'mp' && (
@@ -418,33 +419,33 @@ export function AccountPage() {
               className="btn btn-sm btn-ghost"
               disabled={!!busy}
               onClick={async () => {
-                const ok = await fb.confirm({ title: '取消自动续费？', body: `已付的期间照常可用，到 ${fmtDate(ent?.planUntil ?? null)} 后变为只读（数据保留）。`, confirmLabel: '取消续费', danger: true });
+                const ok = await fb.confirm({ title: tr('取消自动续费？'), body: tr('已付的期间照常可用，到 {0} 后变为只读（数据保留）。', fmtDate(ent?.planUntil ?? null)), confirmLabel: tr('取消续费'), danger: true });
                 if (!ok) return;
-                const r = await run('取消中…', async () => {
+                const r = await run(tr('取消中…'), async () => {
                   const token = await getToken();
-                  if (!token) throw new ApiError(401, '请重新登录');
+                  if (!token) throw new ApiError(401, tr('请重新登录'));
                   return cancelSubscription(cloud, token);
                 });
                 if (r) {
-                  fb.toast('已取消自动续费');
+                  fb.toast(tr('已取消自动续费'));
                   void refreshAccount();
                 }
               }}
             >
-              取消自动续费
+              {tr('取消自动续费')}
             </button>
           )}
           <button
             className="btn btn-sm btn-ghost"
             onClick={async () => {
-              const ok = await fb.confirm({ title: '退出登录？', body: '本机的账单会保留，只是不再同步。重新登录同一个账号即可继续。', confirmLabel: '退出' });
+              const ok = await fb.confirm({ title: tr('退出登录？'), body: tr('本机的账单会保留，只是不再同步。重新登录同一个账号即可继续。'), confirmLabel: tr('退出') });
               if (ok) {
                 await signOut();
-                fb.toast('已退出登录');
+                fb.toast(tr('已退出登录'));
               }
             }}
           >
-            退出登录
+            {tr('退出登录')}
           </button>
         </div>
       </section>
@@ -452,9 +453,9 @@ export function AccountPage() {
       {plan !== 'owner' && (
         <section className="card stack" aria-labelledby="h-plan">
           <h2 id="h-plan" className="row">
-            <IShield width={20} height={20} /> 套餐
+            <IShield width={20} height={20} /> {tr('套餐')}
           </h2>
-          {acc?.subscription?.plan && sub === 'authorized' && acc.subscription.plan !== plan && <p className="xs muted">正在切换到 {PLAN_LABEL[acc.subscription.plan as PlanId] ?? acc.subscription.plan}，付款确认后自动生效并取消原订阅。</p>}
+          {acc?.subscription?.plan && sub === 'authorized' && acc.subscription.plan !== plan && <p className="xs muted">{tr('正在切换到')} {PLAN_LABEL[acc.subscription.plan as PlanId] ?? acc.subscription.plan}{tr('，付款确认后自动生效并取消原订阅。')}</p>}
           <Pricing />
         </section>
       )}
@@ -478,37 +479,37 @@ function PasswordSection() {
   const [show, setShow] = useState(false);
   const ok = pw.length >= 8 && pw === pw2;
   const save = () =>
-    run('保存中…', async () => {
-      if (!cloud) throw new ApiError(0, '没有连接服务');
+    run(tr('保存中…'), async () => {
+      if (!cloud) throw new ApiError(0, tr('没有连接服务'));
       const token = await getToken();
-      if (!token) throw new ApiError(401, '请重新登录');
+      if (!token) throw new ApiError(401, tr('请重新登录'));
       await setPassword(cloud, token, pw);
       setPw('');
       setPw2('');
-      fb.toast('新密码已保存，下次可以用密码登录');
+      fb.toast(tr('新密码已保存，下次可以用密码登录'));
     });
   return (
     <section className="card stack" aria-labelledby="h-pw">
       <details className="more">
-        <summary id="h-pw">登录密码</summary>
+        <summary id="h-pw">{tr('登录密码')}</summary>
         <div className="stack" style={{ marginTop: 8 }}>
-          <p className="small muted">设置或修改密码。用验证码登录的账号也可以在这里加一个密码。</p>
+          <p className="small muted">{tr('设置或修改密码。用验证码登录的账号也可以在这里加一个密码。')}</p>
           <div className="field">
-            <label htmlFor="pw-new">新密码</label>
-            <input id="pw-new" className="input" type={show ? 'text' : 'password'} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="至少 8 位" />
+            <label htmlFor="pw-new">{tr('新密码')}</label>
+            <input id="pw-new" className="input" type={show ? 'text' : 'password'} autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={tr('至少 8 位')} />
           </div>
           <div className="field">
-            <label htmlFor="pw-new2">再输一次</label>
+            <label htmlFor="pw-new2">{tr('再输一次')}</label>
             <input id="pw-new2" className="input" type={show ? 'text' : 'password'} autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ok && save()} />
-            {pw2 && pw !== pw2 && <span className="hint">两次输入不一样</span>}
+            {pw2 && pw !== pw2 && <span className="hint">{tr('两次输入不一样')}</span>}
           </div>
           <div className="row">
             <button className="btn btn-primary" disabled={!!busy || !ok} onClick={save}>
               {busy ? <span className="spin" /> : null}
-              保存新密码
+              {tr('保存新密码')}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => setShow((v) => !v)}>
-              {show ? '隐藏' : '显示'}
+              {show ? tr('隐藏') : tr('显示')}
             </button>
           </div>
         </div>
@@ -528,35 +529,35 @@ function DeleteAccount() {
   const acc = auth.account;
   const storeSub = acc?.subs?.some((x) => (x.source === 'apple' || x.source === 'google') && x.autoRenew);
   const doDelete = () =>
-    run('删除中…', async () => {
-      if (!cloud) throw new ApiError(0, '没有连接服务');
+    run(tr('删除中…'), async () => {
+      if (!cloud) throw new ApiError(0, tr('没有连接服务'));
       const token = await getToken();
-      if (!token) throw new ApiError(401, '请重新登录');
+      if (!token) throw new ApiError(401, tr('请重新登录'));
       const r = await deleteAccountRemote(cloud, token, text.trim().toLowerCase());
       await signOut();
       await repo.clearAll();
       await reload();
       setOpen(false);
-      fb.toast(r.cancelInStore.length ? `账号已删除。别忘了到 ${r.cancelInStore.map((x) => (x === 'apple' ? 'App Store' : 'Google Play')).join('、')} 取消自动续订` : '账号和数据已全部删除');
+      fb.toast(r.cancelInStore.length ? tr('账号已删除。别忘了到 {0} 取消自动续订', r.cancelInStore.map((x) => (x === 'apple' ? 'App Store' : 'Google Play')).join(tr('、'))) : tr('账号和数据已全部删除'));
     });
   return (
     <section className="card stack" aria-labelledby="h-del">
       <details className="more" onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
-        <summary id="h-del">删除账号</summary>
+        <summary id="h-del">{tr('删除账号')}</summary>
         {open && (
           <div className="stack" style={{ marginTop: 8 }}>
             <p className="small">
-              将永久删除这个账号、云端的全部账单和识别记录，以及这台设备上的数据，无法恢复。需要的话先到「数据管理」导出备份。
-              {storeSub && <b> 在 App Store / Google Play 买的订阅不会自动停止扣费，请到商店的订阅管理里取消。</b>}
-              {acc?.source === 'mp' && acc.autoRenew && ' 网页的自动续费会一起取消。'}
+              {tr('将永久删除这个账号、云端的全部账单和识别记录，以及这台设备上的数据，无法恢复。需要的话先到「数据管理」导出备份。')}
+              {storeSub && <b> {tr('在 App Store / Google Play 买的订阅不会自动停止扣费，请到商店的订阅管理里取消。')}</b>}
+              {acc?.source === 'mp' && acc.autoRenew && tr(' 网页的自动续费会一起取消。')}
             </p>
             <div className="field">
-              <label htmlFor="del-confirm">输入你的邮箱 {email} 确认</label>
+              <label htmlFor="del-confirm">{tr('输入你的邮箱')} {email} {tr('确认')}</label>
               <input id="del-confirm" className="input" type="email" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} placeholder={email} />
             </div>
             <button className="btn btn-danger" style={{ alignSelf: 'flex-start' }} disabled={!!busy || text.trim().toLowerCase() !== email.toLowerCase()} onClick={doDelete}>
               {busy ? <span className="spin" /> : null}
-              永久删除账号
+              {tr('永久删除账号')}
             </button>
           </div>
         )}
@@ -593,12 +594,12 @@ function PushSection() {
       const { publicKey } = await pushKey(cloud);
       const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(publicKey) as BufferSource }));
       const token = await getToken();
-      if (!token) throw new ApiError(401, '请重新登录');
+      if (!token) throw new ApiError(401, tr('请重新登录'));
       await pushSubscribe(cloud, token, sub.toJSON());
       setState('on');
-      fb.toast('已开启关屏推送');
+      fb.toast(tr('已开启关屏推送'));
     } catch (e) {
-      fb.toast(e instanceof ApiError ? e.message : `开启失败：${(e as Error).message}`, { bad: true });
+      fb.toast(e instanceof ApiError ? e.message : tr('开启失败：{0}', (e as Error).message), { bad: true });
     } finally {
       setBusy(false);
     }
@@ -614,7 +615,7 @@ function PushSection() {
       if (sub && token) await pushUnsubscribe(cloud, token, sub.endpoint).catch(() => {});
       await sub?.unsubscribe();
       setState('off');
-      fb.toast('已关闭关屏推送');
+      fb.toast(tr('已关闭关屏推送'));
     } finally {
       setBusy(false);
     }
@@ -625,9 +626,9 @@ function PushSection() {
     setBusy(true);
     try {
       const token = await getToken();
-      if (!token) throw new ApiError(401, '请重新登录');
+      if (!token) throw new ApiError(401, tr('请重新登录'));
       const r = await pushTest(cloud, token);
-      fb.toast(r.sent ? `已发送测试推送（${r.sent} 台设备）` : '没有发出去：请关闭后重新开启推送', { bad: !r.sent });
+      fb.toast(r.sent ? tr('已发送测试推送（{0} 台设备）', r.sent) : tr('没有发出去：请关闭后重新开启推送'), { bad: !r.sent });
     } catch (e) {
       fb.toast((e as Error).message, { bad: true });
     } finally {
@@ -638,26 +639,26 @@ function PushSection() {
   return (
     <section className="card stack" aria-labelledby="h-push">
       <h2 id="h-push" className="row">
-        <IBell width={20} height={20} /> 关屏推送提醒 {!gate.canPush && <span className="pill neutral">T1 / T2</span>}
+        <IBell width={20} height={20} /> {tr('关屏推送提醒')} {!gate.canPush && <span className="pill neutral">T1 / T2</span>}
       </h2>
-      <p className="small">每天圣保罗时间 09:00 左右，把要付和已逾期的账单推送到这台设备，不用打开应用。</p>
-      {state === 'unsupported' && <p className="small err">{isIOS() && !standalone() ? 'iPhone 需要先把本应用「添加到主屏幕」，再从主屏幕打开，才能开启推送。' : '这个浏览器不支持网页推送，可以用日历提醒。'}</p>}
-      {state === 'denied' && <p className="small err">通知权限被拒绝：请在浏览器的网站设置里改为「允许」后再开启。</p>}
+      <p className="small">{tr('每天圣保罗时间 09:00 左右，把要付和已逾期的账单推送到这台设备，不用打开应用。')}</p>
+      {state === 'unsupported' && <p className="small err">{isIOS() && !standalone() ? tr('iPhone 需要先把本应用「添加到主屏幕」，再从主屏幕打开，才能开启推送。') : tr('这个浏览器不支持网页推送，可以用日历提醒。')}</p>}
+      {state === 'denied' && <p className="small err">{tr('通知权限被拒绝：请在浏览器的网站设置里改为「允许」后再开启。')}</p>}
       <div className="row">
         {state === 'off' && (
           <button className="btn btn-primary" disabled={busy} onClick={enable}>
             {busy ? <span className="spin" /> : <IBell />}
-            开启推送
+            {tr('开启推送')}
           </button>
         )}
         {state === 'on' && (
           <>
-            <span className="pill paid">已开启</span>
+            <span className="pill paid">{tr('已开启')}</span>
             <button className="btn btn-sm" disabled={busy} onClick={test}>
-              发一条测试
+              {tr('发一条测试')}
             </button>
             <button className="btn btn-sm btn-ghost" disabled={busy} onClick={disable}>
-              关闭
+              {tr('关闭')}
             </button>
           </>
         )}
@@ -674,14 +675,14 @@ export function Welcome() {
     <div className="authpage">
       <div className="authhero">
         <div className="authbrand">
-          <Logo size={34} /> 账期助手
+          <Logo size={34} /> {tr('账期助手')}
         </div>
         <h1>
-          账期和缴费，
+          {tr('账期和缴费，')}
           <br />
-          到期前提醒你
+          {tr('到期前提醒你')}
         </h1>
-        <p>拍照识别单据 · 自动算到期日 · 手机电脑同步</p>
+        <p>{tr('拍照识别单据 · 自动算到期日 · 手机电脑同步')}</p>
         <HeroArt />
       </div>
       <div className="authpanel">
@@ -689,7 +690,7 @@ export function Welcome() {
           <LoginForm compact />
         </section>
         <ul className="perks small">
-          {['拍照或 PDF 识别订单、boleto、水电税费单', '按商家账期自动算到期日，逾期一目了然', '对账单导入、每月流水、多设备同步', `新账号免费试用 ${TRIAL.days} 天，含 ${TRIAL.ai} 次 AI 识别`].map((t, i) => (
+          {[tr('拍照或 PDF 识别订单、boleto、水电税费单'), tr('按商家账期自动算到期日，逾期一目了然'), tr('对账单导入、每月流水、多设备同步'), tr('新账号免费试用 {0} 天，含 {1} 次 AI 识别', TRIAL.days, TRIAL.ai)].map((t, i) => (
             <li key={t} style={{ animationDelay: `${0.15 + i * 0.07}s` }}>
               <ICheck width={16} height={16} /> {t}
             </li>
@@ -697,35 +698,35 @@ export function Welcome() {
         </ul>
         <div className="row" style={{ justifyContent: 'center', gap: 4 }}>
           <button className="btn btn-ghost btn-sm" onClick={() => setHelp(true)}>
-            <IHelp width={16} height={16} /> 使用教程
+            <IHelp width={16} height={16} /> {tr('使用教程')}
           </button>
           <button className="btn btn-ghost btn-sm" onClick={() => setPrices(true)}>
-            套餐与价格
+            {tr('套餐与价格')}
           </button>
         </div>
       </div>
       {prices && (
-        <Modal title="套餐与价格" onClose={() => setPrices(false)}>
+        <Modal title={tr('套餐与价格')} onClose={() => setPrices(false)}>
           <div className="stack">
             <p className="small muted">
-              新账号免费试用 {TRIAL.days} 天，含 {TRIAL.ai} 次 AI 识别。试用结束后可订阅：
+              {tr('新账号免费试用')} {TRIAL.days} {tr('天，含')} {TRIAL.ai} {tr('次 AI 识别。试用结束后可订阅：')}
             </p>
             {(['t1', 't2'] as PlanId[]).map((p) => (
               <div key={p} className="card stack" style={{ gap: 4 }}>
                 <b>
-                  {PLANS[p].name} · {brl(PLANS[p].month)}/月 · {brl(PLANS[p].year)}/年
+                  {PLANS[p].name} · {brl(PLANS[p].month)}{tr('/月 ·')} {brl(PLANS[p].year)}{tr('/年')}
                 </b>
                 <span className="small muted">
-                  关屏推送、AI 识别 {PLANS[p].ai} 次/月{PLANS[p].export ? '、CSV / Excel 导出' : ''}
+                  {tr('关屏推送、AI 识别')} {PLANS[p].ai} {tr('次/月')}{PLANS[p].export ? tr('、CSV / Excel 导出') : ''}
                 </span>
               </div>
             ))}
-            <p className="xs muted">{isNative() ? `通过 ${platform() === 'ios' ? 'App Store' : 'Google Play'} 订阅，可随时取消。` : '网页可用信用卡自动续费或 PIX 一次付清一年；手机 App 里也能订阅。'}没订阅时账单仍可查看和备份。</p>
+            <p className="xs muted">{isNative() ? tr('通过 {0} 订阅，可随时取消。', platform() === 'ios' ? 'App Store' : 'Google Play') : tr('网页可用信用卡自动续费或 PIX 一次付清一年；手机 App 里也能订阅。')}{tr('没订阅时账单仍可查看和备份。')}</p>
           </div>
         </Modal>
       )}
       {help && (
-        <Modal title="使用教程" onClose={() => setHelp(false)}>
+        <Modal title={tr('使用教程')} onClose={() => setHelp(false)}>
           <HelpContent compact />
         </Modal>
       )}
@@ -749,12 +750,12 @@ function HeroArt() {
         <span className="ha-av">L</span>
         <span className="grow">
           <b>Loja Exemplo</b>
-          <small>3 天后到期</small>
+          <small>{tr('3 天后到期')}</small>
         </span>
         <b>R$ 368,00</b>
       </div>
       <div className="ha-paid">
-        <ICheck width={16} height={16} /> 已付
+        <ICheck width={16} height={16} /> {tr('已付')}
       </div>
     </div>
   );
@@ -776,10 +777,10 @@ function DeviceSection() {
   const toggle = async () => {
     if (!user) return;
     if (on) {
-      const ok = await fb.confirm({ title: `关闭${label}解锁？`, body: '关闭后打开应用不再需要验证，账号仍保持登录。', confirmLabel: '关闭' });
+      const ok = await fb.confirm({ title: tr('关闭{0}解锁？', label), body: tr('关闭后打开应用不再需要验证，账号仍保持登录。'), confirmLabel: tr('关闭') });
       if (ok) {
         await setBiometric(null);
-        fb.toast(`已关闭${label}解锁`);
+        fb.toast(tr('已关闭{0}解锁', label));
       }
       return;
     }
@@ -787,9 +788,9 @@ function DeviceSection() {
     try {
       const cfg = await enrollBiometric(user);
       await setBiometric(cfg);
-      fb.toast(`已开启：以后打开应用用${label}解锁`);
+      fb.toast(tr('已开启：以后打开应用用{0}解锁', label));
     } catch (e) {
-      fb.toast(e instanceof BiometricError ? e.message : `开启失败：${(e as Error).message}`, { bad: true });
+      fb.toast(e instanceof BiometricError ? e.message : tr('开启失败：{0}', (e as Error).message), { bad: true });
     } finally {
       setBusy(false);
     }
@@ -798,31 +799,31 @@ function DeviceSection() {
   return (
     <section className="card stack" aria-labelledby="h-device">
       <h2 id="h-device" className="row">
-        <ILock width={20} height={20} /> 设备与安全
+        <ILock width={20} height={20} /> {tr('设备与安全')}
       </h2>
       <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap', gap: 10 }}>
         <span className="okdot" aria-hidden="true">
           <ICheck width={14} height={14} />
         </span>
         <span className="small">
-          <b>已记住这台设备</b>：登录一次在本机长期有效（至少 {REMEMBER_DAYS} 天），关掉浏览器、重启手机都不用重新登录。手机上建议「添加到主屏幕」，打开更快、也更不容易被系统清理。
+          <b>{tr('已记住这台设备')}</b>{tr('：登录一次在本机长期有效（至少')} {REMEMBER_DAYS} {tr('天），关掉浏览器、重启手机都不用重新登录。手机上建议「添加到主屏幕」，打开更快、也更不容易被系统清理。')}
         </span>
       </div>
-      {avail === false && <p className="xs muted">这台设备或浏览器不支持{label}解锁（需要面容 / 指纹硬件和 https 网址）。</p>}
+      {avail === false && <p className="xs muted">{tr('这台设备或浏览器不支持')}{label}{tr('解锁（需要面容 / 指纹硬件和 https 网址）。')}</p>}
       {avail && (
         <>
           <label className="switchrow">
             <span className="grow stack" style={{ gap: 2 }}>
               <b className="small row" style={{ gap: 6 }}>
-                <IFace width={18} height={18} /> 打开应用时用{label}解锁
+                <IFace width={18} height={18} /> {tr('打开应用时用')}{label}{tr('解锁')}
               </b>
-              <span className="xs muted">别人拿到你的手机也看不到账单。离开应用超过 5 分钟回来会重新验证。生物信息只在本机芯片里，不会上传。</span>
+              <span className="xs muted">{tr('别人拿到你的手机也看不到账单。离开应用超过 5 分钟回来会重新验证。生物信息只在本机芯片里，不会上传。')}</span>
             </span>
-            <input type="checkbox" role="switch" className="switch" checked={on} disabled={busy} onChange={toggle} aria-label={`打开应用时用${label}解锁`} />
+            <input type="checkbox" role="switch" className="switch" checked={on} disabled={busy} onChange={toggle} aria-label={tr('打开应用时用{0}解锁', label)} />
           </label>
           {on && (
             <button className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={lockNow}>
-              <ILock width={16} height={16} /> 立即锁定
+              <ILock width={16} height={16} /> {tr('立即锁定')}
             </button>
           )}
         </>

@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 import { isBackNav, onHashChange, onReplace } from './nav';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { IndexedDbRepository, StorageError, explainStorageError, type Repository } from './db/repo';
@@ -55,6 +56,9 @@ export type Route =
   | { name: 'review' }
   | { name: 'masters' }
   | { name: 'settings' }
+  | { name: 'set-remind' }
+  | { name: 'set-ai' }
+  | { name: 'set-dev' }
   | { name: 'data' }
   | { name: 'account' }
   | { name: 'help' }
@@ -82,6 +86,10 @@ export function parseHash(h: string): Route {
       return { name: 'masters' };
     case 'settings':
       return { name: 'settings' };
+    case 'set-remind':
+    case 'set-ai':
+    case 'set-dev':
+      return { name: p[0] };
     case 'data':
       return { name: 'data' };
     case 'account':
@@ -383,7 +391,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           // 令牌确实失效（或在别的标签页退出了）：回到登录页，本机数据保留
           await repo.setMeta(META_SESSION, null);
-          adoptSession(null, r.expired ? '登录已过期，请重新登录' : null);
+          adoptSession(null, r.expired ? tr('登录已过期，请重新登录') : null);
           return null;
         } finally {
           refreshing.current = null;
@@ -425,7 +433,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (cfg.account) {
         const token = await getToken();
         if (!token) {
-          setSync((x) => ({ ...x, status: 'error', error: '登录已过期，请重新登录（设置 → 账号）' }));
+          setSync((x) => ({ ...x, status: 'error', error: tr('登录已过期，请重新登录（设置 → 账号）') }));
           return null;
         }
         cfg = { ...cfg, bearer: token };
@@ -448,7 +456,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (r.applied > 0) await reload();
           return r;
         } catch (e) {
-          const msg = e instanceof SyncError ? e.message : `同步失败：${(e as Error)?.message ?? e}`;
+          const msg = e instanceof SyncError ? e.message : tr('同步失败：{0}', (e as Error)?.message ?? e);
           setSync((x) => ({ ...x, status: 'error', error: msg }));
           return null;
         }

@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import type { Bill, BillStatus } from './types';
 import { diffDays } from './dates';
 import { openCents, paidCents as paidOf } from './payments';
@@ -11,10 +12,10 @@ export function billStatus(bill: Pick<Bill, 'paidAt' | 'dueDate'>, today: string
 }
 
 export const STATUS_LABEL: Record<BillStatus, string> = {
-  open: '未到期',
-  dueSoon: '即将到期',
-  overdue: '已逾期',
-  paid: '已付款',
+  open: tr('未到期'),
+  dueSoon: tr('即将到期'),
+  overdue: tr('已逾期'),
+  paid: tr('已付款'),
 };
 
 export const STATUS_ICON: Record<BillStatus, string> = {

@@ -1,3 +1,5 @@
+import { SAMPLE_PREFIX } from '../sample';
+import { tr } from '../i18n';
 import { tap } from '../native/platform';
 import { useState } from 'react';
 
@@ -25,12 +27,12 @@ export function useGroupMode(): [GroupMode, (m: GroupMode) => void] {
 
 export function GroupModeSeg({ mode, onChange }: { mode: GroupMode; onChange: (m: GroupMode) => void }) {
   return (
-    <div className="seg seg-sm" role="group" aria-label="归类方式">
+    <div className="seg seg-sm" role="group" aria-label={tr('归类方式')}>
       <button aria-pressed={mode === 'date'} onClick={() => onChange('date')}>
-        按日期
+        {tr('按日期')}
       </button>
       <button aria-pressed={mode === 'merchant'} onClick={() => onChange('merchant')}>
-        按商家
+        {tr('按商家')}
       </button>
     </div>
   );
@@ -54,14 +56,14 @@ import type { Merchant } from '../lib/types';
 
 /** 商家名首个字母或汉字（跳过「示例 ·」和数字） */
 export function initialOf(name: string): string {
-  const m = name.replace(/^示例\s*·\s*/, '').match(/[A-Za-zÀ-ÿ\u4e00-\u9fff]/);
+  const m = name.replace(SAMPLE_PREFIX, '').match(/[A-Za-zÀ-ÿ\u4e00-\u9fff]/);
   return (m?.[0] ?? name.slice(0, 1) ?? '?').toUpperCase();
 }
 
 /** 商家头像：圆形 + 商家识别色（与行内的方形日期块区分） */
 export function MerchantAvatar({ merchant, name, bill, size = 'md' }: { merchant?: Merchant | null; name: string; bill?: Bill; size?: 'sm' | 'md' | 'lg' }) {
   const slot = colorSlot(merchant, merchant?.id ?? bill?.merchantId ?? name);
-  const text = bill && isExpense(bill) ? categoryOf(bill.category)?.mark ?? '缴' : initialOf(name);
+  const text = bill && isExpense(bill) ? categoryOf(bill.category)?.mark ?? tr('缴') : initialOf(name);
   return (
     <span className={`mav mav-${size} mc-${slot}`} aria-hidden="true">
       {text}
@@ -90,20 +92,20 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
     }, 160);
   };
   const shortDate = (iso: string) => (iso.slice(0, 4) === today.slice(0, 4) ? formatBR(iso).slice(0, 5) : formatBR(iso));
-  const paidText = bill.paidAt ? `${formatBR(todayISO(new Date(bill.paidAt))).slice(0, 5)} 已付` : '';
+  const paidText = bill.paidAt ? tr('{0} 已付', formatBR(todayISO(new Date(bill.paidAt))).slice(0, 5)) : '';
   const when = bill.paidAt ? paidText : relativeDue(bill.dueDate, today);
   const order = bill.orderNumber ? `#${bill.orderNumber}` : null;
   // 商家卡片：左边日期块就是到期日；标题写距离到期多久，下面写开单日（不再重复商家名和到期日）
   const main = sameTitle ? when : title;
-  const sub = (sameTitle ? [`开单 ${shortDate(bill.billDate)}`, order] : [bill.paidAt ? paidText : `${shortDate(bill.dueDate)} · ${when}`, order]).filter(Boolean);
+  const sub = (sameTitle ? [tr('开单 {0}', shortDate(bill.billDate)), order] : [bill.paidAt ? paidText : `${shortDate(bill.dueDate)} · ${when}`, order]).filter(Boolean);
   return (
     <div className={`brow st-${st} mc-${colorSlot(merchantOf(bill), merchantOf(bill)?.id ?? bill.merchantId ?? title)}${selected ? ' selected' : ''}${leaving ? ' leaving' : ''}`}>
-      {selectable && <input type="checkbox" className="brow-check" checked={!!selected} onChange={onToggle} aria-label={`选择 ${title}`} />}
-      <button type="button" className="brow-main" onClick={() => (selectable ? onToggle?.() : onOpen(bill))} aria-label={`${title}，${formatBRL(amount ?? amountOf(bill))}${isPartial(bill) ? `（还差，账单共 ${formatBRL(bill.totalCents)}）` : ''}，${STATUS_LABEL[st]}，到期 ${formatBR(bill.dueDate)}`}>
+      {selectable && <input type="checkbox" className="brow-check" checked={!!selected} onChange={onToggle} aria-label={tr('选择 {0}', title)} />}
+      <button type="button" className="brow-main" onClick={() => (selectable ? onToggle?.() : onOpen(bill))} aria-label={tr('{0}，{1}{2}，{3}，到期 {4}', title, formatBRL(amount ?? amountOf(bill)), isPartial(bill) ? tr('（还差，账单共 {0}）', formatBRL(bill.totalCents)) : '', STATUS_LABEL[st], formatBR(bill.dueDate))}>
         {sameTitle ? (
           <span className={`brow-day st-${st}`} aria-hidden="true">
             <b>{bill.dueDate.slice(8, 10)}</b>
-            <i>{Number(bill.dueDate.slice(5, 7))}月</i>
+            <i>{Number(bill.dueDate.slice(5, 7))}{tr('月')}</i>
           </span>
         ) : (
           <MerchantAvatar merchant={merchantOf(bill)} name={title} bill={bill} />
@@ -111,29 +113,29 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
         <span className="brow-text">
           <span className={`brow-title${sameTitle ? ` when st-${st}` : ''}`}>
             {main}
-            {bill.installment && <span className="tag">{bill.installment.index}/{bill.installment.count}期</span>}
+            {bill.installment && <span className="tag">{tr('{0}/{1}期', bill.installment.index, bill.installment.count)}</span>}
             {bill.recurrence && (
               <span className="tag" title={describeRepeat(bill.recurrence)}>
                 <IRepeat width={11} height={11} />
                 {describeRepeat(bill.recurrence).split('，')[0]}
               </span>
             )}
-            {bill.estimated && !bill.paidAt && <span className="tag warn">待确认</span>}
-            {isPartial(bill) && <span className="tag warn">已付 {paidPct(bill)}%</span>}
+            {bill.estimated && !bill.paidAt && <span className="tag warn">{tr('待确认')}</span>}
+            {isPartial(bill) && <span className="tag warn">{tr('已付')} {paidPct(bill)}%</span>}
           </span>
           <span className={`brow-sub${!sameTitle && st === 'overdue' ? ' err' : ''}`}>{subOverride ?? sub.join(' · ')}</span>
         </span>
-        <span className="brow-amt num" title={isPartial(bill) ? `账单 ${formatBRL(bill.totalCents)}，还差 ${formatBRL(openCents(bill))}` : undefined}>
+        <span className="brow-amt num" title={isPartial(bill) ? tr('账单 {0}，还差 {1}', formatBRL(bill.totalCents), formatBRL(openCents(bill))) : undefined}>
           {formatBRL(amount ?? amountOf(bill))}
         </span>
       </button>
       {!selectable && !readOnly &&
         (bill.paidAt ? (
-          <span className="brow-done" aria-label="已付款">
+          <span className="brow-done" aria-label={tr('已付款')}>
             <ICheck />
           </span>
         ) : (
-          <button type="button" className="brow-pay" aria-label={`标记已付：${title}`} title="标记已付" disabled={leaving} onClick={pay}>
+          <button type="button" className="brow-pay" aria-label={tr('标记已付：{0}', title)} title={tr('标记已付')} disabled={leaving} onClick={pay}>
             <ICheck />
           </button>
         ))}
@@ -153,24 +155,24 @@ function GroupCard({ g, rowLimit, onOpen, selectable, selected, onToggle, onHead
   const slot = g.sameTitle ? colorSlot(m, m?.id ?? first.merchantId ?? g.label) : null;
   const overdueN = g.bills.filter((b) => !b.paidAt && b.dueDate < today).length;
   return (
-    <section className={`gcard tone-${g.tone}${slot != null ? ` by-merchant mc-${slot}` : ''}`} aria-label={`${g.label}，${g.bills.length} 笔，${formatBRL(g.total)}`}>
+    <section className={`gcard tone-${g.tone}${slot != null ? ` by-merchant mc-${slot}` : ''}`} aria-label={tr('{0}，{1} 笔，{2}', g.label, g.bills.length, formatBRL(g.total))}>
       <div className={`gc-head${onHead && !selectable ? ' clickable' : ''}`} onClick={onHead && !selectable ? () => onHead(g) : undefined} role={onHead && !selectable ? 'button' : undefined} tabIndex={onHead && !selectable ? 0 : undefined} onKeyDown={onHead && !selectable ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onHead(g)) : undefined}>
         {g.sameTitle && <MerchantAvatar merchant={m} name={g.label} bill={first} size="lg" />}
         <div className="gc-title">
           <span className="glabel">
             {g.label}
-            <span className="gc-count num" title={`${g.bills.length} 笔`}>
+            <span className="gc-count num" title={tr('{0} 笔', g.bills.length)}>
               {g.bills.length}
             </span>
           </span>
-          {g.sameTitle ? overdueN > 0 && <span className="gc-flag">逾期 {overdueN}</span> : g.sub && <span className="gc-sub">{g.sub}</span>}
+          {g.sameTitle ? overdueN > 0 && <span className="gc-flag">{tr('逾期')} {overdueN}</span> : g.sub && <span className="gc-sub">{g.sub}</span>}
         </div>
         <span className="gc-total num">{formatBRL(g.total)}</span>
         {selectable && (
           <input
             type="checkbox"
             className="brow-check"
-            aria-label={`全选 ${g.label}`}
+            aria-label={tr('全选 {0}', g.label)}
             checked={!!allSel}
             onChange={() => g.bills.forEach((b) => (allSel ? selected?.has(b.id) : !selected?.has(b.id)) && onToggle?.(b.id))}
           />
@@ -183,7 +185,7 @@ function GroupCard({ g, rowLimit, onOpen, selectable, selected, onToggle, onHead
       </div>
       {g.bills.length > rowLimit && (
         <button type="button" className={`gc-more${all ? ' open' : ''}`} onClick={() => setAll((v) => !v)}>
-          {all ? '收起' : `还有 ${hidden} 笔`}
+          {all ? tr('收起') : tr('还有 {0} 笔', hidden)}
           <IChevron width={14} height={14} />
         </button>
       )}

@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { useState } from 'react';
 import { parseTags } from '../lib/insights';
 import { IX } from './icons';
@@ -15,12 +16,12 @@ export function TagField({ value, onChange, suggestions = [], id = 'f-tags' }: {
   const rest = suggestions.filter((t) => !has(t)).slice(0, 8);
   return (
     <div className="field">
-      <label htmlFor={id}>标签</label>
+      <label htmlFor={id}>{tr('标签')}</label>
       <div className="tagbox" onClick={() => document.getElementById(id)?.focus()}>
         {value.map((t) => (
           <span key={t} className="tagchip">
             #{t}
-            <button type="button" aria-label={`删除标签 ${t}`} onClick={(e) => (e.stopPropagation(), onChange(value.filter((x) => x !== t)))}>
+            <button type="button" aria-label={tr('删除标签 {0}', t)} onClick={(e) => (e.stopPropagation(), onChange(value.filter((x) => x !== t)))}>
               <IX width={12} height={12} />
             </button>
           </span>
@@ -28,7 +29,7 @@ export function TagField({ value, onChange, suggestions = [], id = 'f-tags' }: {
         <input
           id={id}
           value={text}
-          placeholder={value.length ? '' : '如：店铺A、年货、待报销（回车添加）'}
+          placeholder={value.length ? '' : tr('如：店铺A、年货、待报销（回车添加）')}
           onChange={(e) => {
             const v = e.target.value;
             if (/[,，;；]/.test(v)) add(v);
@@ -44,7 +45,7 @@ export function TagField({ value, onChange, suggestions = [], id = 'f-tags' }: {
         />
       </div>
       {rest.length > 0 && (
-        <div className="tagsugg" aria-label="常用标签">
+        <div className="tagsugg" aria-label={tr('常用标签')}>
           {rest.map((t) => (
             <button key={t} type="button" onClick={() => add(t)}>
               + #{t}

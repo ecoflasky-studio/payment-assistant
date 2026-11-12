@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "ZhangQi";
+"NSCameraUsageDescription" = "Photograph orders, boletos and bills to read the amount and due date.";
+"NSPhotoLibraryUsageDescription" = "Choose document images or payment receipts from your photo library.";
+"NSFaceIDUsageDescription" = "Use Face ID to unlock ZhangQi and protect your bills.";

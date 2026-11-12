@@ -1,4 +1,5 @@
 /** 固定账期规则：计算到期日、分期拆分、文字描述 */
+import { tr } from '../i18n';
 import type { TermRule } from './types';
 import { addDays, daysInMonth, toISO, diffDays, isValidISO } from './dates';
 import { formatBRL } from './money';
@@ -25,10 +26,10 @@ export function computeDueDates(rule: TermRule | null | undefined, billISO: stri
 
 export function describeTerm(rule: TermRule | null | undefined): string {
   if (!rule) return '';
-  if (rule.kind === 'days') return rule.days === 0 ? '当天付款' : `开单后 ${rule.days} 天`;
-  if (rule.kind === 'installments') return `分 ${rule.days.length} 期：${rule.days.join('/')} 天`;
-  const when = rule.monthOffset === 0 ? '当月' : rule.monthOffset === 1 ? '次月' : `${rule.monthOffset} 个月后`;
-  return `${when} ${rule.day} 号${rule.cutoffDay ? `（每月 ${rule.cutoffDay} 号截单）` : ''}`;
+  if (rule.kind === 'days') return rule.days === 0 ? tr('当天付款') : tr('开单后 {0} 天', rule.days);
+  if (rule.kind === 'installments') return tr('分 {0} 期：{1} 天', rule.days.length, rule.days.join('/'));
+  const when = rule.monthOffset === 0 ? tr('当月') : rule.monthOffset === 1 ? tr('次月') : tr('{0} 个月后', rule.monthOffset);
+  return tr('{0} {1} 号{2}', when, rule.day, rule.cutoffDay ? tr('（每月 {0} 号截单）', rule.cutoffDay) : '');
 }
 
 /** 解析 "30/60/90" 或 "30, 60, 90" */
@@ -43,17 +44,17 @@ export function parseInstallmentDays(text: string): number[] | null {
 
 export function validateTerm(rule: TermRule | null | undefined): string | null {
   if (!rule) return null;
-  if (rule.kind === 'days') return Number.isInteger(rule.days) && rule.days >= 0 && rule.days <= 720 ? null : '天数应为 0–720 的整数';
-  if (rule.kind === 'installments') return rule.days.length >= 2 ? null : '分期至少 2 期，天数递增，如 30/60/90';
-  if (!Number.isInteger(rule.day) || rule.day < 1 || rule.day > 31) return '付款日应为 1–31';
-  if (!Number.isInteger(rule.monthOffset) || rule.monthOffset < 0 || rule.monthOffset > 12) return '月份偏移应为 0–12';
-  if (rule.cutoffDay != null && (!Number.isInteger(rule.cutoffDay) || rule.cutoffDay < 1 || rule.cutoffDay > 31)) return '截单日应为 1–31';
+  if (rule.kind === 'days') return Number.isInteger(rule.days) && rule.days >= 0 && rule.days <= 720 ? null : tr('天数应为 0–720 的整数');
+  if (rule.kind === 'installments') return rule.days.length >= 2 ? null : tr('分期至少 2 期，天数递增，如 30/60/90');
+  if (!Number.isInteger(rule.day) || rule.day < 1 || rule.day > 31) return tr('付款日应为 1–31');
+  if (!Number.isInteger(rule.monthOffset) || rule.monthOffset < 0 || rule.monthOffset > 12) return tr('月份偏移应为 0–12');
+  if (rule.cutoffDay != null && (!Number.isInteger(rule.cutoffDay) || rule.cutoffDay < 1 || rule.cutoffDay > 31)) return tr('截单日应为 1–31');
   return null;
 }
 
 /** 整数分均分，余数（几分钱）放在第一期 */
 export function splitCents(total: number, n: number): number[] {
-  if (!Number.isInteger(total) || total < 0 || !Number.isInteger(n) || n < 1) throw new Error('splitCents 参数无效');
+  if (!Number.isInteger(total) || total < 0 || !Number.isInteger(n) || n < 1) throw new Error(tr('splitCents 参数无效'));
   const base = Math.floor(total / n);
   const parts = Array(n).fill(base);
   parts[0] += total - base * n;
@@ -61,7 +62,7 @@ export function splitCents(total: number, n: number): number[] {
 }
 
 export function installmentLabel(index: number, count: number, groupTotalCents: number): string {
-  return `第 ${index}/${count} 期（整单 ${formatBRL(groupTotalCents)}）`;
+  return tr('第 {0}/{1} 期（整单 {2}）', index, count, formatBRL(groupTotalCents));
 }
 
 /** 把一笔账单按到期日列表拆成多期账单（总额整数分精确拆分） */

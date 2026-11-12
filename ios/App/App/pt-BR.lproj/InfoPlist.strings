@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "ZhangQi";
+"NSCameraUsageDescription" = "Fotografar pedidos, boletos e contas para ler o valor e o vencimento.";
+"NSPhotoLibraryUsageDescription" = "Escolher imagens de documentos ou comprovantes na galeria.";
+"NSFaceIDUsageDescription" = "Usar o Face ID para desbloquear o ZhangQi e proteger suas contas.";

@@ -1,4 +1,5 @@
 /** 账单列表分组：按"什么时候要付"组织，而不是平铺卡片 */
+import { tr } from '../i18n';
 import type { Bill } from './types';
 import { diffDays, formatBR, monthLabel, todayISO } from './dates';
 import { billTitle } from './expense';
@@ -36,11 +37,11 @@ export function groupUnpaid(bills: Bill[], today: string): BillGroup[] {
   const month = today.slice(0, 7);
   for (const b of [...bills].sort(byDue)) {
     const d = diffDays(today, b.dueDate);
-    if (d < 0) push(map, 'overdue', '已逾期', 'overdue', b);
-    else if (d === 0) push(map, 'today', '今天到期', 'today', b);
-    else if (d === 1) push(map, 'tomorrow', '明天到期', 'soon', b);
-    else if (d <= 7) push(map, 'week', '7 天内', 'soon', b);
-    else if (b.dueDate.slice(0, 7) === month) push(map, 'month', '本月稍后', 'later', b);
+    if (d < 0) push(map, 'overdue', tr('已逾期'), 'overdue', b);
+    else if (d === 0) push(map, 'today', tr('今天到期'), 'today', b);
+    else if (d === 1) push(map, 'tomorrow', tr('明天到期'), 'soon', b);
+    else if (d <= 7) push(map, 'week', tr('7 天内'), 'soon', b);
+    else if (b.dueDate.slice(0, 7) === month) push(map, 'month', tr('本月稍后'), 'later', b);
     else push(map, `m-${b.dueDate.slice(0, 7)}`, monthLabel(b.dueDate.slice(0, 7)), 'later', b);
   }
   return [...map.values()];
@@ -52,7 +53,7 @@ export function groupPaid(bills: Bill[]): BillGroup[] {
   const sorted = [...bills].sort((a, b) => (b.paidAt ?? '').localeCompare(a.paidAt ?? '') || byDue(a, b));
   for (const b of sorted) {
     const m = b.paidAt ? todayISO(new Date(b.paidAt)).slice(0, 7) : b.dueDate.slice(0, 7);
-    push(map, `p-${m}`, `${monthLabel(m)} 付款`, 'paid', b);
+    push(map, `p-${m}`, tr('{0} 付款', monthLabel(m)), 'paid', b);
   }
   return [...map.values()];
 }
@@ -88,18 +89,18 @@ export function groupUnpaidCards(bills: Bill[], today: string, soonDays = 7): Bi
   const month = today.slice(0, 7);
   for (const b of [...bills].sort(byDue)) {
     const d = diffDays(today, b.dueDate);
-    if (d < 0) push(map, 'overdue', '已逾期', 'overdue', b);
-    else if (d <= soonDays) push(map, 'soon', `${soonDays} 天内到期`, d === 0 ? 'today' : 'soon', b);
-    else if (b.dueDate.slice(0, 7) === month) push(map, 'month', '本月稍后', 'later', b);
-    else push(map, 'later', '以后', 'plain', b);
+    if (d < 0) push(map, 'overdue', tr('已逾期'), 'overdue', b);
+    else if (d <= soonDays) push(map, 'soon', tr('{0} 天内到期', soonDays), d === 0 ? 'today' : 'soon', b);
+    else if (b.dueDate.slice(0, 7) === month) push(map, 'month', tr('本月稍后'), 'later', b);
+    else push(map, 'later', tr('以后'), 'plain', b);
   }
   const order = ['overdue', 'soon', 'month', 'later'];
   const out = order.map((k) => map.get(k)).filter((g): g is BillGroup => !!g);
   for (const g of out) {
-    if (g.key === 'soon' && g.bills.some((b) => b.dueDate === today)) g.sub = `今天 ${g.bills.filter((b) => b.dueDate === today).length} 笔`;
+    if (g.key === 'soon' && g.bills.some((b) => b.dueDate === today)) g.sub = tr('今天 {0} 笔', g.bills.filter((b) => b.dueDate === today).length);
     if (g.key === 'later') {
       const last = g.bills[g.bills.length - 1].dueDate;
-      g.sub = `至 ${monthLabel(last.slice(0, 7))}`;
+      g.sub = tr('至 {0}', monthLabel(last.slice(0, 7)));
     }
   }
   return out;
@@ -119,14 +120,14 @@ export function groupByMerchant(bills: Bill[], today: string, soonDays = 7): Bil
     const open = g.bills.filter((b) => !b.paidAt);
     if (!open.length) {
       g.tone = 'paid';
-      g.sub = `${g.bills.length} 笔已付`;
+      g.sub = tr('{0} 笔已付', g.bills.length);
       continue;
     }
     const first = open[0].dueDate;
     const d = diffDays(today, first);
     g.tone = d < 0 ? 'overdue' : d === 0 ? 'today' : d <= soonDays ? 'soon' : 'later';
     const overdueN = open.filter((b) => b.dueDate < today).length;
-    g.sub = overdueN ? `${overdueN} 笔逾期` : `最近 ${formatBR(first).slice(0, 5)} 到期`;
+    g.sub = overdueN ? tr('{0} 笔逾期', overdueN) : tr('最近 {0} 到期', formatBR(first).slice(0, 5));
     // 未付金额优先显示
     g.total = open.reduce((s, b) => s + amountOf(b), 0) || g.total;
   }
@@ -141,8 +142,8 @@ export function groupByWeek(bills: Bill[], today: string): BillGroup[] {
     const day = Number(b.dueDate.slice(8, 10));
     const w = Math.floor((day - 1) / 7);
     const from = w * 7 + 1;
-    const to = w === 4 ? '月底' : `${from + 6} 日`;
-    push(map, `w-${b.dueDate.slice(0, 7)}-${w}`, `${Number(b.dueDate.slice(5, 7))}月 ${from} 日–${to}`, 'later', b);
+    const to = w === 4 ? tr('月底') : tr('{0} 日', from + 6);
+    push(map, `w-${b.dueDate.slice(0, 7)}-${w}`, tr('{0}月 {1} 日–{2}', Number(b.dueDate.slice(5, 7)), from, to), 'later', b);
   }
   const out = [...map.values()];
   for (const g of out) {
@@ -153,7 +154,7 @@ export function groupByWeek(bills: Bill[], today: string): BillGroup[] {
       g.tone = d < 0 ? 'overdue' : d <= 7 ? 'soon' : 'later';
     }
     g.bills.sort((a, b) => Number(!!a.paidAt) - Number(!!b.paidAt) || byDue(a, b));
-    if (open.length && open.length < g.bills.length) g.sub = `${g.bills.length - open.length} 笔已付`;
+    if (open.length && open.length < g.bills.length) g.sub = tr('{0} 笔已付', g.bills.length - open.length);
   }
   return out;
 }

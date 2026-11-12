@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import type { Bill, Item } from './types';
 import { SCHEMA_VERSION } from './types';
 import { isValidISO, diffDays } from './dates';
@@ -29,22 +30,22 @@ export interface ValidationIssue {
 
 export function validateBill(b: Partial<Bill>): ValidationIssue[] {
   const out: ValidationIssue[] = [];
-  if (!b.merchantNameSnapshot?.trim()) out.push({ field: 'merchant', message: '请选择或新增商家' });
-  if (!isValidISO(b.billDate)) out.push({ field: 'billDate', message: '账单日期无效' });
-  if (!isValidISO(b.dueDate)) out.push({ field: 'dueDate', message: '到期日期无效' });
+  if (!b.merchantNameSnapshot?.trim()) out.push({ field: 'merchant', message: tr('请选择或新增商家') });
+  if (!isValidISO(b.billDate)) out.push({ field: 'billDate', message: tr('账单日期无效') });
+  if (!isValidISO(b.dueDate)) out.push({ field: 'dueDate', message: tr('到期日期无效') });
   if (isValidISO(b.billDate) && isValidISO(b.dueDate) && diffDays(b.billDate!, b.dueDate!) < 0 && !b.dueBeforeBillConfirmed) {
-    out.push({ field: 'dueDate', message: '到期日早于账单日，请确认是否正确', confirmable: true });
+    out.push({ field: 'dueDate', message: tr('到期日早于账单日，请确认是否正确'), confirmable: true });
   }
   if (typeof b.reminderDays !== 'number' || !Number.isInteger(b.reminderDays) || b.reminderDays < 0 || b.reminderDays > 60) {
-    out.push({ field: 'reminderDays', message: '提醒天数应为 0–60 的整数' });
+    out.push({ field: 'reminderDays', message: tr('提醒天数应为 0–60 的整数') });
   }
   const items = b.items ?? [];
-  if (!items.some(isValidItem)) out.push({ field: 'items', message: '至少需要一行有效明细（数量、描述、单价）' });
+  if (!items.some(isValidItem)) out.push({ field: 'items', message: tr('至少需要一行有效明细（数量、描述、单价）') });
   items.forEach((i, idx) => {
     const blank = !i.description?.trim() && !i.quantity && !i.unitPriceCents;
-    if (!blank && !isValidItem(i)) out.push({ field: `items.${idx}`, message: `第 ${idx + 1} 行明细不完整` });
+    if (!blank && !isValidItem(i)) out.push({ field: `items.${idx}`, message: tr('第 {0} 行明细不完整', idx + 1) });
   });
-  if ((b.notes ?? '').length > NOTES_MAX) out.push({ field: 'notes', message: `备注不能超过 ${NOTES_MAX} 字` });
+  if ((b.notes ?? '').length > NOTES_MAX) out.push({ field: 'notes', message: tr('备注不能超过 {0} 字', NOTES_MAX) });
   return out;
 }
 
@@ -58,10 +59,10 @@ export function cleanItems(items: Item[]): Item[] {
  * v0（早期原型）：金额为浮点 "total"、明细 "price"/"qty"，日期可能是 DD/MM/YYYY。
  */
 export function migrateBill(raw: any): Bill {
-  if (!raw || typeof raw !== 'object') throw new Error('账单数据不是对象');
+  if (!raw || typeof raw !== 'object') throw new Error(tr('账单数据不是对象'));
   let b = { ...raw };
   const v = typeof b.schemaVersion === 'number' ? b.schemaVersion : 0;
-  if (v > SCHEMA_VERSION) throw new Error(`数据版本 ${v} 比当前应用新，请先升级应用`);
+  if (v > SCHEMA_VERSION) throw new Error(tr('数据版本 {0} 比当前应用新，请先升级应用', v));
   if (v < 1) {
     const toISO = (s: any) => {
       if (typeof s !== 'string') return s;

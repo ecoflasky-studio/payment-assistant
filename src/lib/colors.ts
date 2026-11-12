@@ -1,8 +1,9 @@
+import { tr } from '../i18n';
 /**
  * 商家识别色：固定顺序的 7 色（已用色盲模拟校验相邻可区分），红色留给"逾期"状态。
  * 新建商家按顺序分配；旧数据没有颜色时按 id 稳定散列。
  */
-export const MERCHANT_COLORS = ['蓝', '橙', '青绿', '黄', '粉', '绿', '紫'] as const;
+export const MERCHANT_COLORS = [tr('蓝'), tr('橙'), tr('青绿'), tr('黄'), tr('粉'), tr('绿'), tr('紫')] as const;
 export const COLOR_COUNT = MERCHANT_COLORS.length;
 
 export function hashSlot(key: string): number {

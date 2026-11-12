@@ -1,7 +1,10 @@
 /** 账号版函数接口（与 supabase/saas.mjs 对应） */
+import { tr, tx, lang } from '../i18n';
 import { supaFnUrl, type SupaTarget } from '../lib/ocr/providers';
 import type { Entitlement, PlanDef, PlanId, Period } from '../../shared/plans.mjs';
-export { PLAN_LABEL } from '../../shared/plans.mjs';
+import { PLAN_LABEL as PLAN_LABEL_ZH } from '../../shared/plans.mjs';
+/** 套餐名（按界面语言） */
+export const PLAN_LABEL: Record<string, string> = Object.fromEntries(Object.entries(PLAN_LABEL_ZH).map(([k, v]) => [k, tx(v)]));
 
 export type SubSource = 'mp' | 'pix' | 'apple' | 'google';
 export interface AccountInfo extends Entitlement {
@@ -41,7 +44,7 @@ export async function fnCall<T>(t: SupaTarget, token: string | null, path: strin
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
-    throw new ApiError(0, '连接不到服务（识别函数未部署，或网络受限）', 'network');
+    throw new ApiError(0, tr('连接不到服务（识别函数未部署，或网络受限）'), 'network');
   }
   const text = await r.text();
   let j: any = null;
@@ -49,8 +52,8 @@ export async function fnCall<T>(t: SupaTarget, token: string | null, path: strin
     j = text ? JSON.parse(text) : null;
   } catch {}
   if (!r.ok) {
-    if (r.status === 404) throw new ApiError(404, '服务端还没升级到账号版：请把最新的识别函数代码部署到 Supabase', 'old_function');
-    throw new ApiError(r.status, j?.error || `服务出错（${r.status}）`, j?.code);
+    if (r.status === 404) throw new ApiError(404, tr('服务端还没升级到账号版：请把最新的识别函数代码部署到 Supabase'), 'old_function');
+    throw new ApiError(r.status, j?.error || tr('服务出错（{0}）', r.status), j?.code);
   }
   return j as T;
 }
@@ -59,7 +62,7 @@ export const getAccount = (t: SupaTarget, token: string) => fnCall<AccountInfo>(
 export const startCheckout = (t: SupaTarget, token: string, plan: PlanId, period: Period, returnUrl: string) => fnCall<{ url: string }>(t, token, '/billing/checkout', { body: { plan, period, returnUrl } });
 export const cancelSubscription = (t: SupaTarget, token: string) => fnCall<{ status: string; planUntil: string | null }>(t, token, '/billing/cancel', { body: {} });
 export const pushKey = (t: SupaTarget) => fnCall<{ publicKey: string }>(t, null, '/push/key');
-export const pushSubscribe = (t: SupaTarget, token: string, sub: PushSubscriptionJSON) => fnCall<{ ok: true }>(t, token, '/push/subscribe', { body: sub });
+export const pushSubscribe = (t: SupaTarget, token: string, sub: PushSubscriptionJSON) => fnCall<{ ok: true }>(t, token, '/push/subscribe', { body: { ...sub, lang: lang() } });
 export const pushUnsubscribe = (t: SupaTarget, token: string, endpoint: string) => fnCall<{ ok: true }>(t, token, '/push/unsubscribe', { body: { endpoint } });
 export const pushTest = (t: SupaTarget, token: string) => fnCall<{ sent: number; devices: number }>(t, token, '/push/test', { body: {} });
 

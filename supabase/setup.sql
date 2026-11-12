@@ -259,6 +259,8 @@ create table if not exists public.zq_push_subs (
   fails      int not null default 0
 );
 create index if not exists zq_push_subs_user on public.zq_push_subs (user_id);
+-- 推送用的语言（zh / pt / en），跟随这台设备的界面语言
+alter table public.zq_push_subs add column if not exists lang text;
 create table if not exists public.zq_push_log (
   key     text primary key,
   sent_at timestamptz not null default now()

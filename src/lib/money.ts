@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 /**
  * 金额工具：内部一律使用整数分（centavos）。
  * 解析巴西格式：千位用 "."，小数用 ","。
@@ -30,46 +31,46 @@ function digitsToInt(s: string): number {
 }
 
 function result(raw: string, cents: number | null, ambiguous = false, candidates: number[] = [], error?: string): MoneyParse {
-  if (cents !== null && cents > MAX_CENTS) return { raw, cents: null, ambiguous: false, candidates: [], error: '金额超出合理范围' };
+  if (cents !== null && cents > MAX_CENTS) return { raw, cents: null, ambiguous: false, candidates: [], error: tr('金额超出合理范围') };
   return { raw, cents, ambiguous, candidates, error };
 }
 
 export function parseBRL(input: string | number | null | undefined, opts: MoneyParseOptions = {}): MoneyParse {
-  if (input === null || input === undefined) return result('', null, false, [], '空值');
+  if (input === null || input === undefined) return result('', null, false, [], tr('空值'));
   if (typeof input === 'number') {
-    if (!Number.isFinite(input) || input < 0) return result(String(input), null, false, [], '不是有效金额');
+    if (!Number.isFinite(input) || input < 0) return result(String(input), null, false, [], tr('不是有效金额'));
     // 数字输入按"元"理解，四舍五入到分
     return result(String(input), Math.round(input * 100));
   }
   const raw = input;
   let s = input.trim().replace(/^R\$\s*/i, '').replace(/\s+/g, '');
-  if (s.startsWith('-')) return result(raw, null, false, [], '不允许负数金额');
-  if (s === '') return result(raw, null, false, [], '空值');
-  if (!/^[0-9.,]+$/.test(s)) return result(raw, null, false, [], '包含非数字字符');
-  if (!/[0-9]/.test(s)) return result(raw, null, false, [], '没有数字');
+  if (s.startsWith('-')) return result(raw, null, false, [], tr('不允许负数金额'));
+  if (s === '') return result(raw, null, false, [], tr('空值'));
+  if (!/^[0-9.,]+$/.test(s)) return result(raw, null, false, [], tr('包含非数字字符'));
+  if (!/[0-9]/.test(s)) return result(raw, null, false, [], tr('没有数字'));
 
   const commaCount = (s.match(/,/g) || []).length;
   const dotCount = (s.match(/\./g) || []).length;
 
   // 情况 1：有逗号 —— 逗号是小数分隔符（巴西格式）
-  if (commaCount > 1) return result(raw, null, false, [], '出现多个逗号');
+  if (commaCount > 1) return result(raw, null, false, [], tr('出现多个逗号'));
   if (commaCount === 1) {
     const [intPart, decPart] = s.split(',');
     if (dotCount > 0) {
       // 1.234,56 —— 点必须是规范千位分组
-      if (!/^\d{1,3}(\.\d{3})+$/.test(intPart)) return result(raw, null, false, [], '千位分组格式不正确');
+      if (!/^\d{1,3}(\.\d{3})+$/.test(intPart)) return result(raw, null, false, [], tr('千位分组格式不正确'));
     } else if (!/^\d*$/.test(intPart)) {
-      return result(raw, null, false, [], '整数部分格式不正确');
+      return result(raw, null, false, [], tr('整数部分格式不正确'));
     }
     const intDigits = intPart.replace(/\./g, '') || '0';
-    if (decPart.length === 0) return result(raw, digitsToInt(intDigits) * 100, true, [digitsToInt(intDigits) * 100], '逗号后没有数字');
+    if (decPart.length === 0) return result(raw, digitsToInt(intDigits) * 100, true, [digitsToInt(intDigits) * 100], tr('逗号后没有数字'));
     if (decPart.length === 1) return result(raw, digitsToInt(intDigits) * 100 + digitsToInt(decPart) * 10);
     if (decPart.length === 2) return result(raw, digitsToInt(intDigits) * 100 + digitsToInt(decPart));
     if (decPart.length === 3 && dotCount === 0) {
       // "1,234" 可能是英文千位写法
-      return result(raw, null, true, [digitsToInt(intDigits + decPart) * 100], '逗号后有 3 位数字，可能是千位分组');
+      return result(raw, null, true, [digitsToInt(intDigits + decPart) * 100], tr('逗号后有 3 位数字，可能是千位分组'));
     }
-    return result(raw, null, false, [], '小数位过多');
+    return result(raw, null, false, [], tr('小数位过多'));
   }
 
   // 情况 2：只有点
@@ -81,16 +82,16 @@ export function parseBRL(input: string | number | null | undefined, opts: MoneyP
     if (dotCount === 1) {
       // 也可能是英文小数 1.234 —— 超过 2 位小数，不作为金额候选
     }
-    return result(raw, null, true, alt, '"." 可能是千位分组，需确认');
+    return result(raw, null, true, alt, tr('"." 可能是千位分组，需确认'));
   }
   if (dotCount === 1) {
     const [i, d] = s.split('.');
     if (/^\d*$/.test(i) && /^\d{1,2}$/.test(d)) {
       const cents = digitsToInt(i || '0') * 100 + (d.length === 1 ? digitsToInt(d) * 10 : digitsToInt(d));
-      return result(raw, null, true, [cents], '"." 被当作小数点使用，需确认');
+      return result(raw, null, true, [cents], tr('"." 被当作小数点使用，需确认'));
     }
   }
-  return result(raw, null, false, [], '无法识别的金额格式');
+  return result(raw, null, false, [], tr('无法识别的金额格式'));
 }
 
 /** 严格解析：歧义或错误都返回 null */
@@ -130,7 +131,7 @@ export function lineSubtotalCents(quantity: number, unitPriceCents: number): num
 export function sumCents(values: number[]): number {
   let t = 0;
   for (const v of values) {
-    if (!Number.isInteger(v)) throw new Error('sumCents 只接受整数分');
+    if (!Number.isInteger(v)) throw new Error(tr('sumCents 只接受整数分'));
     t += v;
   }
   return t;

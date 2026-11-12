@@ -1,3 +1,5 @@
+import { SAMPLE_PREFIX } from '../sample';
+import { tr, lang, monthShort } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { PlanBanner } from './Account';
 import { useStore } from '../store';
@@ -79,9 +81,9 @@ function SegBar({ segs, total, label }: { segs: Seg[]; total: number; label: str
   const shown = segs.filter((x) => x.cents > 0);
   return (
     <div className="segwrap">
-      <div className="segbar" role="img" aria-label={`${label}：${shown.map((x) => `${x.label} ${formatBRL(x.cents)}`).join('，')}`}>
+      <div className="segbar" role="img" aria-label={tr('{0}：{1}', label, shown.map((x) => `${x.label} ${formatBRL(x.cents)}`).join(tr('，')))}>
         {shown.map((x) => (
-          <span key={x.key} className={`seg-part ${x.cls}`} style={{ flexGrow: x.cents }} title={`${x.label}：${formatBRL(x.cents)}（${x.count} 笔，${Math.round((x.cents / total) * 100)}%）`} />
+          <span key={x.key} className={`seg-part ${x.cls}`} style={{ flexGrow: x.cents }} title={tr('{0}：{1}（{2} 笔，{3}%）', x.label, formatBRL(x.cents), x.count, Math.round((x.cents / total) * 100))} />
         ))}
       </div>
       <ul className="seglegend">
@@ -129,7 +131,7 @@ export function Dashboard() {
       const key = b.merchantId ?? `n-${billTitle(b)}`;
       const slot = colorSlot(m, key);
       const title = billTitle(b);
-      const e = map.get(key) ?? { key, label: title.replace(/^示例\s*·\s*/, ''), cents: 0, count: 0, cls: `mc-${slot}`, slot, first: b, onClick: () => go({ name: 'bills', filter: `q=${encodeURIComponent(title)}` }) };
+      const e = map.get(key) ?? { key, label: title.replace(SAMPLE_PREFIX, ''), cents: 0, count: 0, cls: `mc-${slot}`, slot, first: b, onClick: () => go({ name: 'bills', filter: `q=${encodeURIComponent(title)}` }) };
       e.cents += b.totalCents;
       e.count++;
       e.avatar = <MerchantAvatar merchant={m} name={billTitle(b)} bill={b} size="sm" />;
@@ -138,7 +140,7 @@ export function Dashboard() {
     const arr = [...map.values()].sort((a, b) => b.cents - a.cents);
     if (arr.length <= 5) return arr;
     const rest = arr.slice(4);
-    return [...arr.slice(0, 4), { key: 'other', label: `其他 ${rest.length} 家`, cents: rest.reduce((a, x) => a + x.cents, 0), count: rest.reduce((a, x) => a + x.count, 0), cls: 'mc-other', slot: -1, first: rest[0].first } as Seg & { slot: number; first: Bill }];
+    return [...arr.slice(0, 4), { key: 'other', label: tr('其他 {0} 家', rest.length), cents: rest.reduce((a, x) => a + x.cents, 0), count: rest.reduce((a, x) => a + x.count, 0), cls: 'mc-other', slot: -1, first: rest[0].first } as Seg & { slot: number; first: Bill }];
   }, [bills, merchants, month, go]);
 
   // 全部待付：按时间段分色
@@ -148,7 +150,7 @@ export function Dashboard() {
     const thisMonth = unpaid.filter((b) => b.dueDate >= today && b.dueDate <= monthEnd);
     const nextM = unpaid.filter((b) => b.dueDate.slice(0, 7) === nextMonth);
     const later = unpaid.filter((b) => b.dueDate.slice(0, 7) > nextMonth);
-    return [add(overdue, 'o', '已逾期', 'tb-overdue', 'overdue'), add(thisMonth, 'm', '本月内', 'tb-month', `month-${month}`), add(nextM, 'n', monthLabel(nextMonth).slice(5), 'tb-next', `month-${nextMonth}`), add(later, 'l', '更晚', 'tb-later', 'unpaid')];
+    return [add(overdue, 'o', tr('已逾期'), 'tb-overdue', 'overdue'), add(thisMonth, 'm', tr('本月内'), 'tb-month', `month-${month}`), add(nextM, 'n', monthLabel(nextMonth).slice(5), 'tb-next', `month-${nextMonth}`), add(later, 'l', tr('更晚'), 'tb-later', 'unpaid')];
   }, [unpaid, today, monthEnd, nextMonth, month, go]);
   const allCents = unpaid.reduce((a, b) => a + amountOf(b), 0);
 
@@ -160,31 +162,31 @@ export function Dashboard() {
           {draft && (
             <div className="banner warn">
               <span className="grow small">
-                有一张<b>未完成的识别核对</b>
+                {tr('有一张')}<b>{tr('未完成的识别核对')}</b>
               </span>
               <button className="btn btn-sm btn-primary" onClick={() => go({ name: 'review' })}>
-                继续核对
+                {tr('继续核对')}
               </button>
             </div>
           )}
           {estimated.length > 0 && (
             <div className="banner warn">
               <span className="grow small">
-                <b>{estimated.length}</b> 笔重复账单金额待确认（{estimated.slice(0, 2).map(billTitle).join('、')}
-                {estimated.length > 2 ? '…' : ''}）
+                <b>{estimated.length}</b> {tr('笔重复账单金额待确认（')}{estimated.slice(0, 2).map(billTitle).join(tr('、'))}
+                {estimated.length > 2 ? '…' : ''}{tr('）')}
               </span>
               <button className="btn btn-sm" onClick={() => go({ name: 'edit', id: estimated[0].id })}>
-                去确认
+                {tr('去确认')}
               </button>
             </div>
           )}
           {hasSample && (
             <div className="banner info">
               <span className="grow small">
-                正在看<b>示例数据</b>，熟悉后可一键清除
+                {tr('正在看')}<b>{tr('示例数据')}</b>{tr('，熟悉后可一键清除')}
               </span>
               <button className="btn btn-sm" onClick={clearSample}>
-                清除示例
+                {tr('清除示例')}
               </button>
             </div>
           )}
@@ -192,12 +194,12 @@ export function Dashboard() {
       )}
 
       <div className="home-grid">
-        <section className="card overview month-plan" aria-label="本月应付">
+        <section className="card overview month-plan" aria-label={tr('本月应付')}>
           <div className="hero-band">
           <div className="ov-top">
             <div className="stack" style={{ gap: 2 }}>
               <span className="ov-label">
-                {Number(month.slice(5))}月还要付 · {toPay.length} 笔
+                {tr('{0}月还要付 · {1} 笔', lang() === 'zh' ? Number(month.slice(5)) : monthShort(Number(month.slice(5))), toPay.length)}
               </span>
               <span className="ov-total num">
                 <small>R$</small>
@@ -208,10 +210,10 @@ export function Dashboard() {
               {formatBR(today)} {weekdayCN(today)}
             </span>
           </div>
-          <button className="mprog" onClick={() => go({ name: 'bills', filter: `month-${month}` })} aria-label={`本月账期总额 ${formatBRL(ms.totalCents)}，已付 ${paidPct}%，打开月历`}>
+          <button className="mprog" onClick={() => go({ name: 'bills', filter: `month-${month}` })} aria-label={tr('本月账期总额 {0}，已付 {1}%，打开月历', formatBRL(ms.totalCents), paidPct)}>
             <span className="row between small" style={{ width: '100%' }}>
               <span>
-                本月账期 <b className="num">{formatBRL(ms.totalCents)}</b> · 已付 <b className="num paid-ink">{formatBRL(ms.paidCents)}</b>
+                {tr('本月账期')} <b className="num">{formatBRL(ms.totalCents)}</b> {tr('· 已付')} <b className="num paid-ink">{formatBRL(ms.paidCents)}</b>
               </span>
               <span className="muted num" style={{ display: 'inline-flex', alignItems: 'center' }}>
                 {paidPct}% <IChevron width={14} height={14} />
@@ -223,36 +225,36 @@ export function Dashboard() {
           </button>
           {carry.length > 0 && (
             <p className="carry">
-              含之前月份逾期 {carry.length} 笔 · {formatBRL(carryCents)}
+              {tr('含之前月份逾期 {0} 笔 · {1}', carry.length, formatBRL(carryCents))}
             </p>
           )}
           </div>
           {merchantSegs.length > 0 && (
             <>
-              <span className="ov-sub">本月各商家账期</span>
-              <SegBar segs={merchantSegs} total={ms.totalCents} label="本月各商家账期" />
+              <span className="ov-sub">{tr('本月各商家账期')}</span>
+              <SegBar segs={merchantSegs} total={ms.totalCents} label={tr('本月各商家账期')} />
             </>
           )}
         </section>
 
-        <section className="quick3" data-tour="capture" aria-label="新增账单">
+        <section className="quick3" data-tour="capture" aria-label={tr('新增账单')}>
           <PickImageButton capture className="btn qa qa-cam">
             <ICamera />
-            拍照识别
+            {tr('拍照识别')}
           </PickImageButton>
           <button className="btn qa qa-sup" onClick={() => go({ name: 'new' })}>
             <IEdit />
-            商家账单
+            {tr('商家账单')}
           </button>
           <button className="btn qa qa-exp" onClick={() => go({ name: 'new', kind: 'expense' })}>
             <IBolt />
-            日常缴费
+            {tr('日常缴费')}
           </button>
         </section>
 
         <section className="stack home-list" aria-labelledby="h-todo">
           <div className="section-head">
-            <h2 id="h-todo">本月待付</h2>
+            <h2 id="h-todo">{tr('本月待付')}</h2>
             {toPay.length > 0 && <GroupModeSeg mode={mode} onChange={setMode} />}
           </div>
           <GroupedBills
@@ -264,22 +266,22 @@ export function Dashboard() {
                 <div className="art">
                   <IReceipt />
                 </div>
-                <h3>{bills.length ? '本月都付清了' : '还没有账单'}</h3>
-                <p>{bills.length ? (unpaid.length ? `下一笔在 ${formatBR([...unpaid].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0].dueDate)} 到期。` : '没有未付账单。') : '拍一张订单照片，或手工录入第一笔账期。'}</p>
+                <h3>{bills.length ? tr('本月都付清了') : tr('还没有账单')}</h3>
+                <p>{bills.length ? (unpaid.length ? tr('下一笔在 {0} 到期。', formatBR([...unpaid].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0].dueDate)) : tr('没有未付账单。')) : tr('拍一张订单照片，或手工录入第一笔账期。')}</p>
               </div>
             }
           />
         </section>
 
-        <section className="card all-unpaid" aria-label="全部待付">
+        <section className="card all-unpaid" aria-label={tr('全部待付')}>
           <div className="row between" style={{ alignItems: 'baseline' }}>
-            <span className="ov-label">全部待付 · {unpaid.length} 笔</span>
+            <span className="ov-label">{tr('全部待付 ·')} {unpaid.length} {tr('笔')}</span>
             <button className="linkbtn" onClick={() => go({ name: 'bills' })}>
-              查看全部 ›
+              {tr('查看全部 ›')}
             </button>
           </div>
           <span className="au-total num">{formatBRL(allCents)}</span>
-          {allCents > 0 && <SegBar segs={allSegs} total={allCents} label="全部待付按时间" />}
+          {allCents > 0 && <SegBar segs={allSegs} total={allCents} label={tr('全部待付按时间')} />}
         </section>
       </div>
     </>

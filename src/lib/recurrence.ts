@@ -1,4 +1,5 @@
 /** 重复账单：周期定义、下一期计算、描述 */
+import { tr } from '../i18n';
 import type { Bill } from './types';
 import { addDays, addMonths, daysInMonth, diffDays, isValidISO, toISO } from './dates';
 
@@ -22,16 +23,16 @@ export interface RepeatRule {
 }
 
 export const REPEAT_PRESETS: { key: string; label: string; rule: RepeatRule }[] = [
-  { key: 'w1', label: '每周', rule: { unit: 'week', every: 1 } },
-  { key: 'w2', label: '每 2 周', rule: { unit: 'week', every: 2 } },
-  { key: 'm1', label: '每月', rule: { unit: 'month', every: 1 } },
-  { key: 'm2', label: '每 2 个月', rule: { unit: 'month', every: 2 } },
-  { key: 'm3', label: '每季度', rule: { unit: 'month', every: 3 } },
-  { key: 'm6', label: '每半年', rule: { unit: 'month', every: 6 } },
-  { key: 'y1', label: '每年', rule: { unit: 'year', every: 1 } },
+  { key: 'w1', label: tr('每周'), rule: { unit: 'week', every: 1 } },
+  { key: 'w2', label: tr('每 2 周'), rule: { unit: 'week', every: 2 } },
+  { key: 'm1', label: tr('每月'), rule: { unit: 'month', every: 1 } },
+  { key: 'm2', label: tr('每 2 个月'), rule: { unit: 'month', every: 2 } },
+  { key: 'm3', label: tr('每季度'), rule: { unit: 'month', every: 3 } },
+  { key: 'm6', label: tr('每半年'), rule: { unit: 'month', every: 6 } },
+  { key: 'y1', label: tr('每年'), rule: { unit: 'year', every: 1 } },
 ];
 
-export const UNIT_LABEL: Record<RepeatUnit, string> = { day: '天', week: '周', month: '个月', year: '年' };
+export const UNIT_LABEL: Record<RepeatUnit, string> = { day: tr('天'), week: tr('周'), month: tr('个月'), year: tr('年') };
 
 export function ruleOf(r: Recurrence | null | undefined): RepeatRule | null {
   if (!r) return null;
@@ -49,16 +50,16 @@ export function describeRepeat(r: Recurrence | RepeatRule | null | undefined): s
   const rule = r && 'seriesId' in r ? ruleOf(r) : (r as RepeatRule | null | undefined) ?? null;
   if (!rule) return '';
   const p = REPEAT_PRESETS.find((x) => x.rule.unit === rule.unit && x.rule.every === rule.every);
-  const base = p ? p.label : `每 ${rule.every} ${UNIT_LABEL[rule.unit]}`;
-  const until = r && 'seriesId' in r && r.until ? `，至 ${r.until.split('-').reverse().join('/')}` : '';
+  const base = p ? p.label : tr('每 {0} {1}', rule.every, UNIT_LABEL[rule.unit]);
+  const until = r && 'seriesId' in r && r.until ? tr('，至 {0}', r.until.split('-').reverse().join('/')) : '';
   return base + until;
 }
 
 export function validateRule(rule: RepeatRule | null): string | null {
   if (!rule) return null;
-  if (!Number.isInteger(rule.every) || rule.every < 1) return '重复间隔应为正整数';
+  if (!Number.isInteger(rule.every) || rule.every < 1) return tr('重复间隔应为正整数');
   const max = { day: 366, week: 104, month: 60, year: 10 }[rule.unit];
-  if (rule.every > max) return `间隔太长（最多 ${max} ${UNIT_LABEL[rule.unit]}）`;
+  if (rule.every > max) return tr('间隔太长（最多 {0} {1}）', max, UNIT_LABEL[rule.unit]);
   return null;
 }
 

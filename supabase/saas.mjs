@@ -84,6 +84,22 @@ export function saasConfig(env) {
   };
 }
 
+/** 推送文字（服务端没有界面词典，这几句单独写三语） */
+const LANGS = ['zh', 'pt', 'en'];
+const langOf = (v) => (LANGS.includes(v) ? v : 'zh');
+const PUSH = {
+  zh: { bill: '账单', left: (x) => `还差 ${x}`, more: (n) => `…还有 ${n} 笔`, overdue: (o, n) => `${o} 笔已逾期 · 共 ${n} 笔要处理`, remind: (n, t) => `付款提醒：${n} 笔，共 ${t}`, today: '今天到期', tomorrow: '明天到期', inDays: (n) => `${n} 天后到期`, late: (n) => `逾期 ${n} 天`, testTitle: '账期助手 · 测试推送', testBody: '关屏推送正常。每天圣保罗时间 09:00 左右提醒到期账单。' },
+  pt: { bill: 'Conta', left: (x) => `falta ${x}`, more: (n) => `…mais ${n} contas`, overdue: (o, n) => `${o} vencidas · ${n} contas a resolver`, remind: (n, t) => `Lembrete de pagamento: ${n} contas, total ${t}`, today: 'vence hoje', tomorrow: 'vence amanhã', inDays: (n) => `vence em ${n} dias`, late: (n) => `vencida há ${n} dias`, testTitle: 'ZhangQi · notificação de teste', testBody: 'Notificações funcionando. Todo dia por volta das 09:00 (São Paulo) você recebe as contas que vencem.' },
+  en: { bill: 'Bill', left: (x) => `${x} left`, more: (n) => `…${n} more bills`, overdue: (o, n) => `${o} overdue · ${n} bills to handle`, remind: (n, t) => `Payment reminder: ${n} bills, total ${t}`, today: 'due today', tomorrow: 'due tomorrow', inDays: (n) => `due in ${n} days`, late: (n) => `${n} days overdue`, testTitle: 'ZhangQi · test notification', testBody: 'Notifications are working. Every day around 09:00 São Paulo time you will get the bills coming due.' },
+};
+const ONE = { contas: 'conta', bills: 'bill' };
+const sing = (s) => s.replace(/(^|[^\d.,])1 (contas|bills)\b/g, (_, p, w) => `${p}1 ${ONE[w]}`);
+const dayDiff = (a, b) => Math.round((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 86400000);
+function relDue(due, today, L) {
+  const d = dayDiff(due, today);
+  return d === 0 ? L.today : d === 1 ? L.tomorrow : d > 1 ? L.inDays(d) : L.late(-d);
+}
+
 /** 常量时间比较（通知令牌等），避免逐字符试探 */
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
@@ -759,10 +775,11 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
     const p256dh = String(b.keys?.p256dh || '');
     const auth = String(b.keys?.auth || '');
     if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000 || !p256dh || !auth) throw new ApiError(400, '推送订阅无效');
+    const lang = langOf(b.lang);
     await db(c, 'zq_push_subs', {
       method: 'POST',
       headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ endpoint, user_id: user.id, p256dh, auth, ua: String(request.headers.get('user-agent') || '').slice(0, 200), fails: 0 }),
+      body: JSON.stringify({ endpoint, user_id: user.id, p256dh, auth, ua: String(request.headers.get('user-agent') || '').slice(0, 200), fails: 0, lang }),
     });
     await rememberFnUrl(c, request).catch(() => {});
     return { ok: true };
@@ -802,21 +819,26 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
     const user = await requireUser(c, request);
     const subs = await db(c, `zq_push_subs?user_id=eq.${user.id}&select=*`);
     if (!subs?.length) throw new ApiError(400, '这台设备还没开启推送');
-    const sent = await sendToSubs(c, subs, { title: '账期助手 · 测试推送', body: '关屏推送正常。每天圣保罗时间 09:00 左右提醒到期账单。', tag: 'zq-test', url: './#/bills' });
+    let sent = 0;
+    for (const L of LANGS) {
+      const list = subs.filter((x) => langOf(x.lang) === L);
+      if (list.length) sent += await sendToSubs(c, list, { title: PUSH[L].testTitle, body: PUSH[L].testBody, tag: 'zq-test', url: './#/bills' });
+    }
     return { sent, devices: subs.length };
   }
 
   /** 每个用户一条摘要：今天要处理的账单（提醒期内 + 逾期） */
-  function digest(bills, today) {
+  function digest(bills, today, lang = 'zh') {
+    const L = PUSH[langOf(lang)];
     const due = bills.filter((b) => !b.deletedAt && !String(b.id).startsWith('sample') && inReminderWindow(b, today));
     if (!due.length) return null;
     const overdue = due.filter((b) => billStatus(b, today) === 'overdue');
     due.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     const total = due.reduce((s, b) => s + openCents(b), 0);
-    const lines = due.slice(0, 4).map((b) => `${b.merchantNameSnapshot || '账单'} · ${isPartial(b) ? `还差 ${formatBRL(openCents(b))}` : formatBRL(b.totalCents)} · ${relativeDue(b.dueDate, today)}`);
-    if (due.length > 4) lines.push(`…还有 ${due.length - 4} 笔`);
+    const lines = due.slice(0, 4).map((b) => `${b.merchantNameSnapshot || L.bill} · ${isPartial(b) ? L.left(formatBRL(openCents(b))) : formatBRL(b.totalCents)} · ${L === PUSH.zh ? relativeDue(b.dueDate, today) : relDue(b.dueDate, today, L)}`);
+    if (due.length > 4) lines.push(sing(L.more(due.length - 4)));
     return {
-      title: overdue.length ? `${overdue.length} 笔已逾期 · 共 ${due.length} 笔要处理` : `付款提醒：${due.length} 笔，共 ${formatBRL(total)}`,
+      title: sing(overdue.length ? L.overdue(overdue.length, due.length) : L.remind(due.length, formatBRL(total))),
       body: lines.join('\n'),
       tag: `zq-digest-${today}`,
       url: './#/bills/unpaid',
@@ -842,10 +864,17 @@ export function createSaas({ fetchImpl = (...a) => fetch(...a), log = () => {}, 
       const done = await db(c, `zq_push_log?key=eq.${encodeURIComponent(key)}&select=key`);
       if (done?.length) continue;
       const rows = (await rpc(c, 'zq_push_bills', { p_user: userId })) ?? [];
-      const d = digest(rows.map((r) => ({ ...r.data, id: r.id })), today);
-      if (!d) continue;
+      const billsOf = rows.map((r) => ({ ...r.data, id: r.id }));
+      let any = false;
+      for (const L of LANGS) {
+        const part = list.filter((x) => langOf(x.lang) === L);
+        const d = part.length ? digest(billsOf, today, L) : null;
+        if (!d) continue;
+        any = true;
+        sent += await sendToSubs(c, part, d);
+      }
+      if (!any) continue;
       users++;
-      sent += await sendToSubs(c, list, d);
       await db(c, 'zq_push_log', { method: 'POST', headers: { prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ key }) });
     }
     log(`[push] cron ${today} users=${users} sent=${sent} reconciled=${reconciled}`);

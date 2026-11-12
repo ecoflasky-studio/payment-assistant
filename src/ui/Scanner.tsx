@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './feedback';
 import { normalizeScanned } from '../lib/boleto';
@@ -20,7 +21,7 @@ function makeDetector(): Detector | null {
 export function ScannerSheet({ onResult, onClose }: { onResult: (code: string, kind: string) => void; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [hint, setHint] = useState('把条码横放在框内，或对准 PIX 二维码');
+  const [hint, setHint] = useState(tr('把条码横放在框内，或对准 PIX 二维码'));
   const done = useRef(false);
 
   const accept = (raw: string) => {
@@ -40,7 +41,7 @@ export function ScannerSheet({ onResult, onClose }: { onResult: (code: string, k
   useEffect(() => {
     const det = makeDetector();
     if (!det) {
-      setErr('这个浏览器不支持扫码');
+      setErr(tr('这个浏览器不支持扫码'));
       return;
     }
     let stream: MediaStream | null = null;
@@ -69,7 +70,7 @@ export function ScannerSheet({ onResult, onClose }: { onResult: (code: string, k
         };
         tick();
       } catch {
-        if (!cancelled) setErr('无法打开相机。可以改用「从相册选图」。');
+        if (!cancelled) setErr(tr('无法打开相机。可以改用「从相册选图」。'));
       }
     })();
     return () => {
@@ -81,7 +82,7 @@ export function ScannerSheet({ onResult, onClose }: { onResult: (code: string, k
   }, []);
 
   return (
-    <Modal title="扫码填写付款码" onClose={onClose}>
+    <Modal title={tr('扫码填写付款码')} onClose={onClose}>
       {!err && (
         <div className="scanbox">
           <video ref={video} playsInline muted />
@@ -93,7 +94,7 @@ export function ScannerSheet({ onResult, onClose }: { onResult: (code: string, k
       </p>
       <label className="btn" style={{ alignSelf: 'flex-start' }}>
         <IImage />
-        从相册选图
+        {tr('从相册选图')}
         <input
           type="file"
           accept="image/*"
@@ -106,10 +107,10 @@ export function ScannerSheet({ onResult, onClose }: { onResult: (code: string, k
             try {
               const bmp = await createImageBitmap(f);
               const codes = await det.detect(bmp);
-              if (!codes.length) return setHint('图里没找到条码或二维码，换一张清楚些的');
+              if (!codes.length) return setHint(tr('图里没找到条码或二维码，换一张清楚些的'));
               for (const c of codes) if (accept(c.rawValue)) return;
             } catch {
-              setHint('这张图无法识别');
+              setHint(tr('这张图无法识别'));
             }
           }}
         />

@@ -4,6 +4,7 @@
  * appAccountToken 用账号的用户 ID（随机 UUID，不含个人信息），这样同一账号在网页、iPhone、安卓上通用，
  * 服务器通知来时也能找到是谁买的。
  */
+import { tr } from '../i18n';
 import { STORE, PLANS, AI_PACK, type PlanId, type Period } from '../../shared/plans.mjs';
 import { platform } from './platform';
 
@@ -77,8 +78,8 @@ export async function purchase(key: ProductKey, userId: string): Promise<StorePu
     return ios ? { store: 'apple', productId: appleId(key), transactionId: String(r.transactionId) } : { store: 'google', productId: googleSub(key), purchaseToken: String(r.purchaseToken ?? r.transactionId) };
   } catch (e: any) {
     const msg = String(e?.message ?? e);
-    if (/cancel|取消|USER_CANCELED|userCancelled/i.test(msg) || e?.code === 'USER_CANCELLED') throw new PurchaseCancelled('已取消');
-    throw new Error(`购买没有完成：${msg}`);
+    if (/cancel|取消|USER_CANCELED|userCancelled/i.test(msg) || e?.code === 'USER_CANCELLED') throw new PurchaseCancelled(tr('已取消'));
+    throw new Error(tr('购买没有完成：{0}', msg));
   }
 }
 

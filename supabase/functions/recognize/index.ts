@@ -355,9 +355,10 @@ function createHandler({ prompt, log: log2 = () => {
     } catch {
       throw new HttpError(400, "请求不是 JSON");
     }
-    const { mediaType, imageBase64, hints } = payload || {};
+    const { mediaType, imageBase64, hints, lang: lang2 } = payload || {};
     if (hints != null && typeof hints !== "string") throw new HttpError(400, "参考资料格式错误");
-    const fullPrompt = withHints(prompt, hints);
+    const langLine = lang2 === "pt" ? "\n\n所有 warnings 和说明文字请用巴西葡萄牙语写（字段值仍照抄原文）。" : lang2 === "en" ? "\n\n所有 warnings 和说明文字请用英文写（字段值仍照抄原文）。" : "";
+    const fullPrompt = withHints(prompt, hints) + langLine;
     if (!MEDIA_TYPES.has(mediaType)) throw new HttpError(415, "只接受 JPG、PNG、WebP 图片");
     if (typeof imageBase64 !== "string" || !imageBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64)) throw new HttpError(400, "图片数据无效");
     if (imageBase64.length * 3 / 4 > c.maxBytes) throw new HttpError(413, "图片过大");
@@ -447,6 +448,57 @@ function createHandler({ prompt, log: log2 = () => {
   };
 }
 
+// src/i18n.ts
+var dict = null;
+var current = "zh";
+var fill = (s, args) => args.length ? s.replace(/\{(\d+)\}/g, (m, i) => Number(i) < args.length ? String(args[Number(i)]) : m) : s;
+var SINGULAR = {
+  contas: "conta",
+  dias: "dia",
+  meses: "mês",
+  semanas: "semana",
+  leituras: "leitura",
+  linhas: "linha",
+  fornecedores: "fornecedor",
+  pagamentos: "pagamento",
+  imagens: "imagem",
+  anos: "ano",
+  parcelas: "parcela",
+  aparelhos: "aparelho",
+  vencidas: "vencida",
+  pagas: "paga",
+  erros: "erro",
+  conflitos: "conflito",
+  registros: "registro",
+  lançamentos: "lançamento",
+  itens: "item",
+  favorecidos: "favorecido",
+  bills: "bill",
+  days: "day",
+  months: "month",
+  weeks: "week",
+  scans: "scan",
+  rows: "row",
+  suppliers: "supplier",
+  payments: "payment",
+  images: "image",
+  years: "year",
+  installments: "installment",
+  devices: "device",
+  errors: "error",
+  conflicts: "conflict",
+  records: "record",
+  entries: "entry",
+  items: "item",
+  payees: "payee"
+};
+var SING_RE = new RegExp(`(^|[^\\d.,])1 (${Object.keys(SINGULAR).join("|")})\\b`, "g");
+var singular = (s) => current === "zh" ? s : s.replace(SING_RE, (_, pre, w) => `${pre}1 ${SINGULAR[w]}`);
+function tr(zh, ...args) {
+  const out = fill(dict && dict[zh] || zh, args);
+  return args.length ? singular(out) : out;
+}
+
 // src/lib/dates.ts
 var TZ = "America/Sao_Paulo";
 var dayFmt = null;
@@ -471,19 +523,20 @@ function isoToUTCms(iso) {
 function diffDays(a, b) {
   return Math.round((isoToUTCms(b) - isoToUTCms(a)) / 864e5);
 }
+var WEEK = [tr("周日"), tr("周一"), tr("周二"), tr("周三"), tr("周四"), tr("周五"), tr("周六")];
 function relativeDue(dueISO, today) {
   const n = diffDays(today, dueISO);
-  if (n === 0) return "今天到期";
-  if (n === 1) return "明天到期";
-  if (n > 1) return `${n} 天后到期`;
-  return `逾期 ${-n} 天`;
+  if (n === 0) return tr("今天到期");
+  if (n === 1) return tr("明天到期");
+  if (n > 1) return tr("{0} 天后到期", n);
+  return tr("逾期 {0} 天", -n);
 }
 
 // src/lib/money.ts
 function sumCents(values) {
   let t = 0;
   for (const v of values) {
-    if (!Number.isInteger(v)) throw new Error("sumCents 只接受整数分");
+    if (!Number.isInteger(v)) throw new Error(tr("sumCents 只接受整数分"));
     t += v;
   }
   return t;
@@ -516,6 +569,12 @@ function billStatus(bill, today, dueSoonDays = 7) {
   if (left <= dueSoonDays) return "dueSoon";
   return "open";
 }
+var STATUS_LABEL = {
+  open: tr("未到期"),
+  dueSoon: tr("即将到期"),
+  overdue: tr("已逾期"),
+  paid: tr("已付款")
+};
 function inReminderWindow(bill, today) {
   if (bill.paidAt) return false;
   return diffDays(today, bill.dueDate) <= bill.reminderDays;
@@ -886,6 +945,20 @@ function saasConfig(env) {
       rtdnToken: get("GOOGLE_RTDN_TOKEN")
     }
   };
+}
+var LANGS = ["zh", "pt", "en"];
+var langOf = (v) => LANGS.includes(v) ? v : "zh";
+var PUSH = {
+  zh: { bill: "账单", left: (x) => `还差 ${x}`, more: (n) => `…还有 ${n} 笔`, overdue: (o, n) => `${o} 笔已逾期 · 共 ${n} 笔要处理`, remind: (n, t) => `付款提醒：${n} 笔，共 ${t}`, today: "今天到期", tomorrow: "明天到期", inDays: (n) => `${n} 天后到期`, late: (n) => `逾期 ${n} 天`, testTitle: "账期助手 · 测试推送", testBody: "关屏推送正常。每天圣保罗时间 09:00 左右提醒到期账单。" },
+  pt: { bill: "Conta", left: (x) => `falta ${x}`, more: (n) => `…mais ${n} contas`, overdue: (o, n) => `${o} vencidas · ${n} contas a resolver`, remind: (n, t) => `Lembrete de pagamento: ${n} contas, total ${t}`, today: "vence hoje", tomorrow: "vence amanhã", inDays: (n) => `vence em ${n} dias`, late: (n) => `vencida há ${n} dias`, testTitle: "ZhangQi · notificação de teste", testBody: "Notificações funcionando. Todo dia por volta das 09:00 (São Paulo) você recebe as contas que vencem." },
+  en: { bill: "Bill", left: (x) => `${x} left`, more: (n) => `…${n} more bills`, overdue: (o, n) => `${o} overdue · ${n} bills to handle`, remind: (n, t) => `Payment reminder: ${n} bills, total ${t}`, today: "due today", tomorrow: "due tomorrow", inDays: (n) => `due in ${n} days`, late: (n) => `${n} days overdue`, testTitle: "ZhangQi · test notification", testBody: "Notifications are working. Every day around 09:00 São Paulo time you will get the bills coming due." }
+};
+var ONE = { contas: "conta", bills: "bill" };
+var sing = (s) => s.replace(/(^|[^\d.,])1 (contas|bills)\b/g, (_, p, w) => `${p}1 ${ONE[w]}`);
+var dayDiff = (a, b) => Math.round((Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) / 864e5);
+function relDue(due, today, L) {
+  const d = dayDiff(due, today);
+  return d === 0 ? L.today : d === 1 ? L.tomorrow : d > 1 ? L.inDays(d) : L.late(-d);
 }
 function safeEqual2(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || !a || !b) return false;
@@ -1495,10 +1568,11 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     const p256dh = String(b.keys?.p256dh || "");
     const auth = String(b.keys?.auth || "");
     if (!/^https:\/\//.test(endpoint) || endpoint.length > 1e3 || !p256dh || !auth) throw new ApiError(400, "推送订阅无效");
+    const lang2 = langOf(b.lang);
     await db(c, "zq_push_subs", {
       method: "POST",
       headers: { prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify({ endpoint, user_id: user.id, p256dh, auth, ua: String(request.headers.get("user-agent") || "").slice(0, 200), fails: 0 })
+      body: JSON.stringify({ endpoint, user_id: user.id, p256dh, auth, ua: String(request.headers.get("user-agent") || "").slice(0, 200), fails: 0, lang: lang2 })
     });
     await rememberFnUrl(c, request).catch(() => {
     });
@@ -1536,19 +1610,24 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
     const user = await requireUser(c, request);
     const subs = await db(c, `zq_push_subs?user_id=eq.${user.id}&select=*`);
     if (!subs?.length) throw new ApiError(400, "这台设备还没开启推送");
-    const sent = await sendToSubs(c, subs, { title: "账期助手 · 测试推送", body: "关屏推送正常。每天圣保罗时间 09:00 左右提醒到期账单。", tag: "zq-test", url: "./#/bills" });
+    let sent = 0;
+    for (const L of LANGS) {
+      const list = subs.filter((x) => langOf(x.lang) === L);
+      if (list.length) sent += await sendToSubs(c, list, { title: PUSH[L].testTitle, body: PUSH[L].testBody, tag: "zq-test", url: "./#/bills" });
+    }
     return { sent, devices: subs.length };
   }
-  function digest(bills, today) {
+  function digest(bills, today, lang2 = "zh") {
+    const L = PUSH[langOf(lang2)];
     const due = bills.filter((b) => !b.deletedAt && !String(b.id).startsWith("sample") && inReminderWindow(b, today));
     if (!due.length) return null;
     const overdue = due.filter((b) => billStatus(b, today) === "overdue");
     due.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     const total = due.reduce((s, b) => s + openCents(b), 0);
-    const lines = due.slice(0, 4).map((b) => `${b.merchantNameSnapshot || "账单"} · ${isPartial(b) ? `还差 ${formatBRL(openCents(b))}` : formatBRL(b.totalCents)} · ${relativeDue(b.dueDate, today)}`);
-    if (due.length > 4) lines.push(`…还有 ${due.length - 4} 笔`);
+    const lines = due.slice(0, 4).map((b) => `${b.merchantNameSnapshot || L.bill} · ${isPartial(b) ? L.left(formatBRL(openCents(b))) : formatBRL(b.totalCents)} · ${L === PUSH.zh ? relativeDue(b.dueDate, today) : relDue(b.dueDate, today, L)}`);
+    if (due.length > 4) lines.push(sing(L.more(due.length - 4)));
     return {
-      title: overdue.length ? `${overdue.length} 笔已逾期 · 共 ${due.length} 笔要处理` : `付款提醒：${due.length} 笔，共 ${formatBRL(total)}`,
+      title: sing(overdue.length ? L.overdue(overdue.length, due.length) : L.remind(due.length, formatBRL(total))),
       body: lines.join("\n"),
       tag: `zq-digest-${today}`,
       url: "./#/bills/unpaid"
@@ -1573,10 +1652,17 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
       const done = await db(c, `zq_push_log?key=eq.${encodeURIComponent(key)}&select=key`);
       if (done?.length) continue;
       const rows = await rpc(c, "zq_push_bills", { p_user: userId }) ?? [];
-      const d = digest(rows.map((r) => ({ ...r.data, id: r.id })), today);
-      if (!d) continue;
+      const billsOf = rows.map((r) => ({ ...r.data, id: r.id }));
+      let any = false;
+      for (const L of LANGS) {
+        const part = list.filter((x) => langOf(x.lang) === L);
+        const d = part.length ? digest(billsOf, today, L) : null;
+        if (!d) continue;
+        any = true;
+        sent += await sendToSubs(c, part, d);
+      }
+      if (!any) continue;
       users++;
-      sent += await sendToSubs(c, list, d);
       await db(c, "zq_push_log", { method: "POST", headers: { prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ key }) });
     }
     log2(`[push] cron ${today} users=${users} sent=${sent} reconciled=${reconciled}`);

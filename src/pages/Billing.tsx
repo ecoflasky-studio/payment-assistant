@@ -4,6 +4,7 @@
  *  - App 版：App Store / Google Play 内购（苹果和谷歌规定 App 内只能用商店付款）
  * 同一个账号在哪里买的都通用；以服务端核实后的结果为准。
  */
+import { tr, lang } from '../i18n';
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useFeedback } from '../ui/feedback';
@@ -16,20 +17,20 @@ import { loadProducts, purchase, restore, manageSubscriptions, PurchaseCancelled
 import { ICheck, IBolt } from '../ui/icons';
 
 const brl = (v: number) => formatBRL(Math.round(v * 100));
-const SOURCE_LABEL: Record<string, string> = { mp: '网页（Mercado Pago 自动续费）', pix: '网页（PIX 年付）', apple: 'App Store', google: 'Google Play' };
+const SOURCE_LABEL: Record<string, string> = { mp: tr('网页（Mercado Pago 自动续费）'), pix: tr('网页（PIX 年付）'), apple: 'App Store', google: 'Google Play' };
 export const sourceLabel = (s?: string | null) => (s ? SOURCE_LABEL[s] ?? s : '');
 
 const FEATURE_ROWS: { label: string; t1: boolean | string; t2: boolean | string }[] = [
-  { label: '账期、缴费、对账、报表、提醒、多设备同步', t1: true, t2: true },
-  { label: 'PDF 直读、本机 OCR、日历提醒', t1: true, t2: true },
-  { label: '到期推送提醒（锁屏也能收到）', t1: true, t2: true },
-  { label: 'AI 识别（每月）', t1: `${PLANS.t1.ai} 次`, t2: `${PLANS.t2.ai} 次` },
-  { label: '导出记录（CSV / Excel）', t1: false, t2: true },
+  { label: tr('账期、缴费、对账、报表、提醒、多设备同步'), t1: true, t2: true },
+  { label: tr('PDF 直读、本机 OCR、日历提醒'), t1: true, t2: true },
+  { label: tr('到期推送提醒（锁屏也能收到）'), t1: true, t2: true },
+  { label: tr('AI 识别（每月）'), t1: tr('{0} 次', PLANS.t1.ai), t2: tr('{0} 次', PLANS.t2.ai) },
+  { label: tr('导出记录（CSV / Excel）'), t1: false, t2: true },
 ];
 
 /** 隐私政策 / 使用条款网址（App 里需要绝对网址） */
 export function legalUrl(kind: 'privacy' | 'terms', site?: string) {
-  const file = `legal/${kind}.html`;
+  const file = `legal/${kind}.html#${lang()}`;
   if (site) return site + file;
   if (typeof location !== 'undefined' && /^https?:/.test(location.protocol)) return new URL(file, location.href).toString();
   return `https://zqzh.com.br/${file}`;
@@ -40,11 +41,11 @@ function useBuy() {
   const fb = useFeedback();
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (label: string, fn: (token: string) => Promise<void>) => {
-    if (!cloud) return fb.toast('没有连接账号服务', { bad: true });
+    if (!cloud) return fb.toast(tr('没有连接账号服务'), { bad: true });
     setBusy(label);
     try {
       const token = await getToken();
-      if (!token || !auth.session) throw new ApiError(401, '请先登录账号');
+      if (!token || !auth.session) throw new ApiError(401, tr('请先登录账号'));
       await fn(token);
     } catch (e) {
       if (!(e instanceof PurchaseCancelled)) fb.toast(e instanceof ApiError || e instanceof AuthError ? e.message : (e as Error).message, { bad: true });
@@ -62,7 +63,7 @@ function useBuy() {
     });
   const celebrate = (a: AccountInfo, key: ProductKey) => {
     fb.celebrate();
-    fb.toast(key === 'ai_pack' ? `已加 ${AI_PACK.qty} 次 AI 识别（共剩 ${a.usage.bonus ?? 0} 次加量）` : `已开通 ${a.plan === 't2' ? 'T2' : 'T1'}，感谢支持！`);
+    fb.toast(key === 'ai_pack' ? tr('已加 {0} 次 AI 识别（共剩 {1} 次加量）', AI_PACK.qty, a.usage.bonus ?? 0) : tr('已开通 {0}，感谢支持！', a.plan === 't2' ? 'T2' : 'T1'));
   };
   return { busy, run, buyNative };
 }
@@ -98,12 +99,12 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
     run('restore', async (token) => {
       const list = await restore(auth.session!.user.id);
       if (!list.length) {
-        fb.toast(`这个 ${storeName()} 账号没有找到购买记录`);
+        fb.toast(tr('这个 {0} 账号没有找到购买记录', storeName()));
         return;
       }
       const r = await verifyPurchases(cloud!, token, list[0].store, list);
       setAccount(r.me);
-      fb.toast(r.me.plan === 't1' || r.me.plan === 't2' ? `已恢复 ${r.me.plan.toUpperCase()}` : '已检查购买记录，没有有效订阅');
+      fb.toast(r.me.plan === 't1' || r.me.plan === 't2' ? tr('已恢复 {0}', r.me.plan.toUpperCase()) : tr('已检查购买记录，没有有效订阅'));
     });
 
   const current = (p: PlanId) => ent?.plan === p;
@@ -112,12 +113,12 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="stack">
-      <div className="seg seg-sm" role="group" aria-label="付款周期" style={{ alignSelf: 'center' }}>
+      <div className="seg seg-sm" role="group" aria-label={tr('付款周期')} style={{ alignSelf: 'center' }}>
         <button aria-pressed={period === 'month'} onClick={() => setPeriod('month')}>
-          月付
+          {tr('月付')}
         </button>
         <button aria-pressed={period === 'year'} onClick={() => setPeriod('year')}>
-          年付 · 送 2 个月
+          {tr('年付 · 送 2 个月')}
         </button>
       </div>
       <div className="plans">
@@ -125,14 +126,14 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
           <div key={p} className={`plan${p === 't2' ? ' hot' : ''}${current(p) ? ' current' : ''}`}>
             <div className="row between">
               <b className="plan-name">{PLANS[p].name}</b>
-              {p === 't2' && !current(p) && <span className="pill brand">最划算</span>}
-              {current(p) && <span className="pill paid">当前</span>}
+              {p === 't2' && !current(p) && <span className="pill brand">{tr('最划算')}</span>}
+              {current(p) && <span className="pill paid">{tr('当前')}</span>}
             </div>
             <div className="plan-price">
               <b className="num">{priceText(p)}</b>
-              <span className="small muted">/{period === 'year' ? '年' : '月'}</span>
+              <span className="small muted">/{period === 'year' ? tr('年') : tr('月')}</span>
             </div>
-            {period === 'year' && <span className="xs muted">相当于 {brl(PLANS[p].year / 12)}/月，比月付省 {months(p)} 个月</span>}
+            {period === 'year' && <span className="xs muted">{tr('相当于')} {brl(PLANS[p].year / 12)}{tr('/月，比月付省')} {months(p)} {tr('个月')}</span>}
             {!compact && (
               <ul className="plan-feats small">
                 {FEATURE_ROWS.map((f) => {
@@ -149,18 +150,18 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
             {native ? (
               <button className={`btn ${p === 't2' ? 'btn-primary' : ''}`} disabled={!!busy || !storeOn || sameAuto(p)} onClick={() => buyNative(`${p}.${period}`)}>
                 {busy === `${p}.${period}` ? <span className="spin" /> : null}
-                {sameAuto(p) ? '已订阅' : current(p) ? `改为${period === 'year' ? '年付' : '月付'}` : ent?.plan === 't1' && p === 't2' ? '升级到 T2' : `订阅 ${PLANS[p].name}`}
+                {sameAuto(p) ? tr('已订阅') : current(p) ? tr('改为{0}', period === 'year' ? tr('年付') : tr('月付')) : ent?.plan === 't1' && p === 't2' ? tr('升级到 T2') : tr('订阅 {0}', PLANS[p].name)}
               </button>
             ) : (
               <div className="stack" style={{ gap: 6 }}>
                 <button className={`btn ${p === 't2' ? 'btn-primary' : ''}`} disabled={!!busy || !webOn || (sameAuto(p) && acc?.source === 'mp')} onClick={() => webSubscribe(p)}>
                   {busy === `web ${p}` ? <span className="spin" /> : null}
-                  {sameAuto(p) && acc?.source === 'mp' ? '已订阅' : ent?.plan === 't1' && p === 't2' ? '升级到 T2（卡，自动续费）' : `订阅 ${PLANS[p].name}（卡，自动续费）`}
+                  {sameAuto(p) && acc?.source === 'mp' ? tr('已订阅') : ent?.plan === 't1' && p === 't2' ? tr('升级到 T2（卡，自动续费）') : tr('订阅 {0}（卡，自动续费）', PLANS[p].name)}
                 </button>
                 {period === 'year' && (
                   <button className="btn btn-soft" disabled={!!busy || !webOn} onClick={() => webPix(p)}>
                     {busy === `pix ${p}` ? <span className="spin" /> : null}
-                    PIX 一次付清 1 年
+                    {tr('PIX 一次付清 1 年')}
                   </button>
                 )}
               </div>
@@ -168,12 +169,12 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
           </div>
         ))}
       </div>
-      {otherSource && <p className="xs muted" style={{ textAlign: 'center', margin: 0 }}>你的套餐已在其他平台开通，在这里可以直接使用。</p>}
+      {otherSource && <p className="xs muted" style={{ textAlign: 'center', margin: 0 }}>{tr('你的套餐已在其他平台开通，在这里可以直接使用。')}</p>}
       {native ? (
         <StoreTerms site={publicConfig?.site} onRestore={doRestore} busy={busy === 'restore'} storeOn={storeOn} />
       ) : (
         <span className="xs muted" style={{ textAlign: 'center' }}>
-          {webOn ? '卡付款自动续费，可随时取消，已付期间照常可用；PIX 年付一次付清，不会自动续费。也可以在 iPhone / 安卓 App 里订阅，同一账号通用。' : '订阅收款暂未开放，请联系管理员。'}
+          {webOn ? tr('卡付款自动续费，可随时取消，已付期间照常可用；PIX 年付一次付清，不会自动续费。也可以在 iPhone / 安卓 App 里订阅，同一账号通用。') : tr('订阅收款暂未开放，请联系管理员。')}
         </span>
       )}
     </div>
@@ -185,23 +186,23 @@ function StoreTerms({ site, onRestore, busy, storeOn }: { site?: string; onResto
   const ios = platform() === 'ios';
   return (
     <div className="stack storeterms" style={{ gap: 6 }}>
-      {!storeOn && <div className="banner warn small">商店付款还没开通，请稍后再试。</div>}
+      {!storeOn && <div className="banner warn small">{tr('商店付款还没开通，请稍后再试。')}</div>}
       <p className="xs muted" style={{ margin: 0 }}>
-        订阅通过 {ios ? '你的 Apple 账户' : 'Google Play'} 付款，到期自动续订同样的周期和价格，除非在当前周期结束前至少 24 小时关闭自动续订。可随时在{ios ? '「设置 → Apple 账户 → 订阅」' : ' Google Play 的「付款和订阅」'}里管理或取消。
+        {tr('订阅通过')} {ios ? tr('你的 Apple 账户') : 'Google Play'} {tr('付款，到期自动续订同样的周期和价格，除非在当前周期结束前至少 24 小时关闭自动续订。可随时在')}{ios ? tr('「设置 → Apple 账户 → 订阅」') : tr(' Google Play 的「付款和订阅」')}{tr('里管理或取消。')}
       </p>
       <div className="row" style={{ justifyContent: 'center', gap: 4, flexWrap: 'wrap' }}>
         <button className="btn btn-ghost btn-sm" disabled={busy} onClick={onRestore}>
           {busy ? <span className="spin" /> : null}
-          恢复购买
+          {tr('恢复购买')}
         </button>
         <button className="btn btn-ghost btn-sm" onClick={() => void manageSubscriptions().catch(() => {})}>
-          管理订阅
+          {tr('管理订阅')}
         </button>
         <button className="btn btn-ghost btn-sm" onClick={() => void openExternal(legalUrl('terms', site))}>
-          使用条款
+          {tr('使用条款')}
         </button>
         <button className="btn btn-ghost btn-sm" onClick={() => void openExternal(legalUrl('privacy', site))}>
-          隐私政策
+          {tr('隐私政策')}
         </button>
       </div>
     </div>
@@ -227,8 +228,8 @@ export function PackCard() {
         <IBolt />
       </span>
       <span className="grow stack" style={{ gap: 2 }}>
-        <b id="h-pack">AI 加量包 · {AI_PACK.qty} 次</b>
-        <span className="xs muted">月度次数用完后自动使用，不过期{bonus ? ` · 现在还剩 ${bonus} 次` : ''}</span>
+        <b id="h-pack">{tr('AI 加量包 ·')} {AI_PACK.qty} {tr('次')}</b>
+        <span className="xs muted">{tr('月度次数用完后自动使用，不过期')}{bonus ? tr(' · 现在还剩 {0} 次', bonus) : ''}</span>
       </span>
       <button
         className="btn btn-primary btn-sm"

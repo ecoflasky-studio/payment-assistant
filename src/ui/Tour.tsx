@@ -2,6 +2,7 @@
  * 新手导览：第一次登录后在首页自动播放一次，高亮界面上的关键按钮并配一句说明。
  * 在「使用教程」里可以重新播放。目标元素用 data-tour 标记；找不到（或在当前屏幕上看不到）的步骤自动跳过。
  */
+import { tr } from '../i18n';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 export const TOUR_DONE = 'zq.tour.done';
@@ -15,13 +16,13 @@ export interface TourStep {
 }
 
 export const TOUR_STEPS: TourStep[] = [
-  { title: '欢迎使用账期助手', text: '花 20 秒认识一下主要按钮。随时可以点「跳过」。右上角的放大镜可以搜索全部账单。' },
-  { target: 'add', title: '新增账单', text: '从这里拍照识别、上传图片或 PDF，也可以手动录入商家账单和日常缴费。' },
-  { target: 'capture', title: '拍照识别', text: '对准订单、boleto 或水电单拍一张，金额、到期日自动填好，你只需核对标黄的字段。' },
-  { target: 'bills', title: '账单', text: '所有未付、逾期、即将到期的账单都在这里；付完点右侧 ✓ 标记已付。' },
-  { target: 'flow', title: '报表', text: '流水、月报 / 年报、未来几周的现金流、每个商家的欠款和账龄都在这里。' },
-  { target: 'settings', title: '设置', text: '商家账期、提醒、账号与套餐、面容 / 指纹解锁和使用教程都在这里。' },
-  { title: '准备好了', text: '先拍一张单据试试吧。以后可以在「设置 → 使用教程」重新看这段导览。' },
+  { title: tr('欢迎使用账期助手'), text: tr('花 20 秒认识一下主要按钮。随时可以点「跳过」。右上角的放大镜可以搜索全部账单。') },
+  { target: 'add', title: tr('新增账单'), text: tr('从这里拍照识别、上传图片或 PDF，也可以手动录入商家账单和日常缴费。') },
+  { target: 'capture', title: tr('拍照识别'), text: tr('对准订单、boleto 或水电单拍一张，金额、到期日自动填好，你只需核对标黄的字段。') },
+  { target: 'bills', title: tr('账单'), text: tr('所有未付、逾期、即将到期的账单都在这里；付完点右侧 ✓ 标记已付。') },
+  { target: 'flow', title: tr('报表'), text: tr('流水、月报 / 年报、未来几周的现金流、每个商家的欠款和账龄都在这里。') },
+  { target: 'settings', title: tr('设置'), text: tr('商家账期、提醒、账号与套餐、面容 / 指纹解锁和使用教程都在这里。') },
+  { title: tr('准备好了'), text: tr('先拍一张单据试试吧。以后可以在「设置 → 使用教程」重新看这段导览。') },
 ];
 
 export function tourDone(): boolean {
@@ -173,20 +174,20 @@ export function Tour({ autoStart }: { autoStart: boolean }) {
         </p>
         <div className="row">
           <button className="btn btn-ghost btn-sm" onClick={close}>
-            {last ? '关闭' : '跳过'}
+            {last ? tr('关闭') : tr('跳过')}
           </button>
           <span className="grow" />
           {idx > 0 && (
             <button className="btn btn-sm" onClick={prev}>
-              上一步
+              {tr('上一步')}
             </button>
           )}
           <button className="btn btn-primary btn-sm tour-next" autoFocus onClick={next}>
-            {last ? '开始使用' : idx === 0 ? '开始' : '下一步'}
+            {last ? tr('开始使用') : idx === 0 ? tr('开始') : tr('下一步')}
           </button>
         </div>
         <span className="sr-only">
-          第 {idx + 1} 步，共 {visible.length} 步
+          {tr('第 {0} 步，共 {1} 步', idx + 1, visible.length)}
         </span>
       </div>
     </div>

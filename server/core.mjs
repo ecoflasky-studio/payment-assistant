@@ -312,9 +312,11 @@ export function createHandler({ prompt, log = () => {}, authorize = null, health
     } catch {
       throw new HttpError(400, '请求不是 JSON');
     }
-    const { mediaType, imageBase64, hints } = payload || {};
+    const { mediaType, imageBase64, hints, lang } = payload || {};
     if (hints != null && typeof hints !== 'string') throw new HttpError(400, '参考资料格式错误');
-    const fullPrompt = withHints(prompt, hints);
+    // 用户界面语言：warnings 等给人看的说明用这个语言写（字段值仍按单据原文照抄）
+    const langLine = lang === 'pt' ? '\n\n所有 warnings 和说明文字请用巴西葡萄牙语写（字段值仍照抄原文）。' : lang === 'en' ? '\n\n所有 warnings 和说明文字请用英文写（字段值仍照抄原文）。' : '';
+    const fullPrompt = withHints(prompt, hints) + langLine;
     if (!MEDIA_TYPES.has(mediaType)) throw new HttpError(415, '只接受 JPG、PNG、WebP 图片');
     if (typeof imageBase64 !== 'string' || !imageBase64 || !/^[A-Za-z0-9+/=]+$/.test(imageBase64)) throw new HttpError(400, '图片数据无效');
     if ((imageBase64.length * 3) / 4 > c.maxBytes) throw new HttpError(413, '图片过大');

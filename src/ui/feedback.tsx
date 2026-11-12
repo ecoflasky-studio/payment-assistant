@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 
 interface Toast {
@@ -32,7 +33,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback<Feedback['toast']>((text, opts = {}) => {
     const id = ++seq.current;
-    setToasts((t) => [...t.slice(-2), { id, text, ...opts }]);
+    setToasts((t) => [...t.slice(-2), { id, text: tx(text), ...opts }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), opts.action ? 6000 : 3200);
   }, []);
 
@@ -87,7 +88,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                 setDlg(null);
               }}
             >
-              {dlg.cancelLabel ?? '取消'}
+              {dlg.cancelLabel ?? tr('取消')}
             </button>
             <button
               className={`btn ${dlg.danger ? 'btn-danger' : 'btn-primary'}`}

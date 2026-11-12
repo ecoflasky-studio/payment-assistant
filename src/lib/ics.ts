@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import type { Bill } from './types';
 import { addDays } from './dates';
 import { formatBRL, formatQuantity } from './money';
@@ -66,24 +67,24 @@ function alarm(minutesFromStart: number, text: string): string[] {
 /** 单个 VEVENT（全天事件，提醒时间为圣保罗 09:00） */
 export function billEvent(bill: Bill, now: Date = new Date()): string[] {
   const expense = bill.kind === 'expense';
-  const part = bill.installment ? `（${bill.installment.index}/${bill.installment.count} 期）` : '';
+  const part = bill.installment ? tr('（{0}/{1} 期）', bill.installment.index, bill.installment.count) : '';
   const open = openCents(bill);
   const partial = !bill.paidAt && open > 0 && open < bill.totalCents;
-  const title = `${expense ? '缴费' : '付款'}：${billTitle(bill)} ${formatBRL(open || bill.totalCents)}${part}${partial ? '（尾款）' : ''}`;
+  const title = tr('{0}：{1} {2}{3}{4}', expense ? tr('缴费') : tr('付款'), billTitle(bill), formatBRL(open || bill.totalCents), part, partial ? tr('（尾款）') : '');
   const desc = [
-    expense ? `类型：${categoryLabel(bill.category)}` : '',
-    `${expense ? '缴费单位' : '商家'}：${bill.merchantNameSnapshot}`,
-    bill.orderNumber ? `订单号：${bill.orderNumber}` : '',
-    `金额：${formatBRL(bill.totalCents)}`,
-    partial ? `已付：${formatBRL(bill.totalCents - open)}，还差 ${formatBRL(open)}` : '',
-    `付款账号：${bill.accountLabelSnapshot || '未指定'}`,
-    `提前提醒：${bill.reminderDays} 天`,
-    bill.paymentCode ? `付款码：${bill.paymentCode}` : '',
-    bill.estimated ? '金额为预估，请以实际账单为准' : '',
-    '明细：',
+    expense ? tr('类型：{0}', categoryLabel(bill.category)) : '',
+    tr('{0}：{1}', expense ? tr('缴费单位') : tr('商家'), bill.merchantNameSnapshot),
+    bill.orderNumber ? tr('订单号：{0}', bill.orderNumber) : '',
+    tr('金额：{0}', formatBRL(bill.totalCents)),
+    partial ? tr('已付：{0}，还差 {1}', formatBRL(bill.totalCents - open), formatBRL(open)) : '',
+    tr('付款账号：{0}', bill.accountLabelSnapshot || tr('未指定')),
+    tr('提前提醒：{0} 天', bill.reminderDays),
+    bill.paymentCode ? tr('付款码：{0}', bill.paymentCode) : '',
+    bill.estimated ? tr('金额为预估，请以实际账单为准') : '',
+    tr('明细：'),
     ...bill.items.map((i) => `  ${formatQuantity(i.quantity)} × ${i.description} × ${formatBRL(i.unitPriceCents)} = ${formatBRL(i.subtotalCents)}`),
-    bill.notes ? `备注：${bill.notes}` : '',
-    '（由账期助手导出；账单修改或付款后请更新或删除此事件）',
+    bill.notes ? tr('备注：{0}', bill.notes) : '',
+    tr('（由账期助手导出；账单修改或付款后请更新或删除此事件）'),
   ]
     .filter(Boolean)
     .join('\n');
@@ -97,12 +98,12 @@ export function billEvent(bill: Bill, now: Date = new Date()): string[] {
     `SUMMARY:${escapeICS(title)}`,
     `DESCRIPTION:${escapeICS(desc)}`,
     'TRANSP:TRANSPARENT',
-    'CATEGORIES:账期',
+    tr('CATEGORIES:账期'),
   ];
   // 全天事件从本地 00:00 开始；09:00 = +540 分钟
   const nine = 9 * 60;
-  if (bill.reminderDays > 0) lines.push(...alarm(nine - bill.reminderDays * 1440, `${bill.reminderDays} 天后需付款：${title}`));
-  lines.push(...alarm(nine, `今天需付款：${title}`));
+  if (bill.reminderDays > 0) lines.push(...alarm(nine - bill.reminderDays * 1440, tr('{0} 天后需付款：{1}', bill.reminderDays, title)));
+  lines.push(...alarm(nine, tr('今天需付款：{0}', title)));
   lines.push('END:VEVENT');
   return lines;
 }
@@ -114,7 +115,7 @@ export function buildICS(bills: Bill[], now: Date = new Date()): string {
     'PRODID:-//ZhangqiZhushou//CN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:账期提醒',
+    tr('X-WR-CALNAME:账期提醒'),
     'X-WR-TIMEZONE:America/Sao_Paulo',
     ...bills.flatMap((b) => billEvent(b, now)),
     'END:VCALENDAR',

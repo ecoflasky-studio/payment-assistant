@@ -1,3 +1,4 @@
+import { tr, lang, monthShort } from '../i18n';
 /** 日期工具：内部 ISO YYYY-MM-DD；界面 DD/MM/YYYY；时区 America/Sao_Paulo */
 
 export const TZ = 'America/Sao_Paulo';
@@ -35,20 +36,20 @@ export interface DateParse {
 /** 解析 DD/MM/YYYY（也接受 - 或 . 分隔）。两位年份不静默猜测。 */
 export function parseBRDate(raw: string | null | undefined, now: Date = new Date()): DateParse {
   const s = (raw ?? '').trim();
-  if (!s) return { iso: null, raw: s, error: '日期为空' };
+  if (!s) return { iso: null, raw: s, error: tr('日期为空') };
   if (isValidISO(s)) return { iso: s, raw: s };
   const m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}|\d{4})$/);
-  if (!m) return { iso: null, raw: s, error: '日期格式应为 DD/MM/YYYY' };
+  if (!m) return { iso: null, raw: s, error: tr('日期格式应为 DD/MM/YYYY') };
   const d = Number(m[1]);
   const mo = Number(m[2]);
   if (m[3].length === 2) {
     const century = Math.floor(Number(todayISO(now).slice(0, 4)) / 100) * 100;
     const y = century + Number(m[3]);
-    if (!isValidYMD(y, mo, d)) return { iso: null, raw: s, error: `日期不存在：${s}` };
-    return { iso: null, raw: s, needsConfirm: true, candidate: toISO(y, mo, d), error: `两位年份需确认：是否为 ${y} 年？` };
+    if (!isValidYMD(y, mo, d)) return { iso: null, raw: s, error: tr('日期不存在：{0}', s) };
+    return { iso: null, raw: s, needsConfirm: true, candidate: toISO(y, mo, d), error: tr('两位年份需确认：是否为 {0} 年？', y) };
   }
   const y = Number(m[3]);
-  if (!isValidYMD(y, mo, d)) return { iso: null, raw: s, error: `日期不存在：${s}` };
+  if (!isValidYMD(y, mo, d)) return { iso: null, raw: s, error: tr('日期不存在：{0}', s) };
   return { iso: toISO(y, mo, d), raw: s };
 }
 
@@ -100,7 +101,7 @@ export function diffDays(a: string, b: string): number {
   return Math.round((isoToUTCms(b) - isoToUTCms(a)) / 86400000);
 }
 
-const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const WEEK = [tr('周日'), tr('周一'), tr('周二'), tr('周三'), tr('周四'), tr('周五'), tr('周六')];
 export function weekdayCN(iso: string): string {
   return WEEK[new Date(isoToUTCms(iso)).getUTCDay()];
 }
@@ -108,10 +109,10 @@ export function weekdayCN(iso: string): string {
 /** 相对描述：今天 / 明天 / 3 天后 / 逾期 2 天 */
 export function relativeDue(dueISO: string, today: string): string {
   const n = diffDays(today, dueISO);
-  if (n === 0) return '今天到期';
-  if (n === 1) return '明天到期';
-  if (n > 1) return `${n} 天后到期`;
-  return `逾期 ${-n} 天`;
+  if (n === 0) return tr('今天到期');
+  if (n === 1) return tr('明天到期');
+  if (n > 1) return tr('{0} 天后到期', n);
+  return tr('逾期 {0} 天', -n);
 }
 
 /** 月份加减（日期超出目标月天数时取月末，如 31/01 + 1 月 = 28/02） */
@@ -135,7 +136,7 @@ export function shiftMonth(ym: string, n: number): string {
 
 export function monthLabel(ym: string): string {
   const [y, m] = ym.split('-').map(Number);
-  return `${y}年${m}月`;
+  return lang() === 'zh' ? tr('{0}年{1}月', y, m) : `${monthShort(m)} ${y}`;
 }
 
 /** 月历网格（周日开头），返回 6 行 × 7 列的 ISO 日期，前后补齐相邻月份 */

@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { holidayName } from '../lib/holidays';
 import { useEffect, useMemo, useState } from 'react';
 import { monthGrid, monthLabel, shiftMonth, formatBR, parseBRDate, addDays, addMonths, endOfMonth, isValidISO } from '../lib/dates';
@@ -6,8 +7,8 @@ import { formatBRL } from '../lib/money';
 import { Modal } from './feedback';
 import { ICal, ICheck } from './icons';
 
-const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
-const URG_LABEL: Record<DayUrgency, string> = { late: '已逾期', soon: '即将到期', fine: '时间充裕', paid: '已付清' };
+const WEEK = [tr('日'), tr('一'), tr('二'), tr('三'), tr('四'), tr('五'), tr('六')];
+const URG_LABEL: Record<DayUrgency, string> = { late: tr('已逾期'), soon: tr('即将到期'), fine: tr('时间充裕'), paid: tr('已付清') };
 
 /** 月历网格：可显示每日到期金额 */
 export function MonthGrid({
@@ -48,7 +49,7 @@ export function MonthGrid({
   return (
     <div className={`mgrid ${size}`} role="grid" aria-label={monthLabel(month)} onKeyDown={onKey}>
       {WEEK.map((w, i) => (
-        <div key={w} className={`mg-h${i === 0 || i === 6 ? ' we' : ''}`} role="columnheader">
+        <div key={i} className={`mg-h${i === 0 || i === 6 ? ' we' : ''}`} role="columnheader">
           {w}
         </div>
       ))}
@@ -72,7 +73,7 @@ export function MonthGrid({
             className={cls}
             aria-selected={d === selected}
             title={hol ?? undefined}
-            aria-label={`${formatBR(d)}${hol ? `（${hol}）` : ''}${t ? `，${t.count} 笔，${formatBRL(t.cents)}${t.unpaidCount ? `，未付 ${formatBRL(t.unpaidCents)}，${URG_LABEL[urg!]}` : '，已全部付清'}` : ''}`}
+            aria-label={`${formatBR(d)}${hol ? tr('（{0}）', hol) : ''}${t ? tr('，{0} 笔，{1}{2}', t.count, formatBRL(t.cents), t.unpaidCount ? tr('，未付 {0}，{1}', formatBRL(t.unpaidCents), URG_LABEL[urg!]) : tr('，已全部付清')) : ''}`}
             onClick={() => onPick(d)}
           >
             {urg && (urg === 'paid' ? <ICheck className="mg-ok" aria-hidden="true" /> : <i className={`mg-dot ${urg}`} aria-hidden="true" />)}
@@ -93,11 +94,11 @@ export function MonthGrid({
 export function MonthNav({ month, onChange, right }: { month: string; onChange: (m: string) => void; right?: React.ReactNode }) {
   return (
     <div className="mnav">
-      <button type="button" className="btn btn-ghost iconbtn" aria-label="上个月" onClick={() => onChange(shiftMonth(month, -1))}>
+      <button type="button" className="btn btn-ghost iconbtn" aria-label={tr('上个月')} onClick={() => onChange(shiftMonth(month, -1))}>
         ‹
       </button>
       <span className="mnav-t">{monthLabel(month)}</span>
-      <button type="button" className="btn btn-ghost iconbtn" aria-label="下个月" onClick={() => onChange(shiftMonth(month, 1))}>
+      <button type="button" className="btn btn-ghost iconbtn" aria-label={tr('下个月')} onClick={() => onChange(shiftMonth(month, 1))}>
         ›
       </button>
       {right}
@@ -147,13 +148,13 @@ export function DateField({
     <>
       <div className="datefield">
         <input id={id} className={`input num ${className}`} inputMode="numeric" placeholder="DD/MM/YYYY" autoComplete="off" value={value} onChange={(e) => onChange(autoSlash(e.target.value, value))} />
-        <button type="button" className="btn datebtn" aria-label={`打开日历选择${title}`} onClick={() => setOpen(true)}>
+        <button type="button" className="btn datebtn" aria-label={tr('打开日历选择{0}', title)} onClick={() => setOpen(true)}>
           <ICal />
         </button>
       </div>
       {dayInfo && dayInfo.unpaidCount > 0 && (
         <span className="hint">
-          这天已有 {dayInfo.unpaidCount} 笔未付，共 {formatBRL(dayInfo.unpaidCents)}
+          {tr('这天已有')} {dayInfo.unpaidCount} {tr('笔未付，共')} {formatBRL(dayInfo.unpaidCents)}
         </span>
       )}
       {hintNode}
@@ -161,9 +162,9 @@ export function DateField({
         <Modal title={title} onClose={() => setOpen(false)}>
           <MonthNav month={month} onChange={setMonth} />
           <MonthGrid month={month} today={today} selected={iso} totals={totals} onPick={pick} />
-          {totals && <p className="xs muted">格子里的数字是当天已有账单的未付金额（R$），方便把付款日错开。</p>}
+          {totals && <p className="xs muted">{tr('格子里的数字是当天已有账单的未付金额（R$），方便把付款日错开。')}</p>}
           <div className="qchips">
-            {[{ label: '今天', iso: today }, ...quick].map((q) => (
+            {[{ label: tr('今天'), iso: today }, ...quick].map((q) => (
               <button key={q.label} type="button" onClick={() => pick(q.iso)}>
                 {q.label}
               </button>
@@ -171,7 +172,7 @@ export function DateField({
           </div>
           <div className="row end">
             <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
-              关闭
+              {tr('关闭')}
             </button>
           </div>
         </Modal>
@@ -193,8 +194,8 @@ export function autoSlash(next: string, prev: string): string {
 export function dueQuickDates(billISO: string | null, today: string): QuickDate[] {
   const b = billISO && isValidISO(billISO) ? billISO : today;
   return [
-    ...[7, 15, 30, 45, 60].map((d) => ({ label: `开单 +${d} 天`, iso: addDays(b, d) })),
-    { label: '本月底', iso: endOfMonth(today) },
-    { label: '下月同日', iso: addMonths(b, 1) },
+    ...[7, 15, 30, 45, 60].map((d) => ({ label: tr('开单 +{0} 天', d), iso: addDays(b, d) })),
+    { label: tr('本月底'), iso: endOfMonth(today) },
+    { label: tr('下月同日'), iso: addMonths(b, 1) },
   ];
 }

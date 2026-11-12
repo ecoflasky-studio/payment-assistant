@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import type { Bill, Merchant, PaymentAccount, Settings } from './types';
 import { SCHEMA_VERSION } from './types';
 import { migrateBill, validateBill, recompute } from './bill';
@@ -48,55 +49,55 @@ export function validateBackup(input: unknown): BackupCheck {
     try {
       obj = JSON.parse(input);
     } catch {
-      return { ok: false, errors: ['文件不是有效的 JSON'], warnings, data: null };
+      return { ok: false, errors: [tr('文件不是有效的 JSON')], warnings, data: null };
     }
   }
-  if (!obj || typeof obj !== 'object') return { ok: false, errors: ['文件内容为空或格式错误'], warnings, data: null };
-  if (obj.format !== BACKUP_FORMAT) errors.push('不是账期助手的备份文件（format 不匹配）');
-  if (typeof obj.schemaVersion !== 'number') errors.push('缺少 schemaVersion');
-  else if (obj.schemaVersion > SCHEMA_VERSION) errors.push(`备份版本 ${obj.schemaVersion} 高于应用支持的 ${SCHEMA_VERSION}，请先升级应用`);
-  for (const k of ['bills', 'merchants', 'accounts']) if (!Array.isArray(obj[k])) errors.push(`缺少 ${k} 列表`);
+  if (!obj || typeof obj !== 'object') return { ok: false, errors: [tr('文件内容为空或格式错误')], warnings, data: null };
+  if (obj.format !== BACKUP_FORMAT) errors.push(tr('不是账期助手的备份文件（format 不匹配）'));
+  if (typeof obj.schemaVersion !== 'number') errors.push(tr('缺少 schemaVersion'));
+  else if (obj.schemaVersion > SCHEMA_VERSION) errors.push(tr('备份版本 {0} 高于应用支持的 {1}，请先升级应用', obj.schemaVersion, SCHEMA_VERSION));
+  for (const k of ['bills', 'merchants', 'accounts']) if (!Array.isArray(obj[k])) errors.push(tr('缺少 {0} 列表', k));
   if (errors.length) return { ok: false, errors, warnings, data: null };
 
   const ids = new Set<string>();
   const bills: Bill[] = [];
   obj.bills.forEach((raw: any, idx: number) => {
-    const tag = `账单 #${idx + 1}${raw?.orderNumber ? `（${raw.orderNumber}）` : ''}`;
+    const tag = tr('账单 #{0}{1}', idx + 1, raw?.orderNumber ? tr('（{0}）', raw.orderNumber) : '');
     try {
-      if (!isStr(raw?.id)) throw new Error('缺少 id');
-      if (ids.has(raw.id)) throw new Error('id 重复');
+      if (!isStr(raw?.id)) throw new Error(tr('缺少 id'));
+      if (ids.has(raw.id)) throw new Error(tr('id 重复'));
       ids.add(raw.id);
       const b = migrateBill({ ...raw, schemaVersion: raw.schemaVersion ?? obj.schemaVersion });
       for (const it of b.items) {
-        if (!Number.isInteger(it.unitPriceCents) || it.unitPriceCents < 0) throw new Error('单价不是非负整数分');
+        if (!Number.isInteger(it.unitPriceCents) || it.unitPriceCents < 0) throw new Error(tr('单价不是非负整数分'));
       }
-      if (!Number.isInteger(b.totalCents)) throw new Error('总额不是整数分');
+      if (!Number.isInteger(b.totalCents)) throw new Error(tr('总额不是整数分'));
       // 已删除的账单（墓碑）明细已清空，不重算金额
       const fixed = b.deletedAt ? b : recompute(b);
-      if (fixed.totalCents !== b.totalCents) warnings.push(`${tag}：总额与明细不一致，导入时将按明细重新计算`);
-      if (b.paidAt !== null && Number.isNaN(Date.parse(b.paidAt))) throw new Error('paidAt 不是有效时间');
+      if (fixed.totalCents !== b.totalCents) warnings.push(tr('{0}：总额与明细不一致，导入时将按明细重新计算', tag));
+      if (b.paidAt !== null && Number.isNaN(Date.parse(b.paidAt))) throw new Error(tr('paidAt 不是有效时间'));
       if (b.payments !== undefined) {
-        if (!Array.isArray(b.payments)) throw new Error('付款记录格式不正确');
+        if (!Array.isArray(b.payments)) throw new Error(tr('付款记录格式不正确'));
         for (const p of b.payments) {
-          if (!isStr(p?.id) || !isValidISO(p?.date) || !Number.isInteger(p?.cents) || p.cents < 0) throw new Error('付款记录有无效的日期或金额');
+          if (!isStr(p?.id) || !isValidISO(p?.date) || !Number.isInteger(p?.cents) || p.cents < 0) throw new Error(tr('付款记录有无效的日期或金额'));
         }
       }
       const issues = validateBill({ ...fixed, dueBeforeBillConfirmed: true }).filter((i) => i.field !== 'merchant' || !b.deletedAt);
-      if (!isValidISO(b.billDate) || !isValidISO(b.dueDate)) throw new Error('日期无效');
-      if (issues.length && !b.deletedAt) throw new Error(issues.map((i) => i.message).join('；'));
+      if (!isValidISO(b.billDate) || !isValidISO(b.dueDate)) throw new Error(tr('日期无效'));
+      if (issues.length && !b.deletedAt) throw new Error(issues.map((i) => i.message).join(tr('；')));
       bills.push({ ...fixed, orderNumber: String(fixed.orderNumber ?? '') });
     } catch (e) {
-      errors.push(`${tag}：${(e as Error).message}`);
+      errors.push(tr('{0}：{1}', tag, (e as Error).message));
     }
   });
   const merchants: Merchant[] = [];
   obj.merchants.forEach((m: any, idx: number) => {
-    if (!isStr(m?.id) || !isStr(m?.name) || !m.name.trim()) return errors.push(`商家 #${idx + 1}：缺少 id 或名称`);
+    if (!isStr(m?.id) || !isStr(m?.name) || !m.name.trim()) return errors.push(tr('商家 #{0}：缺少 id 或名称', idx + 1));
     merchants.push({ defaultAccountId: null, active: true, createdAt: '', ...m, updatedAt: m.updatedAt || new Date().toISOString(), aliases: Array.isArray(m.aliases) ? m.aliases.map(String) : [] });
   });
   const accounts: PaymentAccount[] = [];
   obj.accounts.forEach((a: any, idx: number) => {
-    if (!isStr(a?.id) || !isStr(a?.label) || !a.label.trim()) return errors.push(`付款账号 #${idx + 1}：缺少 id 或名称`);
+    if (!isStr(a?.id) || !isStr(a?.label) || !a.label.trim()) return errors.push(tr('付款账号 #{0}：缺少 id 或名称', idx + 1));
     accounts.push({ type: 'outro', owner: '', bank: '', optionalPixHint: '', active: true, createdAt: '', ...a, updatedAt: a.updatedAt || new Date().toISOString() });
   });
   return { ok: errors.length === 0, errors, warnings, data: { bills, merchants, accounts }, settings: obj.settings };

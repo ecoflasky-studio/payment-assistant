@@ -1,3 +1,4 @@
+import { tr } from '../../i18n';
 /** 纯几何：四边形校验与透视变换（单应矩阵） */
 export interface Pt {
   x: number;
@@ -36,13 +37,13 @@ export interface QuadCheck {
  * 拒绝交叉、退化（面积过小）、凹四边形与逆时针顺序。
  */
 export function checkQuad(q: Pt[], minArea = 400): QuadCheck {
-  if (q.length !== 4) return { ok: false, error: '需要 4 个角点' };
-  if (segmentsIntersect(q[0], q[1], q[2], q[3]) || segmentsIntersect(q[1], q[2], q[3], q[0])) return { ok: false, error: '四边形边线交叉，请调整角点顺序' };
+  if (q.length !== 4) return { ok: false, error: tr('需要 4 个角点') };
+  if (segmentsIntersect(q[0], q[1], q[2], q[3]) || segmentsIntersect(q[1], q[2], q[3], q[0])) return { ok: false, error: tr('四边形边线交叉，请调整角点顺序') };
   const area = polygonArea(q);
-  if (area <= 0) return { ok: false, error: '角点应按 左上→右上→右下→左下 顺时针放置' };
-  if (area < minArea) return { ok: false, error: '裁切区域太小' };
+  if (area <= 0) return { ok: false, error: tr('角点应按 左上→右上→右下→左下 顺时针放置') };
+  if (area < minArea) return { ok: false, error: tr('裁切区域太小') };
   const signs = q.map((_, i) => Math.sign(cross(q[i], q[(i + 1) % 4], q[(i + 2) % 4])));
-  if (signs.some((s) => s <= 0)) return { ok: false, error: '四边形必须是凸的（不能有凹角或三点共线）' };
+  if (signs.some((s) => s <= 0)) return { ok: false, error: tr('四边形必须是凸的（不能有凹角或三点共线）') };
   return { ok: true };
 }
 
@@ -68,7 +69,7 @@ function solve(A: number[][], b: number[]): number[] {
   for (let c = 0; c < n; c++) {
     let piv = c;
     for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
-    if (Math.abs(M[piv][c]) < 1e-12) throw new Error('四边形退化，无法矫正');
+    if (Math.abs(M[piv][c]) < 1e-12) throw new Error(tr('四边形退化，无法矫正'));
     [M[c], M[piv]] = [M[piv], M[c]];
     for (let r = 0; r < n; r++) {
       if (r === c) continue;

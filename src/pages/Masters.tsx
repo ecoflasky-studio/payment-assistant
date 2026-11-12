@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { MERCHANT_COLORS, colorSlot, nextSlot } from '../lib/colors';
 import { BillRow, MerchantAvatar } from '../ui/BillList';
 import { BillCard } from '../ui/BillCard';
@@ -22,15 +23,15 @@ export function Masters() {
   const [tab, setTab] = useState<'m' | 'p' | 'a'>('m');
   return (
     <>
-      <div className="seg" role="tablist" aria-label="固定资料" style={{ alignSelf: 'flex-start' }}>
+      <div className="seg" role="tablist" aria-label={tr('固定资料')} style={{ alignSelf: 'flex-start' }}>
         <button role="tab" aria-selected={tab === 'm'} onClick={() => setTab('m')}>
-          商家
+          {tr('商家')}
         </button>
         <button role="tab" aria-selected={tab === 'p'} onClick={() => setTab('p')}>
-          缴费单位
+          {tr('缴费单位')}
         </button>
         <button role="tab" aria-selected={tab === 'a'} onClick={() => setTab('a')}>
-          付款账号
+          {tr('付款账号')}
         </button>
       </div>
       {tab === 'a' ? <AccountList /> : <MerchantList key={tab} type={tab === 'p' ? 'payee' : 'supplier'} />}
@@ -39,7 +40,7 @@ export function Masters() {
 }
 
 function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
-  const word = type === 'payee' ? '缴费单位' : '商家';
+  const word = type === 'payee' ? tr('缴费单位') : tr('商家');
   const { merchants, accounts, bills, settings, saveSettings } = useStore();
   const [edit, setEdit] = useState<Merchant | 'new' | null>(null);
   const [stats, setStats] = useState<Merchant | null>(null);
@@ -75,14 +76,14 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
         </h2>
         <button className="btn btn-primary btn-sm" onClick={() => setEdit('new')}>
           <IPlus />
-          新增{word}
+          {tr('新增')}{word}
         </button>
       </div>
       <div className="row">
-        <input className="input grow" placeholder="搜索名称或别名" value={q} onChange={(e) => setQ(e.target.value)} aria-label={`搜索${word}`} type="search" />
+        <input className="input grow" placeholder={tr('搜索名称或别名')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={tr('搜索{0}', word)} type="search" />
         <label className="check" style={{ padding: 0 }}>
           <input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} />
-          <span className="small">显示已停用</span>
+          <span className="small">{tr('显示已停用')}</span>
         </label>
       </div>
       {list.length === 0 ? (
@@ -90,32 +91,32 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
           <div className="art">
             <IStore />
           </div>
-          <p>{mine.length ? `没有匹配的${word}` : type === 'payee' ? '还没有缴费单位。例如 Sabesp（水费）、Enel（电费）、DAS（税费），可设置每月固定缴费日。' : '还没有商家。新增后，录账时即可直接选择，并可设置固定账期。'}</p>
+          <p>{mine.length ? tr('没有匹配的{0}', word) : type === 'payee' ? tr('还没有缴费单位。例如 Sabesp（水费）、Enel（电费）、DAS（税费），可设置每月固定缴费日。') : tr('还没有商家。新增后，录账时即可直接选择，并可设置固定账期。')}</p>
         </div>
       ) : (
         <div className="list">
           {list.map((m) => (
             <div key={m.id} className={`li${m.active ? '' : ' off'}`}>
               <MerchantAvatar merchant={m} name={m.name} />
-              <button className="grow stack li-open" style={{ gap: 2 }} onClick={() => setStats(m)} aria-label={`查看 ${m.name} 的对账`}>
+              <button className="grow stack li-open" style={{ gap: 2 }} onClick={() => setStats(m)} aria-label={tr('查看 {0} 的对账', m.name)}>
                 <span className="t">
-                  {m.name} {settings.defaultMerchantId === m.id && <span className="pill brand">默认</span>} {!m.active && <span className="pill neutral">已停用</span>}
+                  {m.name} {settings.defaultMerchantId === m.id && <span className="pill brand">{tr('默认')}</span>} {!m.active && <span className="pill neutral">{tr('已停用')}</span>}
                 </span>
-                {m.term && <span className="pill brand" style={{ alignSelf: 'flex-start' }}>账期：{describeTerm(m.term)}</span>}
+                {m.term && <span className="pill brand" style={{ alignSelf: 'flex-start' }}>{tr('账期：')}{describeTerm(m.term)}</span>}
                 <span className="xs muted">
                   {m.defaultCategory ? `${categoryLabel(m.defaultCategory)} · ` : ''}
-                  {m.repeat ? `${describeRepeat(m.repeat)}重复 · ` : m.recurring ? '每月重复 · ' : ''}
-                  {count(m.id)} 笔账单{unpaid(m.id) ? ` · 未付 R$ ${(unpaid(m.id) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
-                  {m.defaultAccountId ? ` · 默认账号：${accounts.find((a) => a.id === m.defaultAccountId)?.label ?? '（已删除）'}` : ''}
-                  {m.aliases.length ? ` · 别名：${m.aliases.join('、')}` : ''}
+                  {m.repeat ? tr('{0}重复 · ', describeRepeat(m.repeat)) : m.recurring ? tr('每月重复 · ') : ''}
+                  {count(m.id)} {tr('笔账单')}{unpaid(m.id) ? tr(' · 未付 R$ {0}', (unpaid(m.id) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })) : ''}
+                  {m.defaultAccountId ? tr(' · 默认账号：{0}', accounts.find((a) => a.id === m.defaultAccountId)?.label ?? tr('（已删除）')) : ''}
+                  {m.aliases.length ? tr(' · 别名：{0}', m.aliases.join(tr('、'))) : ''}
                 </span>
               </button>
               {m.active && type === 'supplier' && settings.defaultMerchantId !== m.id && (
                 <button className="btn btn-ghost btn-sm" onClick={() => saveSettings({ defaultMerchantId: m.id })}>
-                  设默认
+                  {tr('设默认')}
                 </button>
               )}
-              <button className="btn btn-sm iconbtn" aria-label={`编辑 ${m.name}`} onClick={() => setEdit(m)}>
+              <button className="btn btn-sm iconbtn" aria-label={tr('编辑 {0}', m.name)} onClick={() => setEdit(m)}>
                 <IEdit />
               </button>
             </div>
@@ -131,7 +132,7 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
 type TermKind = 'none' | 'days' | 'monthDay' | 'installments';
 
 function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; initial: Merchant | null; onClose: () => void }) {
-  const word = type === 'payee' ? '缴费单位' : '商家';
+  const word = type === 'payee' ? tr('缴费单位') : tr('商家');
   const t0 = initial?.term ?? null;
   const [termKind, setTermKind] = useState<TermKind>(t0?.kind ?? 'none');
   const [days, setDays] = useState(t0?.kind === 'days' ? String(t0.days) : '30');
@@ -154,11 +155,11 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
     return { kind: 'monthDay', day: Number(mDay), monthOffset: Number(mOff), cutoffDay: cutoff.trim() ? Number(cutoff) : null };
   };
   const termNow = buildTerm();
-  const termErr = termNow === 'invalid' ? '账期格式不正确' : validateTerm(termNow);
+  const termErr = termNow === 'invalid' ? tr('账期格式不正确') : validateTerm(termNow);
   const { merchants, accounts, bills, repo, guard, reload, settings, saveSettings, requireFeature } = useStore();
   const fb = useFeedback();
   const [name, setName] = useState(initial?.name ?? '');
-  const [aliases, setAliases] = useState(initial?.aliases.join('，') ?? '');
+  const [aliases, setAliases] = useState(initial?.aliases.join(tr('，')) ?? '');
   const [acc, setAcc] = useState(initial?.defaultAccountId ?? '');
   const [err, setErr] = useState<string | null>(null);
   const [color, setColor] = useState<number>(initial ? colorSlot(initial) : nextSlot(merchants));
@@ -167,12 +168,12 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
   const save = async () => {
     if (!requireFeature('edit')) return;
     const n = name.trim();
-    if (!n) return setErr(`请填写${word}名称`);
+    if (!n) return setErr(tr('请填写{0}名称', word));
     const term = buildTerm();
-    if (term === 'invalid' || termErr) return setErr(termErr ?? '账期格式不正确');
+    if (term === 'invalid' || termErr) return setErr(termErr ?? tr('账期格式不正确'));
     const al = aliases.split(/[,，;；\n]/).map((s) => s.trim()).filter(Boolean);
     const clash = merchants.find((m) => m.id !== initial?.id && (m.type ?? 'supplier') === type && [m.name, ...m.aliases].some((x) => norm(x) === norm(n) || al.some((a) => norm(a) === norm(x))));
-    if (clash) return setErr(`名称或别名与「${clash.name}」${clash.active ? '' : '（已停用）'}重复，请修改或直接使用已有商家`);
+    if (clash) return setErr(tr('名称或别名与「{0}」{1}重复，请修改或直接使用已有商家', clash.name, clash.active ? '' : tr('（已停用）')));
     const m: Merchant = {
       id: initial?.id ?? uuid(),
       name: n,
@@ -190,7 +191,7 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
     };
     await guard(() => repo.putMerchant(m));
     await reload();
-    fb.toast(initial ? `${word}已更新（历史账单保留原名称快照）` : `已新增${word}`);
+    fb.toast(initial ? tr('{0}已更新（历史账单保留原名称快照）', word) : tr('已新增{0}', word));
     onClose();
   };
 
@@ -199,23 +200,23 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
     await guard(() => repo.putMerchant({ ...initial, active: !initial.active, updatedAt: nowISO() }));
     if (initial.active && settings.defaultMerchantId === initial.id) await saveSettings({ defaultMerchantId: null });
     await reload();
-    fb.toast(initial.active ? '已停用，历史账单不受影响' : '已重新启用');
+    fb.toast(initial.active ? tr('已停用，历史账单不受影响') : tr('已重新启用'));
     onClose();
   };
 
   const remove = async () => {
     if (!initial) return;
     const ok = await fb.confirm({
-      title: `删除${word}「${initial.name}」？`,
+      title: tr('删除{0}「{1}」？', word, initial.name),
       body: (
         <>
           <p>
-            有 <b>{affected}</b> 笔账单关联到此{word}。删除后这些账单仍显示保存时的名称快照。
+            {tr('有')} <b>{affected}</b> {tr('笔账单关联到此')}{word}{tr('。删除后这些账单仍显示保存时的名称快照。')}
           </p>
-          <p className="muted">推荐使用「停用」代替删除。</p>
+          <p className="muted">{tr('推荐使用「停用」代替删除。')}</p>
         </>
       ),
-      confirmLabel: '仍然删除',
+      confirmLabel: tr('仍然删除'),
       danger: true,
     });
     if (!ok) return;
@@ -226,19 +227,19 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
   };
 
   return (
-    <Modal title={initial ? `编辑${word}` : `新增${word}`} onClose={onClose}>
+    <Modal title={initial ? tr('编辑{0}', word) : tr('新增{0}', word)} onClose={onClose}>
       <div className="field">
-        <label htmlFor="m-name">名称</label>
+        <label htmlFor="m-name">{tr('名称')}</label>
         <input id="m-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       </div>
       <div className="field">
-        <label htmlFor="m-alias">别名（用逗号分隔）</label>
-        <input id="m-alias" className="input" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder={type === 'payee' ? '如：Enel SP，Eletropaulo' : '票据上的写法，如：AGOLD，黄筹'} />
-        <span className="hint">识别时会用名称和别名自动匹配。</span>
+        <label htmlFor="m-alias">{tr('别名（用逗号分隔）')}</label>
+        <input id="m-alias" className="input" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder={type === 'payee' ? tr('如：Enel SP，Eletropaulo') : tr('票据上的写法，如：AGOLD，黄筹')} />
+        <span className="hint">{tr('识别时会用名称和别名自动匹配。')}</span>
       </div>
       {type === 'payee' && (
         <div className="field">
-          <span className="label">默认缴费类型</span>
+          <span className="label">{tr('默认缴费类型')}</span>
           <div className="qchips">
             {EXPENSE_CATEGORIES.map((c) => (
               <button key={c.id} type="button" aria-pressed={cat === c.id} style={cat === c.id ? { background: 'var(--brand)', color: 'var(--brand-ink)', borderColor: 'var(--brand)' } : undefined} onClick={() => setCat(cat === c.id ? null : c.id)}>
@@ -249,41 +250,41 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
         </div>
       )}
       <div className="field">
-        <span className="flabel">识别颜色</span>
-        <div className="swatches" role="radiogroup" aria-label="识别颜色">
+        <span className="flabel">{tr('识别颜色')}</span>
+        <div className="swatches" role="radiogroup" aria-label={tr('识别颜色')}>
           {MERCHANT_COLORS.map((c, i) => (
             <button key={c} type="button" role="radio" aria-checked={color === i} aria-label={c} className={`swatch mc-${i}`} onClick={() => setColor(i)}>
               {color === i ? '✓' : ''}
             </button>
           ))}
         </div>
-        <span className="hint">首页和账单里用这个颜色区分{word}。</span>
+        <span className="hint">{tr('首页和账单里用这个颜色区分')}{word}{tr('。')}</span>
       </div>
       <div className="field">
-        <label htmlFor="m-repeat">默认重复周期</label>
+        <label htmlFor="m-repeat">{tr('默认重复周期')}</label>
         <select id="m-repeat" className="input" value={repeatK} onChange={(e) => setRepeatK(e.target.value)}>
-          <option value="none">不重复</option>
+          <option value="none">{tr('不重复')}</option>
           {REPEAT_PRESETS.map((p) => (
             <option key={p.key} value={p.key}>
               {p.label}
             </option>
           ))}
         </select>
-        <span className="hint">选这个{word}记账时自动带出；付款后自动生成下一期。</span>
+        <span className="hint">{tr('选这个')}{word}{tr('记账时自动带出；付款后自动生成下一期。')}</span>
       </div>
       <div className="field">
-        <label htmlFor="m-term">{type === 'payee' ? '固定缴费日' : '固定账期'}</label>
+        <label htmlFor="m-term">{type === 'payee' ? tr('固定缴费日') : tr('固定账期')}</label>
         <select id="m-term" className="input" value={termKind} onChange={(e) => setTermKind(e.target.value as TermKind)}>
-          <option value="none">不固定（每次手动填写）</option>
-          <option value="days">开单后 N 天</option>
-          <option value="monthDay">每月固定日期</option>
-          {type === 'supplier' && <option value="installments">分期付款（如 30/60/90 天）</option>}
+          <option value="none">{tr('不固定（每次手动填写）')}</option>
+          <option value="days">{tr('开单后 N 天')}</option>
+          <option value="monthDay">{tr('每月固定日期')}</option>
+          {type === 'supplier' && <option value="installments">{tr('分期付款（如 30/60/90 天）')}</option>}
         </select>
         {termKind === 'days' && (
           <div className="row">
-            <span className="small">开单后</span>
-            <input className="input num" style={{ width: 90 }} inputMode="numeric" aria-label="天数" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} />
-            <span className="small">天付款</span>
+            <span className="small">{tr('开单后')}</span>
+            <input className="input num" style={{ width: 90 }} inputMode="numeric" aria-label={tr('天数')} value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} />
+            <span className="small">{tr('天付款')}</span>
             <div className="qchips">
               {[7, 15, 21, 28, 30, 45, 60].map((d) => (
                 <button key={d} type="button" onClick={() => setDays(String(d))}>
@@ -296,24 +297,24 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
         {termKind === 'monthDay' && (
           <div className="stack" style={{ gap: 8 }}>
             <div className="row">
-              <select className="input" style={{ width: 'auto' }} aria-label="月份" value={mOff} onChange={(e) => setMOff(e.target.value)}>
-                <option value="0">当月</option>
-                <option value="1">次月</option>
-                <option value="2">隔一个月</option>
+              <select className="input" style={{ width: 'auto' }} aria-label={tr('月份')} value={mOff} onChange={(e) => setMOff(e.target.value)}>
+                <option value="0">{tr('当月')}</option>
+                <option value="1">{tr('次月')}</option>
+                <option value="2">{tr('隔一个月')}</option>
               </select>
-              <input className="input num" style={{ width: 80 }} inputMode="numeric" aria-label="几号" value={mDay} onChange={(e) => setMDay(e.target.value.replace(/\D/g, ''))} />
-              <span className="small">号付款</span>
+              <input className="input num" style={{ width: 80 }} inputMode="numeric" aria-label={tr('几号')} value={mDay} onChange={(e) => setMDay(e.target.value.replace(/\D/g, ''))} />
+              <span className="small">{tr('号付款')}</span>
             </div>
             <div className="row">
-              <span className="small">每月</span>
-              <input className="input num" style={{ width: 80 }} inputMode="numeric" aria-label="截单日" placeholder="可空" value={cutoff} onChange={(e) => setCutoff(e.target.value.replace(/\D/g, ''))} />
-              <span className="small">号截单（之后开的单再顺延一个月）</span>
+              <span className="small">{tr('每月')}</span>
+              <input className="input num" style={{ width: 80 }} inputMode="numeric" aria-label={tr('截单日')} placeholder={tr('可空')} value={cutoff} onChange={(e) => setCutoff(e.target.value.replace(/\D/g, ''))} />
+              <span className="small">{tr('号截单（之后开的单再顺延一个月）')}</span>
             </div>
           </div>
         )}
         {termKind === 'installments' && (
           <div className="row">
-            <input className="input mono" style={{ maxWidth: 200 }} aria-label="分期天数" value={inst} onChange={(e) => setInst(e.target.value)} placeholder="30/60/90" />
+            <input className="input mono" style={{ maxWidth: 200 }} aria-label={tr('分期天数')} value={inst} onChange={(e) => setInst(e.target.value)} placeholder="30/60/90" />
             <div className="qchips">
               {['30/60', '30/60/90', '28/56/84', '30/60/90/120'].map((v) => (
                 <button key={v} type="button" onClick={() => setInst(v)}>
@@ -327,14 +328,14 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
           <span className="err">{termErr}</span>
         ) : termNow && termNow !== 'invalid' ? (
           <span className="hint ok-hint">
-            {describeTerm(termNow)} · 例如今天开单 → 到期 {computeDueDates(termNow, todayLocal()).map(formatBR).join('、')}
+            {describeTerm(termNow)} {tr('· 例如今天开单 → 到期')} {computeDueDates(termNow, todayLocal()).map(formatBR).join(tr('、'))}
           </span>
         ) : null}
       </div>
       <div className="field">
-        <label htmlFor="m-acc">默认付款账号</label>
+        <label htmlFor="m-acc">{tr('默认付款账号')}</label>
         <select id="m-acc" className="input" value={acc} onChange={(e) => setAcc(e.target.value)}>
-          <option value="">（不指定，用全局默认）</option>
+          <option value="">{tr('（不指定，用全局默认）')}</option>
           {accounts
             .filter((a) => a.active || a.id === acc)
             .map((a) => (
@@ -345,26 +346,26 @@ function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; 
             ))}
         </select>
       </div>
-      {err && <p className="err">{err}</p>}
+      {err && <p className="err">{tx(err)}</p>}
       <div className="row between">
         <div className="row" style={{ gap: 4 }}>
           {initial && (
             <>
               <button className="btn btn-sm" onClick={toggleActive}>
-                {initial.active ? '停用' : '启用'}
+                {initial.active ? tr('停用') : tr('启用')}
               </button>
               <button className="btn btn-sm btn-danger-text" onClick={remove}>
-                删除
+                {tr('删除')}
               </button>
             </>
           )}
         </div>
         <div className="row">
           <button className="btn btn-ghost" onClick={onClose}>
-            取消
+            {tr('取消')}
           </button>
           <button className="btn btn-primary" onClick={save}>
-            保存
+            {tr('保存')}
           </button>
         </div>
       </div>
@@ -382,22 +383,22 @@ function AccountList() {
   return (
     <section className="card stack">
       <div className="row between">
-        <h2>付款账号 · {accounts.filter((a) => a.active).length}</h2>
+        <h2>{tr('付款账号 ·')} {accounts.filter((a) => a.active).length}</h2>
         <button className="btn btn-primary btn-sm" onClick={() => setEdit('new')}>
           <IPlus />
-          新增账号
+          {tr('新增账号')}
         </button>
       </div>
       <label className="check" style={{ padding: 0 }}>
         <input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} />
-        <span className="small">显示已停用</span>
+        <span className="small">{tr('显示已停用')}</span>
       </label>
       {list.length === 0 ? (
         <div className="empty">
           <div className="art">
             <IWallet />
           </div>
-          <p>还没有付款账号。新增后，每笔账单都能记下用哪个账号付款。</p>
+          <p>{tr('还没有付款账号。新增后，每笔账单都能记下用哪个账号付款。')}</p>
         </div>
       ) : (
         <div className="list">
@@ -408,21 +409,21 @@ function AccountList() {
               </div>
               <div className="grow stack" style={{ gap: 2 }}>
                 <span className="t">
-                  {a.label} {settings.defaultAccountId === a.id && <span className="pill brand">默认</span>} {!a.active && <span className="pill neutral">已停用</span>}
+                  {a.label} {settings.defaultAccountId === a.id && <span className="pill brand">{tr('默认')}</span>} {!a.active && <span className="pill neutral">{tr('已停用')}</span>}
                 </span>
                 <span className="xs muted">
-                  {[ACCOUNT_TYPE_LABEL[a.type], a.bank, a.owner].filter(Boolean).join(' · ')} · {bills.filter((b) => b.accountId === a.id).length} 笔账单
+                  {[ACCOUNT_TYPE_LABEL[a.type], a.bank, a.owner].filter(Boolean).join(' · ')} · {bills.filter((b) => b.accountId === a.id).length} {tr('笔账单')}
                 </span>
                 {a.optionalPixHint && (
                   <span className="row" style={{ gap: 4 }}>
                     <span className="mono small">{reveal === a.id ? a.optionalPixHint : maskHint(a.optionalPixHint)}</span>
-                    <button className="btn btn-ghost btn-sm iconbtn" aria-label={reveal === a.id ? '隐藏' : '显示完整'} onClick={() => setReveal(reveal === a.id ? null : a.id)}>
+                    <button className="btn btn-ghost btn-sm iconbtn" aria-label={reveal === a.id ? tr('隐藏') : tr('显示完整')} onClick={() => setReveal(reveal === a.id ? null : a.id)}>
                       <IEye />
                     </button>
                     <button
                       className="btn btn-ghost btn-sm iconbtn"
-                      aria-label="复制"
-                      onClick={async () => fb.toast((await copyText(a.optionalPixHint)) ? '已复制，可以粘贴到银行 App' : '复制失败，请手动选择', { bad: false })}
+                      aria-label={tr('复制')}
+                      onClick={async () => fb.toast((await copyText(a.optionalPixHint)) ? tr('已复制，可以粘贴到银行 App') : tr('复制失败，请手动选择'), { bad: false })}
                     >
                       <ICopy />
                     </button>
@@ -431,10 +432,10 @@ function AccountList() {
               </div>
               {a.active && settings.defaultAccountId !== a.id && (
                 <button className="btn btn-ghost btn-sm" onClick={() => saveSettings({ defaultAccountId: a.id })}>
-                  设默认
+                  {tr('设默认')}
                 </button>
               )}
-              <button className="btn btn-sm iconbtn" aria-label={`编辑 ${a.label}`} onClick={() => setEdit(a)}>
+              <button className="btn btn-sm iconbtn" aria-label={tr('编辑 {0}', a.label)} onClick={() => setEdit(a)}>
                 <IEdit />
               </button>
             </div>
@@ -463,9 +464,9 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
   const save = async () => {
     if (!requireFeature('edit')) return;
     const label = f.label.trim();
-    if (!label) return setErr('请填写账号名称');
+    if (!label) return setErr(tr('请填写账号名称'));
     const clash = accounts.find((a) => a.id !== initial?.id && norm(a.label) === norm(label));
-    if (clash) return setErr(`已有同名账号「${clash.label}」${clash.active ? '' : '（已停用）'}，请换个名字，例如加上银行名`);
+    if (clash) return setErr(tr('已有同名账号「{0}」{1}，请换个名字，例如加上银行名', clash.label, clash.active ? '' : tr('（已停用）')));
     const a: PaymentAccount = {
       id: initial?.id ?? uuid(),
       label,
@@ -479,7 +480,7 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
     };
     await guard(() => repo.putAccount(a));
     await reload();
-    fb.toast(initial ? '账号已更新（历史账单保留原名称快照）' : '已新增账号');
+    fb.toast(initial ? tr('账号已更新（历史账单保留原名称快照）') : tr('已新增账号'));
     onClose();
   };
 
@@ -495,13 +496,13 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
     if (!initial) return;
     const usedBy = merchants.filter((m) => m.defaultAccountId === initial.id).length;
     const ok = await fb.confirm({
-      title: `删除账号「${initial.label}」？`,
+      title: tr('删除账号「{0}」？', initial.label),
       body: (
         <p>
-          有 <b>{affected}</b> 笔账单使用此账号{usedBy ? `，${usedBy} 个商家把它设为默认` : ''}。账单仍保留名称快照，PIX 信息会被清除。推荐改用「停用」。
+          {tr('有')} <b>{affected}</b> {tr('笔账单使用此账号')}{usedBy ? tr('，{0} 个商家把它设为默认', usedBy) : ''}{tr('。账单仍保留名称快照，PIX 信息会被清除。推荐改用「停用」。')}
         </p>
       ),
-      confirmLabel: '仍然删除',
+      confirmLabel: tr('仍然删除'),
       danger: true,
     });
     if (!ok) return;
@@ -512,14 +513,14 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
   };
 
   return (
-    <Modal title={initial ? '编辑付款账号' : '新增付款账号'} onClose={onClose}>
+    <Modal title={initial ? tr('编辑付款账号') : tr('新增付款账号')} onClose={onClose}>
       <div className="field">
-        <label htmlFor="a-label">名称</label>
-        <input id="a-label" className="input" value={f.label} onChange={(e) => up({ label: e.target.value })} placeholder="如：PIX 公司主账户" autoFocus />
+        <label htmlFor="a-label">{tr('名称')}</label>
+        <input id="a-label" className="input" value={f.label} onChange={(e) => up({ label: e.target.value })} placeholder={tr('如：PIX 公司主账户')} autoFocus />
       </div>
       <div className="grid2">
         <div className="field">
-          <label htmlFor="a-type">类型</label>
+          <label htmlFor="a-type">{tr('类型')}</label>
           <select id="a-type" className="input" value={f.type} onChange={(e) => up({ type: e.target.value as AccountType })}>
             {(Object.keys(ACCOUNT_TYPE_LABEL) as AccountType[]).map((t) => (
               <option key={t} value={t}>
@@ -529,39 +530,39 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
           </select>
         </div>
         <div className="field">
-          <label htmlFor="a-bank">银行</label>
+          <label htmlFor="a-bank">{tr('银行')}</label>
           <input id="a-bank" className="input" value={f.bank} onChange={(e) => up({ bank: e.target.value })} placeholder="Itaú / Nubank…" />
         </div>
       </div>
       <div className="field">
-        <label htmlFor="a-owner">户名</label>
+        <label htmlFor="a-owner">{tr('户名')}</label>
         <input id="a-owner" className="input" value={f.owner} onChange={(e) => up({ owner: e.target.value })} />
       </div>
       <div className="field">
-        <label htmlFor="a-pix">PIX 键 / 账号（可空）</label>
+        <label htmlFor="a-pix">{tr('PIX 键 / 账号（可空）')}</label>
         <input id="a-pix" className="input mono" value={f.optionalPixHint} onChange={(e) => up({ optionalPixHint: e.target.value })} autoComplete="off" />
-        <span className="hint">仅在付款确实需要时填写。只保存在本机，列表中默认隐藏，导出备份时会包含。</span>
+        <span className="hint">{tr('仅在付款确实需要时填写。只保存在本机，列表中默认隐藏，导出备份时会包含。')}</span>
       </div>
-      {err && <p className="err">{err}</p>}
+      {err && <p className="err">{tx(err)}</p>}
       <div className="row between">
         <div className="row" style={{ gap: 4 }}>
           {initial && (
             <>
               <button className="btn btn-sm" onClick={toggleActive}>
-                {initial.active ? '停用' : '启用'}
+                {initial.active ? tr('停用') : tr('启用')}
               </button>
               <button className="btn btn-sm btn-danger-text" onClick={remove}>
-                删除
+                {tr('删除')}
               </button>
             </>
           )}
         </div>
         <div className="row">
           <button className="btn btn-ghost" onClick={onClose}>
-            取消
+            {tr('取消')}
           </button>
           <button className="btn btn-primary" onClick={save}>
-            保存
+            {tr('保存')}
           </button>
         </div>
       </div>
@@ -593,12 +594,12 @@ function MerchantSheet({ merchant, onClose, onEdit }: { merchant: Merchant; onCl
   return (
     <Modal title={merchant.name} onClose={onClose}>
       <div className="mstats">
-        {kv('还要付', formatBRL(s.openCents), `${s.openCount} 笔${s.overdueCount ? ` · 逾期 ${s.overdueCount}` : ''}`)}
-        {kv('累计已付', formatBRL(s.paidCents), `近 12 个月 ${formatBRL(s.last12Cents)}`)}
-        {kv('账单数', String(s.count), s.lastBill ? `最近 ${formatBR(s.lastBill.billDate)}` : undefined)}
-        {kv('平均账期', s.avgTermDays === null ? '—' : `${s.avgTermDays} 天`, merchant.term ? `设置：${describeTerm(merchant.term)}` : '未设置固定账期')}
-        {kv('按时付清', s.onTimePct === null ? '—' : `${s.onTimePct}%`, s.avgPayDays === null ? undefined : `平均开单后 ${s.avgPayDays} 天付清`)}
-        {kv('下一笔到期', s.nextDue ? formatBR(s.nextDue.dueDate) : '—', s.nextDue ? formatBRL(s.nextDue.totalCents) : '没有未付账单')}
+        {kv(tr('还要付'), formatBRL(s.openCents), tr('{0} 笔{1}', s.openCount, s.overdueCount ? tr(' · 逾期 {0}', s.overdueCount) : ''))}
+        {kv(tr('累计已付'), formatBRL(s.paidCents), tr('近 12 个月 {0}', formatBRL(s.last12Cents)))}
+        {kv(tr('账单数'), String(s.count), s.lastBill ? tr('最近 {0}', formatBR(s.lastBill.billDate)) : undefined)}
+        {kv(tr('平均账期'), s.avgTermDays === null ? '—' : tr('{0} 天', s.avgTermDays), merchant.term ? tr('设置：{0}', describeTerm(merchant.term)) : tr('未设置固定账期'))}
+        {kv(tr('按时付清'), s.onTimePct === null ? '—' : `${s.onTimePct}%`, s.avgPayDays === null ? undefined : tr('平均开单后 {0} 天付清', s.avgPayDays))}
+        {kv(tr('下一笔到期'), s.nextDue ? formatBR(s.nextDue.dueDate) : '—', s.nextDue ? formatBRL(s.nextDue.totalCents) : tr('没有未付账单'))}
       </div>
       {s.bills.length > 0 && (
         <div className="gcard" style={{ boxShadow: 'none', border: '1px solid var(--line)' }}>
@@ -611,22 +612,22 @@ function MerchantSheet({ merchant, onClose, onEdit }: { merchant: Merchant; onCl
       )}
       <div className="row">
         <button className="btn btn-primary" onClick={() => go({ name: 'bills', filter: `q=${encodeURIComponent(merchant.name)}` })}>
-          查看全部账单
+          {tr('查看全部账单')}
         </button>
         <button
           className="btn"
           disabled={!s.openCount}
           onClick={async () => {
             const ok = await copyText(unpaidStatement(merchant.name, bills, merchant.id, today));
-            fb.toast(ok ? '未付清单已复制，可直接发给对方' : '复制失败', { bad: !ok });
+            fb.toast(ok ? tr('未付清单已复制，可直接发给对方') : tr('复制失败'), { bad: !ok });
           }}
         >
           <ICopy />
-          复制未付清单
+          {tr('复制未付清单')}
         </button>
         <button className="btn" onClick={onEdit}>
           <IEdit />
-          编辑资料
+          {tr('编辑资料')}
         </button>
       </div>
     </Modal>

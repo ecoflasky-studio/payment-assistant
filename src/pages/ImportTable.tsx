@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { useFeedback } from '../ui/feedback';
@@ -27,7 +28,7 @@ export function ImportTable() {
   const run = async () => {
     if (!plan) return;
     const rows = plan.rows.filter((r) => r.bill && !r.duplicateOf);
-    if (!rows.length) return fb.toast('没有可导入的行', { bad: true });
+    if (!rows.length) return fb.toast(tr('没有可导入的行'), { bad: true });
     setBusy(true);
     try {
       const newM: Merchant[] = [];
@@ -49,7 +50,7 @@ export function ImportTable() {
       });
       if (!ok) return;
       await reload();
-      fb.toast(`已导入 ${list.length} 笔账单${newM.length ? `，新建 ${newM.length} 个商家` : ''}`, { action: { label: '查看账单', run: () => go({ name: 'bills' }) } });
+      fb.toast(tr('已导入 {0} 笔账单{1}', list.length, newM.length ? tr('，新建 {0} 个商家', newM.length) : ''), { action: { label: tr('查看账单'), run: () => go({ name: 'bills' }) } });
       setText('');
       setFields(null);
     } finally {
@@ -59,14 +60,14 @@ export function ImportTable() {
 
   return (
     <section className="card stack" aria-labelledby="h-imp">
-      <h2 id="h-imp">从表格批量导入账单</h2>
+      <h2 id="h-imp">{tr('从表格批量导入账单')}</h2>
       <p className="small muted" style={{ margin: 0 }}>
-        从 Excel、Google 表格里复制整块内容（含表头）粘贴进来，或选择 .csv 文件。支持中文和葡文表头：商家/Fornecedor、单号/NF、开单/Emissão、到期/Vencimento、金额/Valor、付款账号、分类、备注。
+        {tr('从 Excel、Google 表格里复制整块内容（含表头）粘贴进来，或选择 .csv 文件。支持中文和葡文表头：商家/Fornecedor、单号/NF、开单/Emissão、到期/Vencimento、金额/Valor、付款账号、分类、备注。')}
       </p>
       <div className="row">
         <label className="btn">
           <IUpload />
-          选择 CSV 文件
+          {tr('选择 CSV 文件')}
           <input
             type="file"
             accept=".csv,text/csv,text/plain"
@@ -83,16 +84,16 @@ export function ImportTable() {
         <button
           className="btn btn-sm"
           onClick={async () => {
-            const r = await saveFile('账单导入模板.csv', IMPORT_TEMPLATE, 'text/csv;charset=utf-8');
-            if (r.outcome === 'saved') fb.toast('模板已下载，填好后再导入');
+            const r = await saveFile(tr('账单导入模板.csv'), tx(IMPORT_TEMPLATE), 'text/csv;charset=utf-8');
+            if (r.outcome === 'saved') fb.toast(tr('模板已下载，填好后再导入'));
           }}
         >
           <IDownload />
-          下载模板
+          {tr('下载模板')}
         </button>
       </div>
       <div className="field">
-        <label htmlFor="imp-text">或直接粘贴</label>
+        <label htmlFor="imp-text">{tr('或直接粘贴')}</label>
         <textarea
           id="imp-text"
           className="input"
@@ -102,7 +103,7 @@ export function ImportTable() {
             setText(e.target.value);
             setFields(null);
           }}
-          placeholder={'商家;单号;开单日期;到期日期;金额\nLoja Exemplo;0042;01/09/2026;01/10/2026;1.234,56'}
+          placeholder={tr('商家;单号;开单日期;到期日期;金额\nLoja Exemplo;0042;01/09/2026;01/10/2026;1.234,56')}
           spellCheck={false}
         />
       </div>
@@ -111,19 +112,19 @@ export function ImportTable() {
         <>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             <span className="pill paid">
-              <ICheck width={13} height={13} /> 可导入 {plan.okCount}
+              <ICheck width={13} height={13} /> {tr('可导入')} {plan.okCount}
             </span>
-            {plan.dupCount > 0 && <span className="pill dueSoon">重复跳过 {plan.dupCount}</span>}
-            {plan.badCount > 0 && <span className="pill overdue">有问题 {plan.badCount}</span>}
+            {plan.dupCount > 0 && <span className="pill dueSoon">{tr('重复跳过')} {plan.dupCount}</span>}
+            {plan.badCount > 0 && <span className="pill overdue">{tr('有问题')} {plan.badCount}</span>}
           </div>
           <div className="impcols">
             {plan.fields.map((f, i) => (
               <label key={i} className="impcol">
-                <span className="xs muted">第 {i + 1} 列{plan.headers[i] && plan.headers[i] !== f ? `（${plan.headers[i]}）` : ''}</span>
+                <span className="xs muted">{tr('第 {0} 列', i + 1)}{plan.headers[i] && plan.headers[i] !== f ? tr('（{0}）', plan.headers[i]) : ''}</span>
                 <select
                   className="input"
                   value={f}
-                  aria-label={`第 ${i + 1} 列对应字段`}
+                  aria-label={tr('第 {0} 列对应字段', i + 1)}
                   onChange={(e) => {
                     const next = [...plan.fields];
                     next[i] = e.target.value as Field;
@@ -132,7 +133,7 @@ export function ImportTable() {
                 >
                   {(Object.keys(FIELD_LABEL) as Field[]).map((k) => (
                     <option key={k} value={k}>
-                      {FIELD_LABEL[k]}
+                      {tx(FIELD_LABEL[k])}
                     </option>
                   ))}
                 </select>
@@ -143,11 +144,11 @@ export function ImportTable() {
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>行</th>
-                  <th>商家</th>
-                  <th>到期</th>
-                  <th className="r">金额</th>
-                  <th>状态</th>
+                  <th>{tr('行')}</th>
+                  <th>{tr('商家')}</th>
+                  <th>{tr('到期')}</th>
+                  <th className="r">{tr('金额')}</th>
+                  <th>{tr('状态')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,20 +157,20 @@ export function ImportTable() {
                     <td className="num">{r.index}</td>
                     <td>
                       {r.bill?.merchantNameSnapshot || r.merchantName || '—'}
-                      {r.bill && !r.merchantId && <span className="tag" style={{ marginLeft: 4 }}>新商家</span>}
+                      {r.bill && !r.merchantId && <span className="tag" style={{ marginLeft: 4 }}>{tr('新商家')}</span>}
                     </td>
                     <td className="num">{r.bill ? formatBR(r.bill.dueDate) : '—'}</td>
                     <td className="r num">{r.bill ? formatBRL(r.bill.totalCents) : '—'}</td>
                     <td className={r.issues.length ? 'err' : r.duplicateOf ? '' : 'ok'}>
                       {r.issues.length ? (
                         <>
-                          <IX width={13} height={13} /> {r.issues.join('；')}
+                          <IX width={13} height={13} /> {r.issues.map(tx).join(tr('；'))}
                         </>
                       ) : r.duplicateOf ? (
-                        `已存在（${r.duplicateOf.orderNumber ? `单号 ${r.duplicateOf.orderNumber}` : formatBR(r.duplicateOf.dueDate)}），跳过`
+                        tr('已存在（{0}），跳过', r.duplicateOf.orderNumber ? tr('单号 {0}', r.duplicateOf.orderNumber) : formatBR(r.duplicateOf.dueDate))
                       ) : (
                         <>
-                          <ICheck width={13} height={13} /> 可导入
+                          <ICheck width={13} height={13} /> {tr('可导入')}
                         </>
                       )}
                     </td>
@@ -178,12 +179,12 @@ export function ImportTable() {
               </tbody>
             </table>
           </div>
-          {plan.rows.length > 30 && <p className="xs muted" style={{ margin: 0 }}>只显示前 30 行，导入时会处理全部 {plan.rows.length} 行。</p>}
+          {plan.rows.length > 30 && <p className="xs muted" style={{ margin: 0 }}>{tr('只显示前 30 行，导入时会处理全部')} {plan.rows.length} {tr('行。')}</p>}
           {plan.newMerchants.length > 0 && (
             <label className="check" style={{ padding: 0 }}>
               <input type="checkbox" checked={createMissing} onChange={(e) => setCreateMissing(e.target.checked)} />
               <span>
-                自动新建 {plan.newMerchants.length} 个商家：{plan.newMerchants.slice(0, 3).join('、')}
+                {tr('自动新建')} {plan.newMerchants.length} {tr('个商家：')}{plan.newMerchants.slice(0, 3).join(tr('、'))}
                 {plan.newMerchants.length > 3 ? '…' : ''}
               </span>
             </label>
@@ -191,10 +192,10 @@ export function ImportTable() {
           <div className="row">
             <button className="btn btn-primary" disabled={busy || !plan.okCount} onClick={run}>
               {busy ? <span className="spin" /> : <ICheck />}
-              导入 {plan.okCount} 笔账单
+              {tr('导入')} {plan.okCount} {tr('笔账单')}
             </button>
             <button className="btn btn-ghost" onClick={() => { setText(''); setFields(null); }}>
-              清空
+              {tr('清空')}
             </button>
           </div>
         </>

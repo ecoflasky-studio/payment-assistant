@@ -1,4 +1,5 @@
 /** 浏览器能力封装：文件保存、复制、通知 */
+import { tr } from '../i18n';
 import { getDownloads } from './ocr/providers';
 
 export type SaveOutcome = 'saved' | 'shared' | 'declined' | 'unsupported';
@@ -13,7 +14,7 @@ export async function saveFile(filename: string, data: string, mime: string): Pr
     } catch (e: any) {
       if (e?.code === 'declined') return { outcome: 'declined' };
       if (e?.code !== 'rejected_extension' && e?.code !== 'extension_not_enabled') {
-        if (e?.code === 'rate_limited') return { outcome: 'declined', message: '已有一个保存确认框，请先处理' };
+        if (e?.code === 'rate_limited') return { outcome: 'declined', message: tr('已有一个保存确认框，请先处理') };
       }
       // 继续尝试分享
     }
@@ -42,7 +43,7 @@ export async function saveFile(filename: string, data: string, mime: string): Pr
       return { outcome: 'saved' };
     } catch {}
   }
-  return { outcome: 'unsupported', message: '当前环境不允许直接下载此类文件，已提供复制方式' };
+  return { outcome: 'unsupported', message: tr('当前环境不允许直接下载此类文件，已提供复制方式') };
 }
 
 export async function copyText(text: string): Promise<boolean> {

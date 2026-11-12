@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export interface ComboItem {
@@ -128,7 +129,7 @@ export function Combobox(props: {
         style={{ paddingRight: value ? 44 : undefined }}
       />
       {value && !open && (
-        <button type="button" className="clear" aria-label="清除选择" onClick={() => onChange(null)}>
+        <button type="button" className="clear" aria-label={tr('清除选择')} onClick={() => onChange(null)}>
           ×
         </button>
       )}
@@ -146,17 +147,17 @@ export function Combobox(props: {
               onClick={() => pick(i)}
             >
               <span>
-                {r.label} {r.isDefault && <span className="pill brand xs">默认</span>}
+                {r.label} {r.isDefault && <span className="pill brand xs">{tr('默认')}</span>}
               </span>
               {r.sub && <span className="sub">{r.sub}</span>}
             </div>
           ))}
           {canCreate && (
             <div id={`${listId}-opt-${results.length}`} role="option" aria-selected={active === results.length} className="opt add" onMouseEnter={() => setActive(results.length)} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(results.length)}>
-              {busy ? '保存中…' : `＋ ${props.createLabel ?? '新增并保存'}「${q.trim()}」`}
+              {busy ? tr('保存中…') : tr('＋ {0}「{1}」', props.createLabel ?? tr('新增并保存'), q.trim())}
             </div>
           )}
-          {!results.length && !canCreate && <div className="opt muted">{q ? '已存在同名项（可能已停用，请到「资料」页启用）' : '还没有记录，输入名称即可新增'}</div>}
+          {!results.length && !canCreate && <div className="opt muted">{q ? tr('已存在同名项（可能已停用，请到「资料」页启用）') : tr('还没有记录，输入名称即可新增')}</div>}
         </div>
       )}
     </div>

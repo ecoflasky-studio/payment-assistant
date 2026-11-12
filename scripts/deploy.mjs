@@ -92,11 +92,15 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   ok('数据库已就绪');
 
   step(3, '登录设置');
-  const auth = { mailer_autoconfirm: true, external_email_enabled: true, password_min_length: 8 };
+  // 验证码邮件：中葡英三语一封（Supabase 一个项目只能有一套模板）
+  const codeMail = await readFile(path.join(root, 'supabase/email/code.html'), 'utf8').catch(() => null);
+  const subject = '账期助手验证码 · Código · Code: {{ .Token }}';
+  const auth = { mailer_autoconfirm: true, external_email_enabled: true, password_min_length: 8, mailer_otp_exp: 600 };
+  if (codeMail) Object.assign(auth, { mailer_subjects_magic_link: subject, mailer_templates_magic_link_content: codeMail, mailer_subjects_confirmation: subject, mailer_templates_confirmation_content: codeMail });
   if (site) Object.assign(auth, { site_url: site, uri_allow_list: site });
   try {
     await api('PATCH', `/projects/${ref}/config/auth`, auth);
-    ok(`邮箱 + 密码注册即登录（不发确认邮件）${site ? `；网站地址 ${site}` : ''}`);
+    ok(`邮箱 + 密码注册即登录（不发确认邮件）${codeMail ? '；验证码邮件改为中葡英三语' : ''}${site ? `；网站地址 ${site}` : ''}`);
   } catch (e) {
     // 这一步只是改两个开关，令牌权限不够时可以在控制台手动做，不中断整个部署
     if (!e.permission) throw e;

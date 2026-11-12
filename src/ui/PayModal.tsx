@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { Bill } from '../lib/types';
 import { Modal } from './feedback';
@@ -38,19 +39,19 @@ export function PayModal({ bill, onClose, onSave }: { bill: Bill; onClose: () =>
   const [shrinking, setShrinking] = useState(false);
   const parsed = parseBRL(amount);
   const iso = parseBRDate(date).iso;
-  const err = !parsed.cents || parsed.cents <= 0 ? '请填写付款金额' : parsed.cents > left ? `不能超过还差的 ${formatBRL(left)}` : !iso ? '付款日期不正确' : null;
+  const err = !parsed.cents || parsed.cents <= 0 ? tr('请填写付款金额') : parsed.cents > left ? tr('不能超过还差的 {0}', formatBRL(left)) : !iso ? tr('付款日期不正确') : null;
   const quick = [
-    { label: '全部', cents: left },
-    { label: '一半', cents: Math.round(left / 2) },
+    { label: tr('全部'), cents: left },
+    { label: tr('一半'), cents: Math.round(left / 2) },
     { label: '30%', cents: Math.round(left * 0.3) },
   ];
   return (
-    <Modal title={`记一笔付款 · ${billTitle(bill)}`} onClose={onClose}>
+    <Modal title={tr('记一笔付款 · {0}', billTitle(bill))} onClose={onClose}>
       <p className="small muted" style={{ margin: 0 }}>
-        账单 {formatBRL(bill.totalCents)}，还差 <b style={{ color: 'var(--ink)' }}>{formatBRL(left)}</b>
+        {tr('账单')} {formatBRL(bill.totalCents)}{tr('，还差')} <b style={{ color: 'var(--ink)' }}>{formatBRL(left)}</b>
       </p>
       <div className="field">
-        <label htmlFor="pay-amount">本次付款金额 R$</label>
+        <label htmlFor="pay-amount">{tr('本次付款金额 R$')}</label>
         <input id="pay-amount" className="input num big-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         <div className="row" style={{ gap: 6 }}>
           {quick.map((q) => (
@@ -61,26 +62,26 @@ export function PayModal({ bill, onClose, onSave }: { bill: Bill; onClose: () =>
         </div>
       </div>
       <div className="field">
-        <label htmlFor="pay-date">付款日期</label>
-        <DateField id="pay-date" title="选择付款日期" value={date} today={today} onChange={setDate} />
+        <label htmlFor="pay-date">{tr('付款日期')}</label>
+        <DateField id="pay-date" title={tr('选择付款日期')} value={date} today={today} onChange={setDate} />
       </div>
       <div className="field">
-        <label htmlFor="pay-note">备注（可空）</label>
-        <input id="pay-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="如：定金、尾款、PIX" maxLength={60} />
+        <label htmlFor="pay-note">{tr('备注（可空）')}</label>
+        <input id="pay-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={tr('如：定金、尾款、PIX')} maxLength={60} />
       </div>
       <div className="field">
-        <span className="flabel">付款凭证（可选）</span>
+        <span className="flabel">{tr('付款凭证（可选）')}</span>
         {receipt ? (
           <div className="row">
-            <img src={receipt.url} alt="付款凭证预览" className="receipt-thumb" />
+            <img src={receipt.url} alt={tr('付款凭证预览')} className="receipt-thumb" />
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => { URL.revokeObjectURL(receipt.url); setReceipt(null); }}>
-              移除
+              {tr('移除')}
             </button>
           </div>
         ) : (
           <label className="btn btn-sm" style={{ alignSelf: 'flex-start' }}>
             {shrinking ? <span className="spin" /> : <ICamera />}
-            拍照 / 选截图
+            {tr('拍照 / 选截图')}
             <input
               type="file"
               accept="image/*"
@@ -100,15 +101,15 @@ export function PayModal({ bill, onClose, onSave }: { bill: Bill; onClose: () =>
             />
           </label>
         )}
-        <span className="hint">PIX 回单、转账截图等，只保存在这台设备。</span>
+        <span className="hint">{tr('PIX 回单、转账截图等，只保存在这台设备。')}</span>
       </div>
-      {err && <p className="small err" style={{ margin: 0 }}>{err}</p>}
+      {err && <p className="small err" style={{ margin: 0 }}>{tx(err)}</p>}
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-ghost" onClick={onClose}>
-          取消
+          {tr('取消')}
         </button>
         <button className="btn btn-primary" disabled={!!err} onClick={() => !err && onSave(parsed.cents!, iso!, note.trim() || undefined, receipt?.blob ?? null)}>
-          保存付款
+          {tr('保存付款')}
         </button>
       </div>
     </Modal>

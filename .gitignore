@@ -10,3 +10,5 @@ e2e/*.png
 e2e/e2e-result.txt
 dist-app
 store/raw
+scripts/i18n-keys.json
+scripts/i18n-runtime-keys.json

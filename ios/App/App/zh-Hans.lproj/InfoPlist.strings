@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "账期助手";
+"NSCameraUsageDescription" = "拍摄订单、Boleto 和缴费单，用来识别金额和到期日。";
+"NSPhotoLibraryUsageDescription" = "从相册选择单据图片或付款凭证。";
+"NSFaceIDUsageDescription" = "用面容 ID 解锁账期助手，保护你的账单。";

@@ -1,4 +1,5 @@
 /** 每月流水：按实际付款日期（圣保罗时间）统计支出，支持一笔账单分几次付 */
+import { tr } from '../i18n';
 import type { Bill } from './types';
 import { addDays, formatBR, weekdayCN, shiftMonth } from './dates';
 import { billTitle, categoryLabel, isExpense } from './expense';
@@ -87,11 +88,11 @@ export function shareBy(events: PaymentEvent[], by: 'merchant' | 'account' | 'ca
       key = b.merchantId ?? `n-${billTitle(b)}`;
       label = billTitle(b);
     } else if (by === 'account') {
-      key = b.accountId ?? `a-${b.accountLabelSnapshot || '未指定账号'}`;
-      label = b.accountLabelSnapshot || '未指定账号';
+      key = b.accountId ?? `a-${b.accountLabelSnapshot || tr('未指定账号')}`;
+      label = b.accountLabelSnapshot || tr('未指定账号');
     } else {
       key = isExpense(b) ? `c-${b.category ?? 'other'}` : 'supplier';
-      label = isExpense(b) ? categoryLabel(b.category ?? 'other') : '商家货款';
+      label = isExpense(b) ? categoryLabel(b.category ?? 'other') : tr('商家货款');
     }
     const e = map.get(key) ?? { key, label, cents: 0, count: 0, merchantId: by === 'merchant' ? b.merchantId : null, sample: b };
     e.cents += ev.cents;
@@ -123,7 +124,7 @@ export function ledgerByDay(events: PaymentEvent[]): DayLedger[] {
 /** 导出 CSV（分号分隔、逗号小数，巴西版 Excel 可直接打开） */
 export function flowCSV(events: PaymentEvent[]): string {
   const esc = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const head = ['付款日期', '商家/缴费单位', '类型', '分类', '单号', '开单日期', '到期日期', '付款账号', '本次付款(R$)', '账单总额(R$)', '状态'];
+  const head = [tr('付款日期'), tr('商家/缴费单位'), tr('类型'), tr('分类'), tr('单号'), tr('开单日期'), tr('到期日期'), tr('付款账号'), tr('本次付款(R$)'), tr('账单总额(R$)'), tr('状态')];
   const rows = [...events]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((e) => {
@@ -131,7 +132,7 @@ export function flowCSV(events: PaymentEvent[]): string {
       return [
         formatBR(e.date),
         billTitle(b),
-        isExpense(b) ? '日常缴费' : '商家货款',
+        isExpense(b) ? tr('日常缴费') : tr('商家货款'),
         isExpense(b) ? categoryLabel(b.category ?? 'other') : '',
         b.orderNumber || '',
         formatBR(b.billDate),
@@ -139,11 +140,11 @@ export function flowCSV(events: PaymentEvent[]): string {
         b.accountLabelSnapshot || '',
         centsToInput(e.cents),
         centsToInput(b.totalCents),
-        e.cents >= b.totalCents ? '一次付清' : e.settles ? '付清（分次）' : '部分付款',
+        e.cents >= b.totalCents ? tr('一次付清') : e.settles ? tr('付清（分次）') : tr('部分付款'),
       ];
     });
   const total = events.reduce((a, e) => a + e.cents, 0);
-  rows.push(['合计', '', '', '', '', '', '', '', centsToInput(total), '', '']);
+  rows.push([tr('合计'), '', '', '', '', '', '', '', centsToInput(total), '', '']);
   return '\ufeff' + [head, ...rows].map((r) => r.map((c) => esc(String(c))).join(';')).join('\r\n') + '\r\n';
 }
 
@@ -177,7 +178,7 @@ export function forecast(bills: Bill[], today: string, weeks = 6): Forecast {
     const from = addDays(today, i * 7);
     const to = addDays(today, i * 7 + 6);
     const list = unpaid.filter((b) => b.dueDate >= from && b.dueDate <= to);
-    out.weeks.push({ from, to, label: i === 0 ? '本周内' : `${formatBR(from).slice(0, 5)}起`, cents: list.reduce((a, b) => a + open(b), 0), count: list.length });
+    out.weeks.push({ from, to, label: i === 0 ? tr('本周内') : tr('{0}起', formatBR(from).slice(0, 5)), cents: list.reduce((a, b) => a + open(b), 0), count: list.length });
   }
   out.next7 = unpaid.filter((b) => b.dueDate >= today && b.dueDate <= addDays(today, 7)).reduce((a, b) => a + open(b), 0);
   out.next30 = unpaid.filter((b) => b.dueDate >= today && b.dueDate <= addDays(today, 30)).reduce((a, b) => a + open(b), 0);
@@ -187,17 +188,17 @@ export function forecast(bills: Bill[], today: string, weeks = 6): Forecast {
 /** 账单记录导出（T2）：每笔账单一行，Excel 可直接打开（分号分隔、带 BOM） */
 export function billsCSV(bills: Bill[], today: string): string {
   const esc = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const head = ['商家/缴费单位', '类型', '分类', '单号', '开单日期', '到期日期', '账单总额(R$)', '已付(R$)', '还差(R$)', '状态', '付清日期', '付款账号', '明细', '备注'];
+  const head = [tr('商家/缴费单位'), tr('类型'), tr('分类'), tr('单号'), tr('开单日期'), tr('到期日期'), tr('账单总额(R$)'), tr('已付(R$)'), tr('还差(R$)'), tr('状态'), tr('付清日期'), tr('付款账号'), tr('明细'), tr('备注')];
   const rows = bills
     .filter((b) => !b.deletedAt && !b.id.startsWith('sample'))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .map((b) => {
       const paid = paymentsOf(b).reduce((s, p) => s + p.cents, 0);
       const open = openCents(b);
-      const status = b.paidAt ? '已付' : b.dueDate < today ? '逾期' : paid > 0 ? '部分付款' : '未付';
+      const status = b.paidAt ? tr('已付') : b.dueDate < today ? tr('逾期') : paid > 0 ? tr('部分付款') : tr('未付');
       return [
         billTitle(b),
-        isExpense(b) ? '日常缴费' : '商家货款',
+        isExpense(b) ? tr('日常缴费') : tr('商家货款'),
         isExpense(b) ? categoryLabel(b.category ?? 'other') : '',
         b.orderNumber || '',
         formatBR(b.billDate),

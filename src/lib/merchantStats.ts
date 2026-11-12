@@ -1,4 +1,5 @@
 /** 单个商家/缴费单位的对账统计 */
+import { tr } from '../i18n';
 import type { Bill } from './types';
 import { diffDays, todayISO } from './dates';
 import { openCents, paidCents, paymentsOf } from './payments';
@@ -65,10 +66,10 @@ export function unpaidStatement(name: string, bills: Bill[], merchantId: string,
   const br = (iso: string) => iso.split('-').reverse().join('/');
   const lines = open.map((b) => {
     const left = openCents(b);
-    const partial = left < b.totalCents ? `（已付 ${fmt(b.totalCents - left)}）` : '';
-    const late = b.dueDate < today ? ' ⚠ 逾期' : '';
-    return `• ${br(b.dueDate)}${late} — ${fmt(left)}${partial}${b.orderNumber ? ` — NF/单号 ${b.orderNumber}` : ''}`;
+    const partial = left < b.totalCents ? tr('（已付 {0}）', fmt(b.totalCents - left)) : '';
+    const late = b.dueDate < today ? tr(' ⚠ 逾期') : '';
+    return `• ${br(b.dueDate)}${late} — ${fmt(left)}${partial}${b.orderNumber ? tr(' — NF/单号 {0}', b.orderNumber) : ''}`;
   });
   const total = open.reduce((a, b) => a + openCents(b), 0);
-  return [`${name} — 未付清单（${br(today)}）`, ...lines, `合计：${fmt(total)}（${open.length} 笔）`].join('\n');
+  return [tr('{0} — 未付清单（{1}）', name, br(today)), ...lines, tr('合计：{0}（{1} 笔）', fmt(total), open.length)].join('\n');
 }

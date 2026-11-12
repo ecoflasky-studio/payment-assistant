@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { restorePageState, savePageState } from '../nav';
 import { useStore } from '../store';
@@ -21,16 +22,16 @@ type Sort = 'dueAsc' | 'dueDesc' | 'amountDesc' | 'amountAsc';
 type KindFilter = 'all' | 'supplier' | 'expense';
 type View = 'list' | 'month';
 
-const TIME_LABEL: Record<TimeFilter, string> = { all: '不限时间', thisMonth: '本月到期', nextMonth: '下月到期', next30: '未来 30 天', last30: '过去 30 天' };
-const SORT_LABEL: Record<Sort, string> = { dueAsc: '按到期日分组', dueDesc: '到期日 远→近', amountDesc: '金额 高→低', amountAsc: '金额 低→高' };
-const KIND_LABEL: Record<KindFilter, string> = { all: '全部类型', supplier: '商家货款', expense: '日常缴费' };
+const TIME_LABEL: Record<TimeFilter, string> = { all: tr('不限时间'), thisMonth: tr('本月到期'), nextMonth: tr('下月到期'), next30: tr('未来 30 天'), last30: tr('过去 30 天') };
+const SORT_LABEL: Record<Sort, string> = { dueAsc: tr('按到期日分组'), dueDesc: tr('到期日 远→近'), amountDesc: tr('金额 高→低'), amountAsc: tr('金额 低→高') };
+const KIND_LABEL: Record<KindFilter, string> = { all: tr('全部类型'), supplier: tr('商家货款'), expense: tr('日常缴费') };
 const TABS: [Tab, string][] = [
-  ['unpaid', '未付'],
-  ['overdue', '逾期'],
-  ['dueSoon', '即将到期'],
-  ['estimated', '待确认'],
-  ['paid', '已付'],
-  ['all', '全部'],
+  ['unpaid', tr('未付')],
+  ['overdue', tr('逾期')],
+  ['dueSoon', tr('即将到期')],
+  ['estimated', tr('待确认')],
+  ['paid', tr('已付')],
+  ['all', tr('全部')],
 ];
 
 interface SavedState {
@@ -185,18 +186,18 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
         <div className="searchrow">
           <div className="sbox">
             <label htmlFor="q" className="sr-only">
-              搜索
+              {tr('搜索')}
             </label>
             <ISearch width={18} height={18} />
-            <input id="q" className="input" placeholder="搜索商家、单号、型号、付款码" value={q} onChange={(e) => setQ(e.target.value)} type="search" />
+            <input id="q" className="input" placeholder={tr('搜索商家、单号、型号、付款码')} value={q} onChange={(e) => setQ(e.target.value)} type="search" />
           </div>
-          <button className="btn filterbtn" onClick={() => setFilterOpen(true)} aria-label={`筛选与排序${active.length ? `，已启用 ${active.length} 项` : ''}`}>
+          <button className="btn filterbtn" onClick={() => setFilterOpen(true)} aria-label={tr('筛选与排序{0}', active.length ? tr('，已启用 {0} 项', active.length) : '')}>
             <IFilter />
-            <span className="only-wide">筛选</span>
+            <span className="only-wide">{tr('筛选')}</span>
             {active.length > 0 && <span className="n">{active.length}</span>}
           </button>
         </div>
-        <div className="tabs" role="tablist" aria-label="账单状态">
+        <div className="tabs" role="tablist" aria-label={tr('账单状态')}>
           {visibleTabs.map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} className={counts[k] ? `t-${k}` : ''} onClick={() => setTab(k)}>
               {label}
@@ -207,7 +208,7 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
         {active.length > 0 && (
           <div className="activechips">
             {active.map((a) => (
-              <button key={a.label} className="chip" aria-pressed="true" onClick={a.clear} aria-label={`取消筛选：${a.label}`}>
+              <button key={a.label} className="chip" aria-pressed="true" onClick={a.clear} aria-label={tr('取消筛选：{0}', a.label)}>
                 {a.label} <IX width={14} height={14} />
               </button>
             ))}
@@ -216,26 +217,26 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
       </div>
 
       <div className="listbar">
-        <div className="seg seg-sm" role="group" aria-label="视图">
+        <div className="seg seg-sm" role="group" aria-label={tr('视图')}>
           <button aria-pressed={view === 'list' && mode === 'date'} onClick={() => { setView('list'); setMode('date'); }}>
-            按日期
+            {tr('按日期')}
           </button>
           <button aria-pressed={view === 'list' && mode === 'merchant'} onClick={() => { setView('list'); setMode('merchant'); }}>
-            按商家
+            {tr('按商家')}
           </button>
           <button aria-pressed={view === 'month'} onClick={() => setView('month')}>
-            月历
+            {tr('月历')}
           </button>
         </div>
         <div className="row" style={{ gap: 6 }}>
           {(
-            <button className={`btn btn-sm iconbtn2${selecting ? ' btn-soft' : ''}`} onClick={() => (selecting ? endSelect() : setSelecting(true))} aria-pressed={selecting} title="多选" aria-label={selecting ? '取消多选' : '多选'}>
+            <button className={`btn btn-sm iconbtn2${selecting ? ' btn-soft' : ''}`} onClick={() => (selecting ? endSelect() : setSelecting(true))} aria-pressed={selecting} title={tr('多选')} aria-label={selecting ? tr('取消多选') : tr('多选')}>
               <ICheckSquare />
-              <span className="only-wide">{selecting ? '取消' : '多选'}</span>
+              <span className="only-wide">{selecting ? tr('取消') : tr('多选')}</span>
             </button>
           )}
           {!selecting && (
-            <button className="btn btn-sm iconbtn2" onClick={() => exportICS(list, `账期-未付-${today}.ics`)} disabled={!unpaidInList} title="把列表里的未付账单导出到手机日历" aria-label="导出日历">
+            <button className="btn btn-sm iconbtn2" onClick={() => exportICS(list, tr('账期-未付-{0}.ics', today))} disabled={!unpaidInList} title={tr('把列表里的未付账单导出到手机日历')} aria-label={tr('导出日历')}>
               <ICal />
             </button>
           )}
@@ -253,12 +254,12 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
           />
           <div className="split2 num">
             <div>
-              <span className="xs muted">{monthLabel(month)}到期 · {ms.count} 笔</span>
+              <span className="xs muted">{tr('{0}到期 · {1} 笔', monthLabel(month), ms.count)}</span>
               <div style={{ fontWeight: 800, fontSize: '1.2rem' }}>{formatBRL(ms.totalCents)}</div>
             </div>
             <div>
               <span className="xs muted">
-                未付 {ms.unpaidCount} 笔{ms.overdueCount ? ` · 逾期 ${ms.overdueCount}` : ''}
+                {tr('未付')} {ms.unpaidCount} {tr('笔')}{ms.overdueCount ? tr(' · 逾期 {0}', ms.overdueCount) : ''}
               </span>
               <div style={{ fontWeight: 800, fontSize: '1.2rem', color: ms.overdueCount ? 'var(--overdue)' : undefined }}>{formatBRL(ms.unpaidCents)}</div>
             </div>
@@ -267,25 +268,25 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
           <p className="xs muted">
             {day ? (
               <>
-                只看 {formatBR(day)}。
+                {tr('只看')} {formatBR(day)}{tr('。')}
                 <button className="linkbtn" onClick={() => setDay(null)}>
-                  看整月
+                  {tr('看整月')}
                 </button>
               </>
             ) : (
-              '点日期只看那天'
+              tr('点日期只看那天')
             )}
           </p>
         </section>
       )}
 
       {selecting && (
-        <div className="batchbar" role="toolbar" aria-label="批量操作">
+        <div className="batchbar" role="toolbar" aria-label={tr('批量操作')}>
           <span className="grow small">
-            已选 <b>{selected.length}</b> 笔 · <span className="num">{formatBRL(selected.reduce((s, b) => s + amountOf(b), 0))}</span>
+            {tr('已选')} <b>{selected.length}</b> {tr('笔 ·')} <span className="num">{formatBRL(selected.reduce((s, b) => s + amountOf(b), 0))}</span>
           </span>
           <button className="btn btn-sm cam-alt" onClick={() => setSel(sel.size === list.length ? new Set() : new Set(list.map((b) => b.id)))}>
-            {sel.size === list.length && list.length ? '全不选' : '全选'}
+            {sel.size === list.length && list.length ? tr('全不选') : tr('全选')}
           </button>
           <button
             className="btn btn-sm btn-primary"
@@ -296,16 +297,16 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
             }}
           >
             <ICheck />
-            标记已付
+            {tr('标记已付')}
           </button>
           <button className="btn btn-sm cam-alt" disabled={!selected.some((b) => !b.paidAt)} onClick={() => setPostponeOpen(true)}>
-            顺延
+            {tr('顺延')}
           </button>
-          <button className="btn btn-sm cam-alt" disabled={!selected.some((b) => !b.paidAt)} onClick={() => exportICS(selected, `账期-选中-${today}.ics`)}>
+          <button className="btn btn-sm cam-alt" disabled={!selected.some((b) => !b.paidAt)} onClick={() => exportICS(selected, tr('账期-选中-{0}.ics', today))}>
             <ICal />
-            日历
+            {tr('日历')}
           </button>
-          <button className="btn btn-sm cam-alt iconbtn" aria-label="退出多选" onClick={endSelect}>
+          <button className="btn btn-sm cam-alt iconbtn" aria-label={tr('退出多选')} onClick={endSelect}>
             <IX />
           </button>
         </div>
@@ -313,7 +314,7 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
 
       {list.length > 0 && (
         <p className="small muted listsum" style={{ margin: '-4px 4px' }}>
-          合计 <b className="num" style={{ color: 'var(--ink)' }}>{formatBRL(total)}</b>
+          {tr('合计')} <b className="num" style={{ color: 'var(--ink)' }}>{formatBRL(total)}</b>
           {view === 'month' && day ? ` · ${formatBR(day)} ${weekdayCN(day)}` : ''}
         </p>
       )}
@@ -323,8 +324,8 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
           <div className="art">
             <IList />
           </div>
-          <h3>{bills.length ? '没有符合条件的账单' : '还没有账单'}</h3>
-          <p>{bills.length ? (active.length || q ? '换个筛选条件或清空搜索试试。' : tab === 'unpaid' ? '没有未付账单，全部结清了。' : '这里暂时是空的。') : '新增第一笔账单后会出现在这里。'}</p>
+          <h3>{bills.length ? tr('没有符合条件的账单') : tr('还没有账单')}</h3>
+          <p>{bills.length ? (active.length || q ? tr('换个筛选条件或清空搜索试试。') : tab === 'unpaid' ? tr('没有未付账单，全部结清了。') : tr('这里暂时是空的。')) : tr('新增第一笔账单后会出现在这里。')}</p>
           <div className="row" style={{ justifyContent: 'center' }}>
             {(active.length > 0 || q) && (
               <button
@@ -337,18 +338,18 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
                   setSort('dueAsc');
                 }}
               >
-                清除筛选
+                {tr('清除筛选')}
               </button>
             )}
             {!bills.length && (
               <>
                 <button className="btn btn-primary" onClick={() => go({ name: 'new' })}>
                   <IPlus />
-                  商家账单
+                  {tr('商家账单')}
                 </button>
                 <button className="btn" onClick={() => go({ name: 'new', kind: 'expense' })}>
                   <IPlus />
-                  日常缴费
+                  {tr('日常缴费')}
                 </button>
               </>
             )}
@@ -359,9 +360,9 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
       )}
 
       {postponeOpen && (
-        <Modal title={`顺延 ${selected.filter((b) => !b.paidAt).length} 笔的到期日`} onClose={() => setPostponeOpen(false)}>
+        <Modal title={tr('顺延 {0} 笔的到期日', selected.filter((b) => !b.paidAt).length)} onClose={() => setPostponeOpen(false)}>
           <p className="small muted" style={{ margin: 0 }}>
-            和商家谈好延期时使用，只改未付的账单。
+            {tr('和商家谈好延期时使用，只改未付的账单。')}
           </p>
           <div className="optgrid">
             {[3, 7, 15, 30].map((d) => (
@@ -374,17 +375,17 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
                   endSelect();
                 }}
               >
-                +{d} 天
+                +{d} {tr('天')}
               </button>
             ))}
           </div>
         </Modal>
       )}
       {filterOpen && (
-        <Modal title="筛选与排序" onClose={() => setFilterOpen(false)}>
+        <Modal title={tr('筛选与排序')} onClose={() => setFilterOpen(false)}>
           <div className="field">
-            <span className="flabel">账单类型</span>
-            <div className="seg" role="group" aria-label="账单类型">
+            <span className="flabel">{tr('账单类型')}</span>
+            <div className="seg" role="group" aria-label={tr('账单类型')}>
               {(Object.keys(KIND_LABEL) as KindFilter[]).map((k) => (
                 <button
                   key={k}
@@ -394,17 +395,17 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
                     if (k !== 'expense') setCat('');
                   }}
                 >
-                  {k === 'all' ? '全部' : KIND_LABEL[k]}
+                  {k === 'all' ? tr('全部') : KIND_LABEL[k]}
                 </button>
               ))}
             </div>
           </div>
           {kind === 'expense' && (
             <div className="field">
-              <span className="flabel">缴费分类</span>
+              <span className="flabel">{tr('缴费分类')}</span>
               <div className="optgrid">
                 <button className="chip" aria-pressed={!cat} onClick={() => setCat('')}>
-                  全部
+                  {tr('全部')}
                 </button>
                 {EXPENSE_CATEGORIES.map((c) => (
                   <button key={c.id} className="chip" aria-pressed={cat === c.id} onClick={() => setCat(cat === c.id ? '' : c.id)}>
@@ -416,11 +417,11 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
           )}
           {view !== 'month' && (
             <div className="field">
-              <span className="flabel">到期时间</span>
+              <span className="flabel">{tr('到期时间')}</span>
               <div className="optgrid">
                 {(Object.keys(TIME_LABEL) as TimeFilter[]).map((k) => (
                   <button key={k} className="chip" aria-pressed={time === k} onClick={() => setTime(k)}>
-                    {k === 'all' ? '不限' : TIME_LABEL[k]}
+                    {k === 'all' ? tr('不限') : TIME_LABEL[k]}
                   </button>
                 ))}
               </div>
@@ -428,7 +429,7 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
           )}
           {view === 'list' && (
             <div className="field">
-              <span className="flabel">排序</span>
+              <span className="flabel">{tr('排序')}</span>
               <div className="optgrid">
                 {(Object.keys(SORT_LABEL) as Sort[]).map((k) => (
                   <button key={k} className="chip" aria-pressed={sort === k} onClick={() => setSort(k)}>
@@ -448,10 +449,10 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
                 setSort('dueAsc');
               }}
             >
-              重置
+              {tr('重置')}
             </button>
             <button className="btn btn-primary" onClick={() => setFilterOpen(false)}>
-              看 {list.length} 笔
+              {tr('看')} {list.length} {tr('笔')}
             </button>
           </div>
         </Modal>

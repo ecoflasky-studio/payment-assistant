@@ -2,6 +2,7 @@
  * 数据访问层。界面只依赖 Repository 接口；第二阶段可实现 SyncRepository
  * （本地 IndexedDB + 云端），利用 updatedAt 与 deletedAt 墓碑做增量同步。
  */
+import { tr } from '../i18n';
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb';
 import type { Bill, Merchant, PaymentAccount, Settings } from '../lib/types';
 import { defaultSettings } from '../lib/types';
@@ -81,14 +82,14 @@ export class StorageError extends Error {
 export function explainStorageError(e: unknown): StorageError {
   if (e instanceof StorageError) return e;
   const name = (e as any)?.name ?? '';
-  if (name === 'QuotaExceededError') return new StorageError('存储空间已满', '请导出备份后删除不需要的票据图片，或清理浏览器空间');
-  if (name === 'InvalidStateError' || name === 'SecurityError') return new StorageError('浏览器禁止本地存储', '可能处于无痕模式或禁用了网站数据。请换用普通窗口，或允许本站保存数据');
-  if (name === 'VersionError') return new StorageError('本地数据版本比应用新', '请刷新页面加载最新版本的应用；数据未被删除');
-  return new StorageError(`本地存储出错：${(e as Error)?.message ?? e}`, '请刷新重试；若持续出现，先在「数据」页导出备份');
+  if (name === 'QuotaExceededError') return new StorageError(tr('存储空间已满'), tr('请导出备份后删除不需要的票据图片，或清理浏览器空间'));
+  if (name === 'InvalidStateError' || name === 'SecurityError') return new StorageError(tr('浏览器禁止本地存储'), tr('可能处于无痕模式或禁用了网站数据。请换用普通窗口，或允许本站保存数据'));
+  if (name === 'VersionError') return new StorageError(tr('本地数据版本比应用新'), tr('请刷新页面加载最新版本的应用；数据未被删除'));
+  return new StorageError(tr('本地存储出错：{0}', (e as Error)?.message ?? e), tr('请刷新重试；若持续出现，先在「数据」页导出备份'));
 }
 
 async function open(name = DB_NAME): Promise<IDBPDatabase<Schema>> {
-  if (typeof indexedDB === 'undefined') throw new StorageError('此浏览器不支持 IndexedDB', '请使用最新版 Chrome、Safari 或 Edge');
+  if (typeof indexedDB === 'undefined') throw new StorageError(tr('此浏览器不支持 IndexedDB'), tr('请使用最新版 Chrome、Safari 或 Edge'));
   try {
     return await openDB<Schema>(name, DB_VERSION, {
       upgrade(db, oldVersion, _newVersion, tx) {

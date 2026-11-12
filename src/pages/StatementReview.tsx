@@ -1,3 +1,4 @@
+import { tr, tx } from '../i18n';
 import { useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { useFeedback } from '../ui/feedback';
@@ -41,8 +42,8 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
   const balanceOk = st.balanceCents === null || st.balanceCents === unpaidSum;
 
   const save = async () => {
-    if (!name) return fb.toast('请选择或填写商家', { bad: true });
-    if (!chosen.length) return fb.toast('没有勾选要导入的账单', { bad: true });
+    if (!name) return fb.toast(tr('请选择或填写商家'), { bad: true });
+    if (!chosen.length) return fb.toast(tr('没有勾选要导入的账单'), { bad: true });
     let m = merchant;
     const newMerchants: Merchant[] = [];
     if (!m) {
@@ -60,7 +61,7 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
     });
     if (!ok) return;
     await reload();
-    fb.toast(`已导入 ${list.length} 笔账单（其中已付 ${list.filter((b) => b.paidAt).length} 笔）`);
+    fb.toast(tr('已导入 {0} 笔账单（其中已付 {1} 笔）', list.length, list.filter((b) => b.paidAt).length));
     go({ name: 'bills', filter: `q=${encodeURIComponent(name)}` }, true);
   };
 
@@ -68,44 +69,44 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
     <div className="stack">
       <div className="banner info">
         <span className="grow small">
-          识别为<b>对账单</b>：共 {st.entries.length} 笔欠款、{st.payments.length} 条付款记录。请核对后一次导入。
+          {tr('识别为')}<b>{tr('对账单')}</b>{tr('：共')} {st.entries.length} {tr('笔欠款、')}{st.payments.length} {tr('条付款记录。请核对后一次导入。')}
         </span>
       </div>
       {imageUrl && (
         <details className="card more">
-          <summary>查看原图</summary>
-          <img src={imageUrl} alt="对账单原图" style={{ width: '100%', borderRadius: 10, marginTop: 8 }} />
+          <summary>{tr('查看原图')}</summary>
+          <img src={imageUrl} alt={tr('对账单原图')} style={{ width: '100%', borderRadius: 10, marginTop: 8 }} />
         </details>
       )}
       <section className="card stack">
         <div className="grid2">
           <div className="field">
-            <label htmlFor="st-m">商家</label>
+            <label htmlFor="st-m">{tr('商家')}</label>
             <select id="st-m" className="input" value={merchantId} onChange={(e) => setMerchantId(e.target.value)}>
-              <option value="">请选择</option>
+              <option value="">{tr('请选择')}</option>
               {suppliers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                 </option>
               ))}
-              <option value="new">＋ 新建商家</option>
+              <option value="new">{tr('＋ 新建商家')}</option>
             </select>
-            {raw && <span className="hint">对账单上写的是「{raw}」{merchant ? '，导入后会记为这个商家的别名' : ''}</span>}
+            {raw && <span className="hint">{tr('对账单上写的是「')}{raw}{tr('」')}{merchant ? tr('，导入后会记为这个商家的别名') : ''}</span>}
           </div>
           {merchantId === 'new' && (
             <div className="field">
-              <label htmlFor="st-new">新商家名称</label>
+              <label htmlFor="st-new">{tr('新商家名称')}</label>
               <input id="st-new" className="input" value={newName} onChange={(e) => setNewName(e.target.value)} />
             </div>
           )}
           {merchant?.term ? (
             <div className="field">
-              <span className="flabel">到期日</span>
-              <span className="small">按商家账期：{describeTerm(merchant.term)}</span>
+              <span className="flabel">{tr('到期日')}</span>
+              <span className="small">{tr('按商家账期：')}{describeTerm(merchant.term)}</span>
             </div>
           ) : (
             <div className="field">
-              <label htmlFor="st-term">账期天数（单据日期 + N 天 = 到期日）</label>
+              <label htmlFor="st-term">{tr('账期天数（单据日期 + N 天 = 到期日）')}</label>
               <input id="st-term" className="input num" inputMode="numeric" value={termDays} onChange={(e) => setTermDays(e.target.value.replace(/\D/g, ''))} />
             </div>
           )}
@@ -114,17 +115,17 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
           <table className="tbl">
             <thead>
               <tr>
-                <th>导入</th>
-                <th>单据</th>
-                <th className="r">金额 / 到期</th>
-                <th>已付</th>
+                <th>{tr('导入')}</th>
+                <th>{tr('单据')}</th>
+                <th className="r">{tr('金额 / 到期')}</th>
+                <th>{tr('已付')}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i}>
                   <td>
-                    <input type="checkbox" checked={r.include} disabled={!!r.problem} onChange={(e) => set(i, { include: e.target.checked })} aria-label={`导入 ${r.orderNumber || formatBR(r.date ?? '')}`} />
+                    <input type="checkbox" checked={r.include} disabled={!!r.problem} onChange={(e) => set(i, { include: e.target.checked })} aria-label={tr('导入 {0}', r.orderNumber || formatBR(r.date ?? ''))} />
                   </td>
                   <td>
                     {st.entries[i]?.date || (st.entries[i]?.dateRaw && !edits[i]) ? (
@@ -133,14 +134,14 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
                       <input
                         className="input num st-edit"
                         placeholder="DD/MM/AAAA"
-                        aria-label="补填日期"
+                        aria-label={tr('补填日期')}
                         defaultValue={r.date ? formatBR(r.date) : ''}
                         onBlur={(e) => setEdits((x) => ({ ...x, [i]: { ...x[i], date: parseBRDate(e.target.value).iso } }))}
                       />
                     )}
                     <div className="xs muted mono">{r.orderNumber ? `#${r.orderNumber}` : ''}</div>
-                    {r.problem && <div className="xs err">{r.problem}</div>}
-                    {r.duplicateOf && <div className="xs" style={{ color: 'var(--soon)' }}>已录过，默认跳过</div>}
+                    {r.problem && <div className="xs err">{tx(r.problem)}</div>}
+                    {r.duplicateOf && <div className="xs" style={{ color: 'var(--soon)' }}>{tr('已录过，默认跳过')}</div>}
                   </td>
                   <td className="r">
                     {st.entries[i]?.cents ? (
@@ -150,15 +151,15 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
                         className="input num st-edit"
                         placeholder="0,00"
                         inputMode="decimal"
-                        aria-label="补填金额"
+                        aria-label={tr('补填金额')}
                         defaultValue={r.cents ? formatBRL(r.cents, false) : ''}
                         onBlur={(e) => setEdits((x) => ({ ...x, [i]: { ...x[i], cents: parseBRL(e.target.value).cents } }))}
                       />
                     )}
-                    <div className="xs muted num">{r.dueDate ? `到期 ${formatBR(r.dueDate)}` : ''}</div>
+                    <div className="xs muted num">{r.dueDate ? tr('到期 {0}', formatBR(r.dueDate)) : ''}</div>
                   </td>
                   <td>
-                    <input type="checkbox" checked={r.paid} onChange={(e) => set(i, { paid: e.target.checked, paidDate: e.target.checked ? r.paidDate ?? r.date : null })} aria-label="已付" />
+                    <input type="checkbox" checked={r.paid} onChange={(e) => set(i, { paid: e.target.checked, paidDate: e.target.checked ? r.paidDate ?? r.date : null })} aria-label={tr('已付')} />
                     {r.paid && r.paidDate && <div className="xs muted num">{formatBR(r.paidDate).slice(0, 5)}</div>}
                   </td>
                 </tr>
@@ -168,16 +169,16 @@ export function StatementReview({ model, imageUrl, onCancel }: { model: ModelOut
         </div>
         {st.balanceCents !== null && (
           <p className={`small ${balanceOk ? 'ok-hint' : 'err'}`} style={{ margin: 0 }}>
-            {balanceOk ? `✓ 未付合计 ${formatBRL(unpaidSum)} 与对账单「结欠」一致` : `未付合计 ${formatBRL(unpaidSum)} 与对账单「结欠」${formatBRL(st.balanceCents)} 不一致，请核对已付勾选`}
+            {balanceOk ? tr('✓ 未付合计 {0} 与对账单「结欠」一致', formatBRL(unpaidSum)) : tr('未付合计 {0} 与对账单「结欠」{1} 不一致，请核对已付勾选', formatBRL(unpaidSum), formatBRL(st.balanceCents))}
           </p>
         )}
         <div className="row end">
           <button className="btn btn-ghost" onClick={onCancel}>
-            返回
+            {tr('返回')}
           </button>
           <button className="btn btn-primary" onClick={save} disabled={!chosen.length || !name}>
             <ICheck />
-            导入 {chosen.length} 笔账单
+            {tr('导入')} {chosen.length} {tr('笔账单')}
           </button>
         </div>
       </section>

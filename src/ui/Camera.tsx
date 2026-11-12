@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { Pt } from '../lib/image/geometry';
 import { IX, IFlash, ISwitch, ICamera, IImage } from './icons';
@@ -18,10 +19,10 @@ type CamError = { title: string; detail: string };
 function explain(e: any): CamError {
   const n = e?.name ?? '';
   if (n === 'NotAllowedError' || n === 'SecurityError')
-    return { title: '没有相机权限', detail: '请在浏览器地址栏的网站设置里允许使用相机后重试；也可以用下方的「系统相机」拍照。' };
-  if (n === 'NotFoundError' || n === 'OverconstrainedError') return { title: '没有找到可用的相机', detail: '可以改用「从相册选择」上传已拍好的照片。' };
-  if (n === 'NotReadableError') return { title: '相机正被其他应用占用', detail: '关闭其他使用相机的应用后重试。' };
-  return { title: '无法打开相机', detail: '当前环境不支持网页相机（例如在其他应用内嵌打开）。请用「系统相机」或「从相册选择」。' };
+    return { title: tr('没有相机权限'), detail: tr('请在浏览器地址栏的网站设置里允许使用相机后重试；也可以用下方的「系统相机」拍照。') };
+  if (n === 'NotFoundError' || n === 'OverconstrainedError') return { title: tr('没有找到可用的相机'), detail: tr('可以改用「从相册选择」上传已拍好的照片。') };
+  if (n === 'NotReadableError') return { title: tr('相机正被其他应用占用'), detail: tr('关闭其他使用相机的应用后重试。') };
+  return { title: tr('无法打开相机'), detail: tr('当前环境不支持网页相机（例如在其他应用内嵌打开）。请用「系统相机」或「从相册选择」。') };
 }
 
 /**
@@ -140,14 +141,14 @@ export function CameraSheet({ onCapture, onClose, onFallbackFile }: { onCapture:
   );
 
   return (
-    <div className="cam" role="dialog" aria-modal="true" aria-label="拍摄单据">
+    <div className="cam" role="dialog" aria-modal="true" aria-label={tr('拍摄单据')}>
       <div className="cam-top">
-        <button className="cam-btn" aria-label="关闭相机" onClick={onClose}>
+        <button className="cam-btn" aria-label={tr('关闭相机')} onClick={onClose}>
           <IX />
         </button>
-        <span className="cam-title">把单据放进框里，尽量平整、光线均匀</span>
+        <span className="cam-title">{tr('把单据放进框里，尽量平整、光线均匀')}</span>
         {torch !== null && !shot && (
-          <button className={`cam-btn${torch ? ' on' : ''}`} aria-label={torch ? '关闭闪光灯' : '打开闪光灯'} aria-pressed={torch} onClick={toggleTorch}>
+          <button className={`cam-btn${torch ? ' on' : ''}`} aria-label={torch ? tr('关闭闪光灯') : tr('打开闪光灯')} aria-pressed={torch} onClick={toggleTorch}>
             <IFlash />
           </button>
         )}
@@ -172,7 +173,7 @@ export function CameraSheet({ onCapture, onClose, onFallbackFile }: { onCapture:
               }}
               style={{ display: shot ? 'none' : 'block' }}
             />
-            {shot && <img src={shot.url} alt="刚拍的照片" />}
+            {shot && <img src={shot.url} alt={tr('刚拍的照片')} />}
             {!shot && (
               <div className="cam-guide" style={{ left: `${GUIDE.x * 100}%`, top: `${GUIDE.y * 100}%`, width: `${GUIDE.w * 100}%`, height: `${GUIDE.h * 100}%` }}>
                 <i className="tl" />
@@ -181,7 +182,7 @@ export function CameraSheet({ onCapture, onClose, onFallbackFile }: { onCapture:
                 <i className="br" />
               </div>
             )}
-            {!ready && !shot && <div className="cam-loading">正在打开相机…</div>}
+            {!ready && !shot && <div className="cam-loading">{tr('正在打开相机…')}</div>}
           </div>
         )}
       </div>
@@ -195,25 +196,25 @@ export function CameraSheet({ onCapture, onClose, onFallbackFile }: { onCapture:
                 setShot(null);
               }}
             >
-              重拍
+              {tr('重拍')}
             </button>
             <button className="btn btn-primary btn-lg" onClick={use}>
-              使用这张
+              {tr('使用这张')}
             </button>
           </>
         ) : (
           <>
-            {fileInput(false, '相册', <IImage />)}
-            <button className="shutter" aria-label="按下快门" disabled={!ready || !!err} onClick={take}>
+            {fileInput(false, tr('相册'), <IImage />)}
+            <button className="shutter" aria-label={tr('按下快门')} disabled={!ready || !!err} onClick={take}>
               <span />
             </button>
             {multi && !err ? (
-              <button className="btn cam-alt" aria-label="切换前后摄像头" onClick={() => setFacing((f) => (f === 'environment' ? 'user' : 'environment'))}>
+              <button className="btn cam-alt" aria-label={tr('切换前后摄像头')} onClick={() => setFacing((f) => (f === 'environment' ? 'user' : 'environment'))}>
                 <ISwitch />
-                切换
+                {tr('切换')}
               </button>
             ) : (
-              fileInput(true, '系统相机', <ICamera />)
+              fileInput(true, tr('系统相机'), <ICamera />)
             )}
           </>
         )}

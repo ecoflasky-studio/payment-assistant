@@ -534,7 +534,7 @@ try {
   ok('流程', '列表一键标记已付；详情里恢复未付');
 
   // A08 ICS
-  await page.goto(BASE + '#/settings');
+  await page.goto(BASE + '#/set-remind');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '导出全部未付账单' }).click()]);
   const icsPath = 'export.ics';
   await dl.saveAs(icsPath);
@@ -841,6 +841,7 @@ try {
   await page.fill('#q', '');
   // 每月预算 + 键盘快捷键
   await page.goto(BASE + '#/settings');
+  await page.getByRole('button', { name: /提醒与预算/ }).click();
   await page.fill('#s-budget', '3.000,00');
   await page.locator('#s-rd').click();
   await page.goto(BASE + '#/flow');
@@ -854,6 +855,8 @@ try {
 
   // ===== 云同步：两台设备通过 Supabase 同步 =====
   await page.goto(BASE + '#/settings');
+  // 自建版（没有账号服务）：手动云同步在「管理员 → 部署与识别服务」里
+  await page.getByRole('button', { name: /部署与识别服务/ }).click();
   await page.fill('#sy-url', SB_URL);
   await page.fill('#sy-key', SB_KEY);
   await page.getByRole('button', { name: '测试连接并开始同步' }).click();
@@ -869,7 +872,7 @@ try {
   await ctx2.route(SB_URL + '/**', supabaseRoute);
   const p2 = await ctx2.newPage();
   p2.on('pageerror', (e) => errors.push('设备2: ' + e.message));
-  await p2.goto(BASE + '#/settings');
+  await p2.goto(BASE + '#/set-dev');
   await p2.fill('#sy-paste', cfgText);
   await p2.getByRole('button', { name: '导入', exact: true }).click();
   await p2.getByText(/已连接，下载 \d+ 条/).waitFor({ timeout: 15000 });
@@ -911,7 +914,7 @@ try {
   ok('B10', '设备 2 付款自动上传，设备 1 同步后看到已付；设备 1 删除后设备 2 也删除');
 
   // ===== AI 识别：同步用的 Supabase 里的识别函数（Gemini），无需再填地址和口令 =====
-  await page.goto(BASE + '#/settings');
+  await page.goto(BASE + '#/set-dev');
   await page.getByText(/连接不到识别函数|找不到识别函数/).first().waitFor({ timeout: 15000 });
   await page.getByText('开启 AI 识别：Supabase + Gemini').waitFor();
   fnDeployed = true;
@@ -958,8 +961,13 @@ try {
   assert.ok(acctRows.rows[0].n > 0, '登录后本机账单应上传到账号');
   await page.screenshot({ path: 'shot-account-360.png', fullPage: true });
   await page.goto(BASE + '#/settings');
-  await page.getByText('已用账号同步').waitFor();
-  await page.getByText(/账期助手 v1\.0\.0（\w+）/).waitFor();
+  // 登录后：设置首页只显示账号自动同步的状态，不再有手动云同步
+  const syncRow = page.locator('.setrow', { hasText: '多设备同步' });
+  await syncRow.getByText(/已同步|已配置，等待同步|同步中/).waitFor();
+  await syncRow.getByRole('button', { name: '立即同步' }).waitFor();
+  assert.equal(await page.locator('#sy-url').count(), 0, '登录后不应出现手动云同步');
+  await page.getByText(/v1\.0\.0 \(\w+\)/).waitFor();
+  await page.getByRole('button', { name: /AI 识别与隐私/ }).click();
   await page.getByText('AI 识别 · Gemini').first().waitFor({ timeout: 15000 });
   await page.goto(BASE + '#/capture');
   await page.setInputFiles('input[type=file]:not([capture])', 'ticket.jpg');
@@ -1113,6 +1121,11 @@ try {
   await lockDlg.waitFor({ state: 'detached', timeout: 10000 });
   await p3.goto(BASE + '#/settings');
   await p3.getByText('AI 识别与隐私').waitFor();
+  // 正式版普通用户：没有手动云同步、没有部署设置
+  assert.equal(await p3.getByText('部署与识别服务').count(), 0, '普通用户不应看到部署设置');
+  assert.equal(await p3.locator('#sy-url').count(), 0, '普通用户不应看到手动云同步');
+  await p3.getByRole('button', { name: /AI 识别与隐私/ }).click();
+  await p3.getByText('上传前').first().waitFor().catch(() => {});
   assert.equal(await p3.locator('#s-fn').count(), 0, '普通用户不应看到识别函数名');
   assert.equal(await p3.getByText('开启 AI 识别：Supabase + Gemini').count(), 0);
   // 退出登录 → 回到登录页，记住上次的邮箱、默认「登录」
@@ -1132,7 +1145,7 @@ try {
   ok('B25', '登录页：登录/注册分页、记住上次邮箱；新手导览首次自动播放、可在使用教程重播；刷新不需重新登录；面容 / 指纹解锁（虚拟验证器）：验证不通过停在锁屏、通过即解锁、可改用密码；退出登录清除解锁设置');
 
   // 桌面
-  const d = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: 'America/Sao_Paulo' });
+  const d = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: 'America/Sao_Paulo', locale: 'zh-CN' });
   const dp = await d.newPage();
   await dp.goto(BASE);
   await dp.waitForTimeout(1200);
@@ -1142,11 +1155,36 @@ try {
   await dp.screenshot({ path: 'shot-bills-1280.png' });
 
   // 暗色
-  const dk = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', timezoneId: 'America/Sao_Paulo' });
+  const dk = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', timezoneId: 'America/Sao_Paulo', locale: 'zh-CN' });
   const kp = await dk.newPage();
   await kp.goto(BASE);
   await kp.waitForTimeout(1200);
   await kp.screenshot({ path: 'shot-dark-390.png', fullPage: true });
+
+  // 三语：葡语系统 → 葡语界面；设置里切换到英文、再改回跟随系统
+  const lg = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Sao_Paulo', locale: 'pt-BR', serviceWorkers: 'block' });
+  const lp = await lg.newPage();
+  const lerr = [];
+  lp.on('pageerror', (e) => lerr.push(e.message));
+  await lp.goto(BASE);
+  await lp.getByRole('button', { name: 'Limpar exemplos' }).waitFor({ timeout: 15000 });
+  assert.equal(await lp.evaluate(() => document.documentElement.lang), 'pt-BR');
+  await lp.getByText('Vencidas').first().waitFor();
+  const cjk = await lp.evaluate(() => (document.body.innerText.match(/[\u4e00-\u9fff\u3000-\u303f\uff01-\uff5e]/g) || []).length);
+  assert.equal(cjk, 0, '葡语首页不应有中文');
+  await lp.goto(BASE + '#/settings');
+  await Promise.all([lp.waitForEvent('load'), lp.selectOption('select[aria-label="Language / Idioma / 语言"]', 'en')]);
+  await lp.getByText('Appearance', { exact: true }).waitFor();
+  assert.equal(await lp.evaluate(() => document.documentElement.lang), 'en');
+  await lp.goto(BASE + '#/');
+  await lp.getByText('Overdue').first().waitFor();
+  await lp.goto(BASE + '#/settings');
+  await Promise.all([lp.waitForEvent('load'), lp.selectOption('select[aria-label="Language / Idioma / 语言"]', 'auto')]);
+  await lp.getByText('Aparência', { exact: true }).waitFor();
+  assert.deepEqual(lerr, []);
+  await lp.screenshot({ path: 'shot-lang-pt-390.png' });
+  await lg.close();
+  ok('B28', '三语：跟随系统语言显示葡语（首页无中文），设置里可切换英文、改回跟随系统');
 
   assert.deepEqual(errors, [], '页面错误: ' + errors.join('\n'));
   ok('稳定性', '全程无页面脚本错误');

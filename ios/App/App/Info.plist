@@ -10,6 +10,7 @@
 	<array>
 		<string>zh-Hans</string>
 		<string>pt-BR</string>
+		<string>en</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>拍摄订单、Boleto 和缴费单，用来识别金额和到期日。</string>

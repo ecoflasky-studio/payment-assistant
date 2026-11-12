@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 import { isPartial, openCents } from './lib/payments';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from './store';
@@ -41,8 +42,8 @@ export function useReminders(): ReminderSnapshot & { recheck: () => void } {
         const sig = notifySignature(b, today, st);
         if (sent.has(sig)) continue;
         const ok = await showNotification(
-          st === 'overdue' ? `已逾期：${b.merchantNameSnapshot}` : `付款提醒：${b.merchantNameSnapshot}`,
-          `${isPartial(b) ? `还差 ${formatBRL(openCents(b))}` : formatBRL(b.totalCents)} · ${relativeDue(b.dueDate, today)}${b.accountLabelSnapshot ? ` · ${b.accountLabelSnapshot}` : ''}`,
+          st === 'overdue' ? tr('已逾期：{0}', b.merchantNameSnapshot) : tr('付款提醒：{0}', b.merchantNameSnapshot),
+          `${isPartial(b) ? tr('还差 {0}', formatBRL(openCents(b))) : formatBRL(b.totalCents)} · ${relativeDue(b.dueDate, today)}${b.accountLabelSnapshot ? ` · ${b.accountLabelSnapshot}` : ''}`,
           `bill-${b.id}`,
         );
         if (ok) newly.push(sig);

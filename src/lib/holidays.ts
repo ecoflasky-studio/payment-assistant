@@ -1,4 +1,5 @@
 /** 巴西全国节假日与工作日（Boleto 到期日遇周末/节假日顺延到下一个工作日） */
+import { tr } from '../i18n';
 import { addDays } from './dates';
 
 /** 复活节（格里高利历，Meeus 算法） */
@@ -28,21 +29,21 @@ export function holidaysOf(y: number): Map<string, string> {
   if (hit) return hit;
   const e = easter(y);
   const fixed: [string, string][] = [
-    ['01-01', '元旦'],
-    ['04-21', '蒂拉登特斯日'],
-    ['05-01', '劳动节'],
-    ['09-07', '独立日'],
-    ['10-12', '圣母显灵日'],
-    ['11-02', '万灵节'],
-    ['11-15', '共和国日'],
-    ['11-20', '黑人意识日'],
-    ['12-25', '圣诞节'],
+    ['01-01', tr('元旦')],
+    ['04-21', tr('蒂拉登特斯日')],
+    ['05-01', tr('劳动节')],
+    ['09-07', tr('独立日')],
+    ['10-12', tr('圣母显灵日')],
+    ['11-02', tr('万灵节')],
+    ['11-15', tr('共和国日')],
+    ['11-20', tr('黑人意识日')],
+    ['12-25', tr('圣诞节')],
   ];
   const m = new Map<string, string>(fixed.map(([md, n]) => [`${y}-${md}`, n]));
-  m.set(addDays(e, -48), '狂欢节');
-  m.set(addDays(e, -47), '狂欢节');
-  m.set(addDays(e, -2), '耶稣受难日');
-  m.set(addDays(e, 60), '基督圣体节');
+  m.set(addDays(e, -48), tr('狂欢节'));
+  m.set(addDays(e, -47), tr('狂欢节'));
+  m.set(addDays(e, -2), tr('耶稣受难日'));
+  m.set(addDays(e, 60), tr('基督圣体节'));
   cache.set(y, m);
   return m;
 }
@@ -58,7 +59,7 @@ export function nonBusinessReason(iso: string): string | null {
   const h = holidayName(iso);
   if (h) return h;
   const w = weekday(iso);
-  return w === 0 ? '周日' : w === 6 ? '周六' : null;
+  return w === 0 ? tr('周日') : w === 6 ? tr('周六') : null;
 }
 
 /** 当天或之后的第一个工作日 */
