@@ -155,7 +155,7 @@ const log = [];
 const ok = (id, msg) => { log.push(`✔ ${id} ${msg}`); console.log(`✔ ${id} ${msg}`); };
 
 const LAUNCH_ARGS = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'];
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: LAUNCH_ARGS });
+const browser = await chromium.launch({ ...(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {}), args: LAUNCH_ARGS });
 const addDaysISO = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 const br = (iso) => iso.split('-').reverse().join('/');
 const spToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -266,7 +266,7 @@ try {
   await page.getByRole('button', { name: '原日期顺延 1 个月' }).click();
   await page.fill('#f-orderNumber', 'T-02');
   await page.getByRole('button', { name: '保存', exact: true }).click();
-  await page.getByText('已保存 R$ 1.234,56').waitFor();
+  await page.getByText('已保存 R$ 1.234,56').last().waitFor();
   await page.locator('.brow', { hasText: 'T-02' }).waitFor();
   ok('B01', '账单可复制为新账单（清空订单号、可顺延一个月）');
 
@@ -420,7 +420,8 @@ try {
   await page.getByRole('button', { name: '+30' }).click();
   assert.equal(await page.inputValue('#f-dueDate'), '10/10/2026');
   const rows = [['3', 'FN-A78', '0,10'], ['1', 'X-1', '0,20'], ['7', 'CA31 3', '19,99'], ['0,5', 'meio', '3,33']];
-  for (let i = 2; i < 4; i++) await page.getByRole('button', { name: '添加一行' }).click();
+  await page.getByRole('button', { name: '逐行明细', exact: true }).click();
+  for (let i = 1; i < 4; i++) await page.getByRole('button', { name: '添加一行' }).click();
   const cards = page.locator('.item-card');
   for (let i = 0; i < 4; i++) {
     await cards.nth(i).locator('input').nth(0).fill(rows[i][1]);
@@ -561,6 +562,7 @@ try {
   const tbl = await page.getByRole('table').innerText();
   assert.match(tbl, /账单\s+0\s+1\s+0\s+1/);
   await page.getByRole('button', { name: '确认合并导入' }).click();
+  await noOverflow('数据页');
   await page.getByRole('button', { name: '合并导入', exact: true }).click();
   await page.getByText('导入完成').waitFor();
   await writeFile('backup-bad.json', JSON.stringify({ ...backup, bills: [{ ...backup.bills[0], dueDate: '2026-02-31' }] }));
@@ -579,6 +581,8 @@ try {
 
   // 表格批量导入 + 重复提醒
   await page.goto(BASE + '#/data');
+  await page.getByRole('button', { name: 'Excel 批量导入' }).click();
+  await page.getByText('也可以从表格复制粘贴，或用 CSV 模板').click();
   await page.fill('#imp-text', '商家;单号;开单日期;到期日期;金额\nLoja Exemplo;7001;01/09/2026;01/10/2026;1.234,56\nNova Loja SP;7002;02/09/2026;02/10/2026;800,00\nLoja Exemplo;0042;10/09/2026;10/10/2026;142,10\nSem nada;;;;\n');
   await page.getByText('可导入 2').waitFor();
   await page.getByText('重复跳过 1').waitFor();
@@ -590,6 +594,22 @@ try {
   await page.fill('#q', 'Nova Loja');
   await page.locator('.brow', { hasText: '#7002' }).waitFor();
   ok('B15', '从表格批量导入：自动识别表头、按商家账期补到期日、重复行跳过、错误行给原因、可自动新建商家');
+
+  // 连续录入：存并记下一笔；金额离开输入框自动整理；最近金额一点就填
+  await page.goto(BASE + '#/new');
+  await page.fill('#f-totalOnly', '1234,5');
+  await page.click('#f-merchant');
+  assert.equal(await page.inputValue('#f-totalOnly'), '1.234,50');
+  await page.fill('#f-merchant', 'Nova Loja');
+  await page.getByRole('option', { name: /Nova Loja SP/ }).click();
+  await page.getByRole('button', { name: '800,00' }).waitFor();
+  await page.fill('#f-orderNumber', '7003');
+  await page.getByRole('button', { name: '存并记下一笔' }).click();
+  await page.getByText('已保存 R$ 1.234,50，接着记下一笔').waitFor();
+  assert.equal(await page.inputValue('#f-totalOnly'), '');
+  assert.equal(await page.inputValue('#f-orderNumber'), '');
+  assert.equal(await page.inputValue('#f-merchant'), '');
+  ok('B30', '连续录入：存并记下一笔（保留日期和账号、清空金额商家单号）；金额自动整理成 1.234,50；选商家后显示最近金额');
 
   // 手工录入时的重复提醒
   await page.goto(BASE + '#/new');
@@ -1002,7 +1022,7 @@ try {
   ok('B22', '账号：邮箱+密码注册登录（不发邮件）与邮箱验证码两种方式（错码/错密码提示），本机账单自动上传到账号并改为账号同步；AI 识别按次计（试用 10 次）；识别结果按商家历史免逐行核对');
   // 试用期没有导出（T2）：点导出弹出订阅说明
   await page.goto(BASE + '#/data');
-  await page.getByRole('button', { name: '导出账单记录（CSV）' }).click();
+  await page.getByRole('button', { name: '导出 Excel' }).click();
   await page.getByRole('dialog', { name: '导出记录是 T2 的功能' }).waitFor();
   await page.getByRole('button', { name: '以后再说' }).click();
   // 试用到期 → 只读：首页提示、新增弹出订阅、识别页换成订阅说明
@@ -1030,7 +1050,7 @@ try {
   await page.getByText(/T2（年付）有效期至/).waitFor({ timeout: 15000 });
   await page.getByText('0 / 50 次').waitFor(); // 订阅后按自然月计次（试用期的次数单独计）
   await page.goto(BASE + '#/data');
-  await page.getByRole('button', { name: '导出账单记录（CSV）' }).click();
+  await page.getByRole('button', { name: '导出 Excel' }).click();
   await page.getByText('已导出账单记录').waitFor();
   ok('B23', '套餐：试用 30 天 + AI 10 次；试用期导出需 T2；到期只读（首页提示、新增与识别换成订阅说明）；Mercado Pago 订阅 T2 年付（R$ 199,00/12 个月）后恢复全部功能、AI 50 次/月、可导出 CSV');
 
@@ -1056,7 +1076,7 @@ try {
   assert.ok(await p3.locator('.tour-hole').isVisible(), '应高亮目标按钮');
   await p3.waitForTimeout(1500);
   await p3.screenshot({ path: 'shot-tour-390.png' });
-  for (const t of ['拍照识别', '账单', '报表', '设置']) {
+  for (const t of ['记一笔', '账单', '报表', '设置']) {
     await tour.getByRole('button', { name: '下一步' }).click();
     await tour.getByRole('heading', { name: t, exact: true }).waitFor();
   }
@@ -1160,6 +1180,29 @@ try {
   await kp.goto(BASE);
   await kp.waitForTimeout(1200);
   await kp.screenshot({ path: 'shot-dark-390.png', fullPage: true });
+
+  // Excel 批量导入：下载 .xlsx 模板 → 原样选回来 → 预览 → 导入
+  const xc = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Sao_Paulo', locale: 'zh-CN', serviceWorkers: 'block', isMobile: true, hasTouch: true });
+  const xp = await xc.newPage();
+  xp.on('pageerror', (e) => errors.push('导入: ' + e.message));
+  await xp.goto(BASE + '#/bills');
+  await xp.getByRole('button', { name: 'Excel 批量导入' }).first().click();
+  await xp.getByRole('heading', { name: 'Excel 批量导入账单' }).waitFor();
+  const [xdl] = await Promise.all([xp.waitForEvent('download'), xp.getByRole('button', { name: '下载 Excel 模板' }).click()]);
+  assert.ok(['账单导入模板.xlsx', 'download'].includes(xdl.suggestedFilename()));
+  const tpl = await xdl.path();
+  await xp.locator('input[type=file][accept*=".xlsx"]').setInputFiles({ name: '我的账单.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: await readFile(tpl) });
+  await xp.getByText('我的账单.xlsx · 3 行').waitFor();
+  await xp.locator('.pill', { hasText: '可导入 2' }).waitFor();
+  { const w = await xp.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]); assert.ok(w[0] <= w[1], `导入页 横向溢出 ${w}`); }
+  await xp.screenshot({ path: 'shot-import-390.png', fullPage: true });
+  await xp.getByRole('button', { name: '导入 2 笔账单' }).click();
+  await xp.getByText('已导入 2 笔账单，新建 2 个商家').waitFor();
+  await xp.goto(BASE + '#/bills/all');
+  await xp.locator('.brow', { hasText: '#0042' }).waitFor();
+  await xp.locator('.brow', { hasText: '电费 · Enel' }).waitFor();
+  await xc.close();
+  ok('B29', 'Excel 批量导入：下载 .xlsx 模板（中文表头、单号列为文本），原样上传后预览 2 笔并导入（商家账单 + 日常缴费）');
 
   // 三语：葡语系统 → 葡语界面；设置里切换到英文、再改回跟随系统
   const lg = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Sao_Paulo', locale: 'pt-BR', serviceWorkers: 'block' });

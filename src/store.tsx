@@ -60,6 +60,7 @@ export type Route =
   | { name: 'set-ai' }
   | { name: 'set-dev' }
   | { name: 'data' }
+  | { name: 'import' }
   | { name: 'account' }
   | { name: 'help' }
   | { name: 'report'; period?: string }
@@ -92,6 +93,8 @@ export function parseHash(h: string): Route {
       return { name: p[0] };
     case 'data':
       return { name: 'data' };
+    case 'import':
+      return { name: 'import' };
     case 'account':
       return { name: 'account' };
     case 'help':

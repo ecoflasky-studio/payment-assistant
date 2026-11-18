@@ -125,6 +125,14 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
   const [triedSave, setTriedSave] = useState(false);
   const autoAccount = useRef(true);
   const loaded = useRef(false);
+  // 电脑上新建账单时直接把光标放在金额（手机上不自动弹键盘）
+  const focusedOnce = useRef(false);
+  useEffect(() => {
+    if (focusedOnce.current || mode !== 'new' || !state || state.copiedFrom || !isTotalMode(state)) return;
+    focusedOnce.current = true;
+    if (typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine)').matches) setTimeout(() => document.getElementById('f-totalOnly')?.focus({ preventScroll: true }), 80);
+  }, [mode, state]);
+
 
   /* ---------- 初始化 ---------- */
   useEffect(() => {
@@ -192,9 +200,9 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
           dueDateText: isoToBR(addDays(t, 30)),
           reminderDays: String(settings.defaultReminderDays),
           notes: '',
-          rows: [blankRow(), blankRow()],
+          rows: [blankRow()],
           dueBeforeConfirmed: false,
-          amountMode: 'items',
+          amountMode: 'total',
           totalText: '',
           totalDesc: '',
           paidDateText: '',
@@ -362,6 +370,16 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
   const curMerchant = merchants.find((m) => m.id === state.merchantId) ?? null;
   const rule = curMerchant?.term ?? null;
   const expenseMode = state.kind === 'expense';
+  // 这个商家最近几次的金额（去重），方便固定金额的账单一点就填
+  const recentAmounts = (() => {
+    if (!state.merchantId) return [] as number[];
+    const seen = new Set<number>();
+    for (const b of [...bills].filter((b) => b.merchantId === state.merchantId && b.id !== existing?.id && !b.deletedAt && b.totalCents > 0).sort((a, b) => b.billDate.localeCompare(a.billDate))) {
+      seen.add(b.totalCents);
+      if (seen.size >= 3) break;
+    }
+    return [...seen];
+  })();
   const partyWord = expenseMode ? tr('缴费单位') : tr('商家');
   const installmentDues = (() => {
     if (existing || rule?.kind !== 'installments' || !state.splitInstallments) return [];
@@ -390,7 +408,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
     set({
       kind: k,
       ...(keepMerchant ? {} : { merchantId: null, merchantName: '' }),
-      ...(k === 'expense' && !hasRows ? { amountMode: 'total' as const } : {}),
+      ...(!hasRows ? { amountMode: 'total' as const } : {}),
       ...(k === 'expense' && (state.repeatKey ?? 'none') === 'none' ? repeatFields({ unit: 'month', every: 1 }) : {}),
       ...(k === 'supplier' ? { category: null } : {}),
       splitInstallments: false,
@@ -484,7 +502,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
     go({ name: 'home' }, true);
   };
 
-  const save = async () => {
+  const save = async (next = false) => {
     if (saving) return;
     if (!gate.canSave) {
       setTriedSave(true);
@@ -600,6 +618,32 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         go({ name: 'bills', filter: 'unpaid' }, true);
         return;
       }
+      if (next && !existing) {
+        // 连续录入：保留类型、日期、账号、提醒和重复设置，清空金额、商家和单号
+        fb.toast(tr('已保存 {0}，接着记下一笔', formatBRL(bill.totalCents)));
+        autoAccount.current = true;
+        setPaidToggle(false);
+        setTriedSave(false);
+        setState((st) => st && ({
+          ...st,
+          merchantId: null,
+          merchantName: '',
+          orderNumber: '',
+          notes: '',
+          tags: [],
+          paymentCode: '',
+          totalText: '',
+          totalDesc: '',
+          rows: [blankRow()],
+          paidDateText: '',
+          copiedFrom: undefined,
+          dueBeforeConfirmed: false,
+          splitInstallments: false,
+        }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => document.getElementById(totalMode ? 'f-totalOnly' : 'f-merchant')?.focus({ preventScroll: true }), 50);
+        return;
+      }
       if (existing && existing.dueDate !== bill.dueDate) fb.toast(tr('已保存。到期日有变，如已导入日历请更新旧事件'));
       else
         fb.toast(existing ? tr('已保存修改') : tr('已保存 {0}', formatBRL(bill.totalCents)), {
@@ -692,7 +736,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         </div>
       )}
 
-      <section className="card stack">
+      <section className="card stack" aria-label={tr('金额')}>
         {(
           <div className="seg" role="group" aria-label={tr('账单类型')} style={{ alignSelf: 'flex-start' }}>
             <button type="button" aria-pressed={!expenseMode} onClick={() => switchKind('supplier')}>
@@ -703,6 +747,331 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
             </button>
           </div>
         )}
+        <div className="section-head" style={{ flexWrap: 'wrap' }}>
+          <h2>{totalMode ? tr('金额') : tr('明细')}</h2>
+          <div className="seg" role="group" aria-label={tr('金额填写方式')}>
+            <button type="button" aria-pressed={!totalMode} onClick={() => switchMode('items')}>
+              {tr('逐行明细')}
+            </button>
+            <button type="button" aria-pressed={totalMode} onClick={() => switchMode('total')}>
+              {tr('仅填总金额')}
+            </button>
+          </div>
+        </div>
+        {totalMode ? (
+          <div className="stack">
+            <div className="grid2 stack-sm">
+              <div className="field">
+                <label htmlFor="f-totalOnly">{tr('总金额 R$')}</label>
+                <input
+                  id="f-totalOnly"
+                  className={`input num big-input${cls('totalOnly')}`}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder={tr('例如 1.234,56')}
+                  value={state.totalText ?? ''}
+                  onChange={(e) => set({ totalText: e.target.value })}
+                  enterKeyHint="next"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      document.getElementById('f-dueDate')?.focus();
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // 离开输入框时整理成标准写法（1234,5 → 1.234,50）；有歧义的不动，交给校验提示
+                    const p = parseBRL(e.target.value);
+                    if (p.cents && !p.ambiguous && centsToInput(p.cents) !== e.target.value) set({ totalText: centsToInput(p.cents) });
+                  }}
+                />
+                {inline('totalOnly')}
+                {recentAmounts.length > 0 && !state.ocr?.printedTotalRaw && (
+                  <div className="qchips" aria-label={tr('最近金额')}>
+                    <span className="xs muted">{tr('最近：')}</span>
+                    {recentAmounts.map((c) => (
+                      <button key={c} type="button" aria-pressed={parseBRL(state.totalText ?? '').cents === c} onClick={() => set({ totalText: centsToInput(c) })}>
+                        {formatBRL(c, false)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {state.ocr?.printedTotalRaw && (
+                  <div className="qchips">
+                    <span className="xs muted">{tr('图片 TOTAL：')}</span>
+                    <button type="button" onClick={() => set({ totalText: state.ocr!.printedTotalRaw! })}>
+                      {tr('用')} {state.ocr.printedTotalRaw}
+                    </button>
+                    {computedTotal(state.rows) > 0 && (
+                      <button type="button" onClick={() => set({ totalText: centsToInput(computedTotal(state.rows)) })}>
+                        {tr('用明细合计')} {formatBRL(computedTotal(state.rows), false)}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="f-totalDesc">{tr('说明（可空）')}</label>
+                <input id="f-totalDesc" className="input" value={state.totalDesc ?? ''} onChange={(e) => set({ totalDesc: e.target.value })} placeholder={tx(TOTAL_ONLY_DESC)} maxLength={120} />
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
+        <div className="items-wrap has-cards">
+          <table className="items-table">
+            <thead>
+              <tr>
+                <th>{tr('数量')}</th>
+                <th>{tr('型号 / 描述')}</th>
+                <th>{tr('单价 R$')}</th>
+                <th style={{ textAlign: 'right' }}>{tr('小计')}</th>
+                <th>
+                  <span className="sr-only">{tr('操作')}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.rows.map((r) => (
+                <ItemRowTable key={r.key} r={r} cls={cls} sel={selRow === r.key} onSel={() => setSelRow(r.key)} setRow={setRow} onRemove={() => set({ rows: state.rows.filter((x) => x.key !== r.key) })} onView={r.bbox ? () => { setSelRow(r.key); setPane('img'); } : undefined} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="item-cards">
+          {state.rows.map((r, idx) => (
+            <ItemRowCard key={r.key} idx={idx} r={r} cls={cls} sel={selRow === r.key} onSel={() => setSelRow(r.key)} setRow={setRow} onRemove={() => set({ rows: state.rows.filter((x) => x.key !== r.key) })} onView={r.bbox ? () => { setSelRow(r.key); setPane('img'); } : undefined} />
+          ))}
+        </div>
+        <button type="button" className="btn btn-soft" onClick={() => set({ rows: [...state.rows, blankRow()] })}>
+          <IPlus />
+          {tr('添加一行')}
+        </button>
+        </>
+        )}
+        {!totalMode && (
+          <div className="totalbar" id="f-total">
+            <span className="stack" style={{ gap: 0 }}>
+              <span className="small" style={{ fontWeight: 700 }}>{totalMode ? tr('保存金额') : tr('计算总额')}</span>
+              {state.ocr?.printedTotalRaw && !totalMode && (
+                <span className={`xs ${byField.get('total') ? 'err' : 'muted'}`}>
+                  {tr('图片 TOTAL：')}{state.ocr.printedTotalRaw}
+                  {(() => {
+                    const p = parseBRL(state.ocr!.printedTotalRaw!, { groupingKnown: true });
+                    return p.cents !== null && p.cents !== total ? tr('（差额 {0}）', formatBRL(total - p.cents)) : p.cents === total ? tr(' ✓ 一致') : '';
+                  })()}
+                </span>
+              )}
+            </span>
+            <span className="t num">{formatBRL(total)}</span>
+          </div>
+        )}
+      </section>
+
+      {state.ocr && state.ocr.unparsedLines.length > 0 && !totalMode && (
+        <section className="card stack" id="f-unparsed">
+          <h3>{tr('未解析的行')}</h3>
+          <p className="small muted">{tr('这些行包含数字但没有形成明细。如果是漏掉的商品，请点「转为明细」后补全。')}</p>
+          {state.ocr.unparsedLines.map((l, i) => (
+            <div key={i} className="row between" style={{ borderTop: '1px dashed var(--line)', paddingTop: 8 }}>
+              <span className="mono grow" style={{ overflowWrap: 'anywhere' }}>{l}</span>
+              <button type="button" className="btn btn-sm" onClick={() => set({ rows: [...state.rows, { ...blankRow(), desc: '', qtyText: '', unitText: '', needsReview: true, confidence: 0 }] })}>
+                {tr('转为明细')}
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="card stack" aria-label={tr('日期')}>
+        <div className="grid2 stack-sm">
+          <div className="field">
+            <label htmlFor="f-billDate">{tr('账单日期')}</label>
+            <DateField
+              id="f-billDate"
+              title={tr('选择账单日期')}
+              className={cls('billDate')}
+              value={state.billDateText}
+              today={store.today}
+              onChange={setBillDate}
+              quick={[{ label: tr('昨天'), iso: addDays(store.today, -1) }]}
+              hintNode={state.ocr?.billDateRaw ? <span className="hint">{tr('图片原文：')}{state.ocr.billDateRaw}</span> : null}
+            />
+            {inline('billDate')}
+          </div>
+          <div className="field">
+            <label htmlFor="f-dueDate">{tr('到期日期')}</label>
+            <DateField
+              id="f-dueDate"
+              title={tr('选择到期日期')}
+              className={cls('dueDate')}
+              value={state.dueDateText}
+              today={store.today}
+              totals={dueTotals}
+              quick={dueQuickDates(billISO, store.today)}
+              onChange={(v) => set({ dueDateText: v, dueBeforeConfirmed: false, dueAuto: false })}
+              hintNode={
+                rule ? (
+                  state.dueAuto ? (
+                    <span className="hint ok-hint">{tr('✓ 已按「')}{curMerchant!.name}{tr('」账期（')}{describeTerm(rule)}{tr('）自动计算')}</span>
+                  ) : (
+                    <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', paddingLeft: 0 }} onClick={() => billISO && set(termPatch(rule, billISO, !!existing))}>
+                      {tr('按「')}{curMerchant!.name}{tr('」账期重新计算')}
+                    </button>
+                  )
+                ) : null
+              }
+            />
+            {inline('dueDate')}
+            {dueISO && nonBusinessReason(dueISO) && (
+              <span className="hint warn-hint">
+                {isoToBR(dueISO).slice(0, 5)} {tr('是')}{nonBusinessReason(dueISO)}{tr('，银行顺延到')} {weekdayCN(nextBusinessDay(dueISO))} {isoToBR(nextBusinessDay(dueISO)).slice(0, 5)}{tr('。')}
+                <button type="button" className="linkbtn" onClick={() => set({ dueDateText: isoToBR(nextBusinessDay(dueISO)), dueBeforeConfirmed: false, dueAuto: false })}>
+                  {tr('改为')} {isoToBR(nextBusinessDay(dueISO)).slice(0, 5)}
+                </button>
+              </span>
+            )}
+            {billISO && (
+              <div className="qchips" aria-label={tr('按账期天数填写')}>
+                <span className="xs muted">{tr('账期：')}</span>
+                {[7, 15, 30, 45, 60].map((d) => (
+                  <button key={d} type="button" onClick={() => set({ dueDateText: isoToBR(addDays(billISO, d)), dueBeforeConfirmed: false, dueAuto: false })}>
+                    +{d}
+                  </button>
+                ))}
+                <button type="button" onClick={() => set({ dueDateText: isoToBR(addMonths(billISO, 1)), dueBeforeConfirmed: false, dueAuto: false })}>
+                  {tr('下月同日')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {rule?.kind === 'installments' && !existing && (
+          <div className="instbox stack" style={{ gap: 6 }}>
+            <label className="check" style={{ padding: 0 }}>
+              <input type="checkbox" checked={!!state.splitInstallments} onChange={(e) => set({ splitInstallments: e.target.checked })} />
+              <span>
+                <b>{tr('按分期保存')}</b>{tr('（')}{describeTerm(rule)}{tr('，每期单独提醒）')}
+              </span>
+            </label>
+            {installmentDues.length >= 2 && (
+              <div className="tbl-wrap">
+                <table className="tbl num">
+                  <tbody>
+                    {installmentDues.map((d, i) => (
+                      <tr key={d + i}>
+                        <td>
+                          {tr('第 {0}/{1} 期', i + 1, installmentDues.length)}
+                        </td>
+                        <td>{formatBR(d)}</td>
+                        <td className="r" style={{ fontWeight: 800 }}>
+                          {total > 0 ? formatBRL(splitCents(total, installmentDues.length)[i]) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="field" id="f-repeat" tabIndex={-1}>
+          <label htmlFor="f-repeatKey">{tr('重复')}</label>
+          <div className="row" style={{ gap: 8 }}>
+            <select
+              id="f-repeatKey"
+              className={`input${cls('repeat')}`}
+              style={{ width: 'auto', minWidth: 140 }}
+              value={state.repeatKey ?? (state.recurring ? 'm1' : 'none')}
+              onChange={(e) => set({ repeatKey: e.target.value })}
+            >
+              <option value="none">{tr('不重复')}</option>
+              {REPEAT_PRESETS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+              <option value="custom">{tr('自定义…')}</option>
+            </select>
+            {state.repeatKey === 'custom' && (
+              <>
+                <span className="small">{tr('每')}</span>
+                <input className={`input num${cls('repeat')}`} style={{ width: 72 }} inputMode="numeric" aria-label={tr('间隔')} value={state.repeatEvery ?? ''} onChange={(e) => set({ repeatEvery: e.target.value.replace(/\D/g, '') })} />
+                <select className="input" style={{ width: 'auto' }} aria-label={tr('单位')} value={state.repeatUnit ?? 'month'} onChange={(e) => set({ repeatUnit: e.target.value as RepeatUnit })}>
+                  {(Object.keys(UNIT_LABEL) as RepeatUnit[]).map((u) => (
+                    <option key={u} value={u}>
+                      {UNIT_LABEL[u]}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
+          {(state.repeatKey ?? 'none') !== 'none' && (
+            <>
+              <div className="field" style={{ maxWidth: 320 }}>
+                <label htmlFor="f-repeatUntil">{tr('结束日期（可空 = 一直重复）')}</label>
+                <DateField id="f-repeatUntil" title={tr('选择重复结束日期')} value={state.repeatUntil ?? ''} today={store.today} onChange={(v) => set({ repeatUntil: v })} />
+              </div>
+              <span className="hint">
+                {repeatRuleOf(state) ? tr('{0}：', describeRepeat(repeatRuleOf(state))) : ''}{tr('付款后自动生成下一期')}
+              </span>
+            </>
+          )}
+          {inline('repeat')}
+        </div>
+
+        <div className="field" style={{ maxWidth: 360 }}>
+          <label htmlFor="f-reminderDays">{tr('提前提醒（天）')}</label>
+          <input id="f-reminderDays" className={`input num${cls('reminderDays')}`} inputMode="numeric" value={state.reminderDays} onChange={(e) => set({ reminderDays: e.target.value.replace(/[^\d]/g, '') })} />
+          <div className="qchips">
+            {[0, 1, 3, 5, 7].map((d) => (
+              <button key={d} type="button" onClick={() => set({ reminderDays: String(d) })}>
+                {d === 0 ? tr('当天') : tr('{0} 天', d)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(
+          <div className="stack" style={{ gap: 6 }}>
+            <label className="check" style={{ padding: 0 }}>
+              <input
+                type="checkbox"
+                checked={paidToggle}
+                onChange={async (e) => {
+                  const on = e.target.checked;
+                  // 取消勾选会清空多笔付款记录：先确认
+                  if (!on && existing && (existing.payments?.length ?? 0) > 1) {
+                    const ok = await fb.confirm({ title: tr('取消「已付款」？'), body: <p>{tr('这笔账单有')} {existing.payments!.length} {tr('条付款记录，保存后会全部清空。只想改某一笔付款，请到账单详情里删除那一条。')}</p>, confirmLabel: tr('仍然取消') });
+                    if (!ok) return;
+                  }
+                  setPaidToggle(on);
+                  set({ paidDateText: on ? state.paidDateText || isoToBR(store.today) : '' });
+                }}
+              />
+              <span>
+                <b>{tr('已付款')}</b>
+              </span>
+            </label>
+            {!paidToggle && existing && isPartial(existing) && (
+              <span className="hint">
+                {tr('已分次付')} {formatBRL(existing.totalCents - openCents(existing))}{tr('，还差')} {formatBRL(openCents(existing))}{tr('。付款记录在账单详情里管理；勾选「已付款」会把剩余部分记为一笔付款。')}
+              </span>
+            )}
+            {paidToggle && (
+              <div className="field" style={{ maxWidth: 320 }}>
+                <label htmlFor="f-paidDate">{tr('付款日期')}</label>
+                <DateField id="f-paidDate" title={tr('选择付款日期')} className={cls('paidDate')} value={state.paidDateText ?? ''} today={store.today} onChange={(v) => set({ paidDateText: v })} />
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="card stack" aria-label={expenseMode ? tr('缴费单位与付款') : tr('商家与付款')}>
+        <h3 className="editor-sec-title">{expenseMode ? tr('缴费单位与付款') : tr('商家与付款')}</h3>
         {expenseMode && (
           <div className="field" id="f-category" tabIndex={-1}>
             <span className="label">{tr('缴费类型')}</span>
@@ -867,117 +1236,11 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
           </div>
         </div>
 
-        <div className="grid2 stack-sm">
-          <div className="field">
-            <label htmlFor="f-orderNumber">{expenseMode ? tr('单号 / 参考号') : tr('订单号')}</label>
-            <input id="f-orderNumber" className={`input mono${cls('orderNumber')}`} inputMode="text" autoComplete="off" value={state.orderNumber} onChange={(e) => set({ orderNumber: e.target.value })} placeholder={tr('可空，保留前导零')} />
-            {dupOrder && <span className="err">{tr('同商家已有订单号')} {state.orderNumber} {tr('的账单（到期')} {formatBR(dupOrder.dueDate)}{tr('），请确认不是重复录入')}</span>}
-          </div>
-          <div className="field">
-            <label htmlFor="f-reminderDays">{tr('提前提醒（天）')}</label>
-            <input id="f-reminderDays" className={`input num${cls('reminderDays')}`} inputMode="numeric" value={state.reminderDays} onChange={(e) => set({ reminderDays: e.target.value.replace(/[^\d]/g, '') })} />
-            <div className="qchips">
-              {[0, 1, 3, 5, 7].map((d) => (
-                <button key={d} type="button" onClick={() => set({ reminderDays: String(d) })}>
-                  {d === 0 ? tr('当天') : tr('{0} 天', d)}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="field">
+          <label htmlFor="f-orderNumber">{expenseMode ? tr('单号 / 参考号') : tr('订单号')}</label>
+          <input id="f-orderNumber" className={`input mono${cls('orderNumber')}`} inputMode="text" autoComplete="off" value={state.orderNumber} onChange={(e) => set({ orderNumber: e.target.value })} placeholder={tr('可空，保留前导零')} />
+          {dupOrder && <span className="err">{tr('同商家已有订单号')} {state.orderNumber} {tr('的账单（到期')} {formatBR(dupOrder.dueDate)}{tr('），请确认不是重复录入')}</span>}
         </div>
-
-        <div className="grid2 stack-sm">
-          <div className="field">
-            <label htmlFor="f-billDate">{tr('账单日期')}</label>
-            <DateField
-              id="f-billDate"
-              title={tr('选择账单日期')}
-              className={cls('billDate')}
-              value={state.billDateText}
-              today={store.today}
-              onChange={setBillDate}
-              quick={[{ label: tr('昨天'), iso: addDays(store.today, -1) }]}
-              hintNode={state.ocr?.billDateRaw ? <span className="hint">{tr('图片原文：')}{state.ocr.billDateRaw}</span> : null}
-            />
-            {inline('billDate')}
-          </div>
-          <div className="field">
-            <label htmlFor="f-dueDate">{tr('到期日期')}</label>
-            <DateField
-              id="f-dueDate"
-              title={tr('选择到期日期')}
-              className={cls('dueDate')}
-              value={state.dueDateText}
-              today={store.today}
-              totals={dueTotals}
-              quick={dueQuickDates(billISO, store.today)}
-              onChange={(v) => set({ dueDateText: v, dueBeforeConfirmed: false, dueAuto: false })}
-              hintNode={
-                rule ? (
-                  state.dueAuto ? (
-                    <span className="hint ok-hint">{tr('✓ 已按「')}{curMerchant!.name}{tr('」账期（')}{describeTerm(rule)}{tr('）自动计算')}</span>
-                  ) : (
-                    <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', paddingLeft: 0 }} onClick={() => billISO && set(termPatch(rule, billISO, !!existing))}>
-                      {tr('按「')}{curMerchant!.name}{tr('」账期重新计算')}
-                    </button>
-                  )
-                ) : null
-              }
-            />
-            {inline('dueDate')}
-            {dueISO && nonBusinessReason(dueISO) && (
-              <span className="hint warn-hint">
-                {isoToBR(dueISO).slice(0, 5)} {tr('是')}{nonBusinessReason(dueISO)}{tr('，银行顺延到')} {weekdayCN(nextBusinessDay(dueISO))} {isoToBR(nextBusinessDay(dueISO)).slice(0, 5)}{tr('。')}
-                <button type="button" className="linkbtn" onClick={() => set({ dueDateText: isoToBR(nextBusinessDay(dueISO)), dueBeforeConfirmed: false, dueAuto: false })}>
-                  {tr('改为')} {isoToBR(nextBusinessDay(dueISO)).slice(0, 5)}
-                </button>
-              </span>
-            )}
-            {billISO && (
-              <div className="qchips" aria-label={tr('按账期天数填写')}>
-                <span className="xs muted">{tr('账期：')}</span>
-                {[7, 15, 30, 45, 60].map((d) => (
-                  <button key={d} type="button" onClick={() => set({ dueDateText: isoToBR(addDays(billISO, d)), dueBeforeConfirmed: false, dueAuto: false })}>
-                    +{d}
-                  </button>
-                ))}
-                <button type="button" onClick={() => set({ dueDateText: isoToBR(addMonths(billISO, 1)), dueBeforeConfirmed: false, dueAuto: false })}>
-                  {tr('下月同日')}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {rule?.kind === 'installments' && !existing && (
-          <div className="instbox stack" style={{ gap: 6 }}>
-            <label className="check" style={{ padding: 0 }}>
-              <input type="checkbox" checked={!!state.splitInstallments} onChange={(e) => set({ splitInstallments: e.target.checked })} />
-              <span>
-                <b>{tr('按分期保存')}</b>{tr('（')}{describeTerm(rule)}{tr('，每期单独提醒）')}
-              </span>
-            </label>
-            {installmentDues.length >= 2 && (
-              <div className="tbl-wrap">
-                <table className="tbl num">
-                  <tbody>
-                    {installmentDues.map((d, i) => (
-                      <tr key={d + i}>
-                        <td>
-                          {tr('第 {0}/{1} 期', i + 1, installmentDues.length)}
-                        </td>
-                        <td>{formatBR(d)}</td>
-                        <td className="r" style={{ fontWeight: 800 }}>
-                          {total > 0 ? formatBRL(splitCents(total, installmentDues.length)[i]) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="field">
           <label htmlFor="f-paymentCode">{tr('Boleto 条码 / PIX 复制码（可空）')}</label>
@@ -1017,192 +1280,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
           )}
           {state.paymentCode?.trim() && <span className="hint">{describePaymentCode(state.paymentCode)} · {state.paymentCode.replace(/\D/g, '').length} {tr('位数字')}</span>}
         </div>
-
-        <div className="field" id="f-repeat" tabIndex={-1}>
-          <label htmlFor="f-repeatKey">{tr('重复')}</label>
-          <div className="row" style={{ gap: 8 }}>
-            <select
-              id="f-repeatKey"
-              className={`input${cls('repeat')}`}
-              style={{ width: 'auto', minWidth: 140 }}
-              value={state.repeatKey ?? (state.recurring ? 'm1' : 'none')}
-              onChange={(e) => set({ repeatKey: e.target.value })}
-            >
-              <option value="none">{tr('不重复')}</option>
-              {REPEAT_PRESETS.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-              <option value="custom">{tr('自定义…')}</option>
-            </select>
-            {state.repeatKey === 'custom' && (
-              <>
-                <span className="small">{tr('每')}</span>
-                <input className={`input num${cls('repeat')}`} style={{ width: 72 }} inputMode="numeric" aria-label={tr('间隔')} value={state.repeatEvery ?? ''} onChange={(e) => set({ repeatEvery: e.target.value.replace(/\D/g, '') })} />
-                <select className="input" style={{ width: 'auto' }} aria-label={tr('单位')} value={state.repeatUnit ?? 'month'} onChange={(e) => set({ repeatUnit: e.target.value as RepeatUnit })}>
-                  {(Object.keys(UNIT_LABEL) as RepeatUnit[]).map((u) => (
-                    <option key={u} value={u}>
-                      {UNIT_LABEL[u]}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
-          </div>
-          {(state.repeatKey ?? 'none') !== 'none' && (
-            <>
-              <div className="field" style={{ maxWidth: 320 }}>
-                <label htmlFor="f-repeatUntil">{tr('结束日期（可空 = 一直重复）')}</label>
-                <DateField id="f-repeatUntil" title={tr('选择重复结束日期')} value={state.repeatUntil ?? ''} today={store.today} onChange={(v) => set({ repeatUntil: v })} />
-              </div>
-              <span className="hint">
-                {repeatRuleOf(state) ? tr('{0}：', describeRepeat(repeatRuleOf(state))) : ''}{tr('付款后自动生成下一期')}
-              </span>
-            </>
-          )}
-          {inline('repeat')}
-        </div>
-
-        {(
-          <div className="stack" style={{ gap: 6 }}>
-            <label className="check" style={{ padding: 0 }}>
-              <input
-                type="checkbox"
-                checked={paidToggle}
-                onChange={async (e) => {
-                  const on = e.target.checked;
-                  // 取消勾选会清空多笔付款记录：先确认
-                  if (!on && existing && (existing.payments?.length ?? 0) > 1) {
-                    const ok = await fb.confirm({ title: tr('取消「已付款」？'), body: <p>{tr('这笔账单有')} {existing.payments!.length} {tr('条付款记录，保存后会全部清空。只想改某一笔付款，请到账单详情里删除那一条。')}</p>, confirmLabel: tr('仍然取消') });
-                    if (!ok) return;
-                  }
-                  setPaidToggle(on);
-                  set({ paidDateText: on ? state.paidDateText || isoToBR(store.today) : '' });
-                }}
-              />
-              <span>
-                <b>{tr('已付款')}</b>
-              </span>
-            </label>
-            {!paidToggle && existing && isPartial(existing) && (
-              <span className="hint">
-                {tr('已分次付')} {formatBRL(existing.totalCents - openCents(existing))}{tr('，还差')} {formatBRL(openCents(existing))}{tr('。付款记录在账单详情里管理；勾选「已付款」会把剩余部分记为一笔付款。')}
-              </span>
-            )}
-            {paidToggle && (
-              <div className="field" style={{ maxWidth: 320 }}>
-                <label htmlFor="f-paidDate">{tr('付款日期')}</label>
-                <DateField id="f-paidDate" title={tr('选择付款日期')} className={cls('paidDate')} value={state.paidDateText ?? ''} today={store.today} onChange={(v) => set({ paidDateText: v })} />
-              </div>
-            )}
-          </div>
-        )}
       </section>
-
-      <section className="card stack" aria-label={tr('明细')}>
-        <div className="section-head" style={{ flexWrap: 'wrap' }}>
-          <h2>{totalMode ? tr('金额') : tr('明细')}</h2>
-          <div className="seg" role="group" aria-label={tr('金额填写方式')}>
-            <button type="button" aria-pressed={!totalMode} onClick={() => switchMode('items')}>
-              {tr('逐行明细')}
-            </button>
-            <button type="button" aria-pressed={totalMode} onClick={() => switchMode('total')}>
-              {tr('仅填总金额')}
-            </button>
-          </div>
-        </div>
-        {totalMode ? (
-          <div className="stack">
-            <div className="grid2 stack-sm">
-              <div className="field">
-                <label htmlFor="f-totalOnly">{tr('总金额 R$')}</label>
-                <input id="f-totalOnly" className={`input num big-input${cls('totalOnly')}`} inputMode="decimal" autoComplete="off" placeholder={tr('例如 1.234,56')} value={state.totalText ?? ''} onChange={(e) => set({ totalText: e.target.value })} />
-                {inline('totalOnly')}
-                {state.ocr?.printedTotalRaw && (
-                  <div className="qchips">
-                    <span className="xs muted">{tr('图片 TOTAL：')}</span>
-                    <button type="button" onClick={() => set({ totalText: state.ocr!.printedTotalRaw! })}>
-                      {tr('用')} {state.ocr.printedTotalRaw}
-                    </button>
-                    {computedTotal(state.rows) > 0 && (
-                      <button type="button" onClick={() => set({ totalText: centsToInput(computedTotal(state.rows)) })}>
-                        {tr('用明细合计')} {formatBRL(computedTotal(state.rows), false)}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="field">
-                <label htmlFor="f-totalDesc">{tr('说明（可空）')}</label>
-                <input id="f-totalDesc" className="input" value={state.totalDesc ?? ''} onChange={(e) => set({ totalDesc: e.target.value })} placeholder={tx(TOTAL_ONLY_DESC)} maxLength={120} />
-              </div>
-            </div>
-          </div>
-        ) : (
-        <>
-        <div className="items-wrap has-cards">
-          <table className="items-table">
-            <thead>
-              <tr>
-                <th>{tr('数量')}</th>
-                <th>{tr('型号 / 描述')}</th>
-                <th>{tr('单价 R$')}</th>
-                <th style={{ textAlign: 'right' }}>{tr('小计')}</th>
-                <th>
-                  <span className="sr-only">{tr('操作')}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.rows.map((r) => (
-                <ItemRowTable key={r.key} r={r} cls={cls} sel={selRow === r.key} onSel={() => setSelRow(r.key)} setRow={setRow} onRemove={() => set({ rows: state.rows.filter((x) => x.key !== r.key) })} onView={r.bbox ? () => { setSelRow(r.key); setPane('img'); } : undefined} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="item-cards">
-          {state.rows.map((r, idx) => (
-            <ItemRowCard key={r.key} idx={idx} r={r} cls={cls} sel={selRow === r.key} onSel={() => setSelRow(r.key)} setRow={setRow} onRemove={() => set({ rows: state.rows.filter((x) => x.key !== r.key) })} onView={r.bbox ? () => { setSelRow(r.key); setPane('img'); } : undefined} />
-          ))}
-        </div>
-        <button type="button" className="btn btn-soft" onClick={() => set({ rows: [...state.rows, blankRow()] })}>
-          <IPlus />
-          {tr('添加一行')}
-        </button>
-        </>
-        )}
-        <div className="totalbar" id="f-total">
-          <span className="stack" style={{ gap: 0 }}>
-            <span className="small" style={{ fontWeight: 700 }}>{totalMode ? tr('保存金额') : tr('计算总额')}</span>
-            {state.ocr?.printedTotalRaw && !totalMode && (
-              <span className={`xs ${byField.get('total') ? 'err' : 'muted'}`}>
-                {tr('图片 TOTAL：')}{state.ocr.printedTotalRaw}
-                {(() => {
-                  const p = parseBRL(state.ocr!.printedTotalRaw!, { groupingKnown: true });
-                  return p.cents !== null && p.cents !== total ? tr('（差额 {0}）', formatBRL(total - p.cents)) : p.cents === total ? tr(' ✓ 一致') : '';
-                })()}
-              </span>
-            )}
-          </span>
-          <span className="t num">{formatBRL(total)}</span>
-        </div>
-      </section>
-
-      {state.ocr && state.ocr.unparsedLines.length > 0 && !totalMode && (
-        <section className="card stack" id="f-unparsed">
-          <h3>{tr('未解析的行')}</h3>
-          <p className="small muted">{tr('这些行包含数字但没有形成明细。如果是漏掉的商品，请点「转为明细」后补全。')}</p>
-          {state.ocr.unparsedLines.map((l, i) => (
-            <div key={i} className="row between" style={{ borderTop: '1px dashed var(--line)', paddingTop: 8 }}>
-              <span className="mono grow" style={{ overflowWrap: 'anywhere' }}>{l}</span>
-              <button type="button" className="btn btn-sm" onClick={() => set({ rows: [...state.rows, { ...blankRow(), desc: '', qtyText: '', unitText: '', needsReview: true, confidence: 0 }] })}>
-                {tr('转为明细')}
-              </button>
-            </div>
-          ))}
-        </section>
-      )}
 
       <section className="card stack">
         <TagField value={state.tags ?? []} onChange={(tags) => set({ tags })} suggestions={tagSuggestions} />
@@ -1311,12 +1389,17 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
             <button className="btn btn-ghost btn-sm" onClick={discard}>
               {tr('放弃')}
             </button>
-          ) : (
+          ) : mode === 'new' && !state.copiedFrom && installmentDues.length < 2 ? null : (
             <button className="btn btn-ghost btn-sm" onClick={back}>
               {tr('取消')}
             </button>
           )}
-          <button className="btn btn-primary" disabled={(mode === 'review' && !gate.canSave) || saving} aria-disabled={!gate.canSave} onClick={save} aria-describedby="gate-reasons">
+          {mode === 'new' && !state.copiedFrom && installmentDues.length < 2 && (
+            <button className="btn btn-soft btn-sm savenext" disabled={saving} onClick={() => save(true)} title={tr('保存后清空金额和商家，接着录入下一笔')}>
+              {tr('存并记下一笔')}
+            </button>
+          )}
+          <button className="btn btn-primary" disabled={(mode === 'review' && !gate.canSave) || saving} aria-disabled={!gate.canSave} onClick={() => save()} aria-describedby="gate-reasons">
             {saving ? <span className="spin" /> : <ICheck />}
             {mode === 'review' ? tr('确认保存') : tr('保存')}
           </button>

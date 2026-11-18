@@ -83,12 +83,20 @@ export function explainStorageError(e: unknown): StorageError {
   if (e instanceof StorageError) return e;
   const name = (e as any)?.name ?? '';
   if (name === 'QuotaExceededError') return new StorageError(tr('存储空间已满'), tr('请导出备份后删除不需要的票据图片，或清理浏览器空间'));
+  if (isClosedConnection(e)) return new StorageError(tr('本地数据库连接断开了'), tr('刷新页面即可恢复，数据没有丢失'));
   if (name === 'InvalidStateError' || name === 'SecurityError') return new StorageError(tr('浏览器禁止本地存储'), tr('可能处于无痕模式或禁用了网站数据。请换用普通窗口，或允许本站保存数据'));
   if (name === 'VersionError') return new StorageError(tr('本地数据版本比应用新'), tr('请刷新页面加载最新版本的应用；数据未被删除'));
   return new StorageError(tr('本地存储出错：{0}', (e as Error)?.message ?? e), tr('请刷新重试；若持续出现，先在「数据」页导出备份'));
 }
 
-async function open(name = DB_NAME): Promise<IDBPDatabase<Schema>> {
+/** 数据库连接被关掉了（不是真的禁止存储） */
+export function isClosedConnection(e: unknown): boolean {
+  const name = (e as any)?.name ?? '';
+  const msg = String((e as any)?.message ?? '');
+  return (name === 'InvalidStateError' && /clos|connection|database/i.test(msg)) || (name === 'UnknownError' && /connection|lost|server/i.test(msg)) || /database connection is closing|connection to indexed database server lost/i.test(msg);
+}
+
+async function open(name = DB_NAME, onTerminated?: () => void): Promise<IDBPDatabase<Schema>> {
   if (typeof indexedDB === 'undefined') throw new StorageError(tr('此浏览器不支持 IndexedDB'), tr('请使用最新版 Chrome、Safari 或 Edge'));
   try {
     return await openDB<Schema>(name, DB_VERSION, {
@@ -108,6 +116,10 @@ async function open(name = DB_NAME): Promise<IDBPDatabase<Schema>> {
       },
       blocked() {
         console.warn('数据库升级被其他标签页阻塞');
+      },
+      // iPhone 上 App 切到后台一段时间，系统会关掉数据库连接：标记一下，下次用时重新打开
+      terminated() {
+        onTerminated?.();
       },
     });
   } catch (e) {
@@ -138,9 +150,24 @@ async function putLocal(tx: any, store: StoreName, rec: any) {
 
 export class IndexedDbRepository implements Repository {
   private dbp: Promise<IDBPDatabase<Schema>>;
+  private dbName: string;
+  private stale = false;
   onWrite: (() => void) | null = null;
   constructor(name = DB_NAME) {
-    this.dbp = open(name);
+    this.dbName = name;
+    this.dbp = this.connect();
+  }
+  private connect() {
+    this.stale = false;
+    const p = open(this.dbName, () => (this.stale = true));
+    p.then((db) => {
+      // 别的标签页升级数据库时关掉本连接，避免卡住
+      db.addEventListener('versionchange', () => {
+        db.close();
+        this.stale = true;
+      });
+    }).catch(() => {});
+    return p;
   }
   private changed() {
     try {
@@ -148,10 +175,23 @@ export class IndexedDbRepository implements Repository {
     } catch {}
   }
   private async run<T>(fn: (db: IDBPDatabase<Schema>) => Promise<T>): Promise<T> {
-    const db = await this.dbp;
+    if (this.stale) this.dbp = this.connect();
+    let db = await this.dbp;
     try {
       return await fn(db);
     } catch (e) {
+      // 连接已被系统关闭（iOS Safari 后台回来常见）：重新打开再试一次，不要误报「浏览器禁止本地存储」
+      // 已经成功打开过的连接再报 InvalidStateError / UnknownError，基本都是连接被系统关了
+      const n = (e as any)?.name ?? '';
+      if (n === 'InvalidStateError' || n === 'UnknownError' || n === 'TransactionInactiveError' || isClosedConnection(e)) {
+        try {
+          this.dbp = this.connect();
+          db = await this.dbp;
+          return await fn(db);
+        } catch (e2) {
+          throw explainStorageError(e2);
+        }
+      }
       throw explainStorageError(e);
     }
   }

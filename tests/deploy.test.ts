@@ -95,6 +95,41 @@ describe('一键部署脚本', () => {
     expect(out.config.publishableKey).toBe('sb_publishable_xyz');
     expect(JSON.parse(readFileSync(path.join(root, 'dist/zq-config.json'), 'utf8')).functionName).toBe('recognize');
   });
+  it('免费版没配 SMTP 不能改邮件模板：不改模板、其他登录设置照常，并提示配好 SMTP 后重跑', async () => {
+    const pg = new PGlite();
+    await pg.exec(readFileSync('tests/support/pg-auth.sql', 'utf8'));
+    await pg.exec(`create schema cron; create table cron.job(jobid serial, jobname text); create function cron.schedule(n text, s text, c text) returns int language sql as $$ insert into cron.job(jobname) values (n) returning jobid $$; create function cron.unschedule(id int) returns bool language sql as $$ delete from cron.job where jobid = id returning true $$;`);
+    const root = mkdtempSync(path.join(tmpdir(), 'zq-deploy-'));
+    mkdirSync(path.join(root, 'supabase/email'), { recursive: true });
+    cpSync('supabase/setup.sql', path.join(root, 'supabase/setup.sql'));
+    cpSync('supabase/push-cron.sql', path.join(root, 'supabase/push-cron.sql'));
+    cpSync('supabase/email/code.html', path.join(root, 'supabase/email/code.html'));
+    const authBodies: any[] = [];
+    const fetchImpl = async (url: string, init: any) => {
+      const p = url.replace('https://api.supabase.com/v1', '');
+      const j = (o: unknown) => new Response(JSON.stringify(o), { status: 200 });
+      if (p.endsWith('/config/auth')) {
+        const b = JSON.parse(init.body);
+        authBodies.push(b);
+        if (b.mailer_templates_magic_link_content) return new Response(JSON.stringify({ message: 'Email template modification is not available for free tier projects using the default email provider. Please upgrade your plan or configure a custom SMTP provider.', error: { code: 'entitlement_required', feature: 'auth.email_templates' } }), { status: 400 });
+        return j({});
+      }
+      if (p === '/projects/abcdefghijklmnopqrst') return j({ name: 'zq', status: 'ACTIVE_HEALTHY' });
+      if (p.endsWith('/database/query')) {
+        await pg.exec(JSON.parse(init.body).query.replace(/create extension[^;]*;/g, ''));
+        return j([]);
+      }
+      if (p.includes('/api-keys')) return j([{ name: 'default', type: 'publishable', api_key: 'sb_publishable_xyz' }]);
+      return j({});
+    };
+    const out = await main({ env: { SUPABASE_ACCESS_TOKEN: 't', SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', GEMINI_API_KEY: 'g', SITE_URL: 'https://zqzh.com.br/' }, fetchImpl, run: async () => '', root, log: () => {} });
+    expect(authBodies).toHaveLength(2);
+    expect(authBodies[1]).toMatchObject({ mailer_autoconfirm: true, site_url: 'https://zqzh.com.br/' });
+    expect(authBodies[1].mailer_templates_magic_link_content).toBeUndefined();
+    expect(out.warnings.join('\n')).toMatch(/SMTP/);
+    expect(out.config.siteUrl).toBe('https://zqzh.com.br/');
+  });
+
   it('其他步骤权限不够时直接报错，并说明要换全部权限的令牌', async () => {
     const e = await main({
       env: { SUPABASE_ACCESS_TOKEN: 'sbp_scoped', SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', GEMINI_API_KEY: 'g' },

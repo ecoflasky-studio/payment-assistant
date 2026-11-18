@@ -4,9 +4,9 @@ import { getDownloads } from './ocr/providers';
 
 export type SaveOutcome = 'saved' | 'shared' | 'declined' | 'unsupported';
 
-export async function saveFile(filename: string, data: string, mime: string): Promise<{ outcome: SaveOutcome; message?: string }> {
-  // 1) 在 Claude 中打开时，走平台下载能力
-  const dl = await getDownloads();
+export async function saveFile(filename: string, data: string | Uint8Array, mime: string): Promise<{ outcome: SaveOutcome; message?: string }> {
+  // 1) 在 Claude 中打开时，走平台下载能力（只支持文字内容）
+  const dl = typeof data === 'string' ? await getDownloads() : null;
   if (dl) {
     try {
       await dl.save({ filename, data });
@@ -21,7 +21,7 @@ export async function saveFile(filename: string, data: string, mime: string): Pr
   }
   // 2) 手机端系统分享（可直接存到"文件"或发送到日历）
   try {
-    const file = new File([data], filename, { type: mime });
+    const file = new File([data as BlobPart], filename, { type: mime });
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: filename });
       return { outcome: 'shared' };
@@ -32,7 +32,7 @@ export async function saveFile(filename: string, data: string, mime: string): Pr
   // 3) 普通浏览器下载
   if (!dl) {
     try {
-      const url = URL.createObjectURL(new Blob([data], { type: mime }));
+      const url = URL.createObjectURL(new Blob([data as BlobPart], { type: mime }));
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;

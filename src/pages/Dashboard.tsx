@@ -5,7 +5,7 @@ import { PlanBanner } from './Account';
 import { useStore } from '../store';
 import { formatBRL } from '../lib/money';
 import { endOfMonth, formatBR, monthLabel, shiftMonth, weekdayCN } from '../lib/dates';
-import { ICamera, IEdit, IReceipt, IBolt, IChevron } from '../ui/icons';
+import { ICamera, IEdit, IReceipt, IBolt, IChevron, IUpload } from '../ui/icons';
 import { monthSummary } from '../lib/monthly';
 import { cameraSupported } from '../ui/Camera';
 import { billTitle } from '../lib/expense';
@@ -238,10 +238,6 @@ export function Dashboard() {
         </section>
 
         <section className="quick3" data-tour="capture" aria-label={tr('新增账单')}>
-          <PickImageButton capture className="btn qa qa-cam">
-            <ICamera />
-            {tr('拍照识别')}
-          </PickImageButton>
           <button className="btn qa qa-sup" onClick={() => go({ name: 'new' })}>
             <IEdit />
             {tr('商家账单')}
@@ -250,6 +246,16 @@ export function Dashboard() {
             <IBolt />
             {tr('日常缴费')}
           </button>
+          <div className="qa-more">
+            <PickImageButton capture className="btn btn-sm btn-ghost qa-cam">
+              <ICamera />
+              {tr('拍照识别')}
+            </PickImageButton>
+            <button className="btn btn-sm btn-ghost" onClick={() => go({ name: 'import' })}>
+              <IUpload />
+              {tr('Excel 批量导入')}
+            </button>
+          </div>
         </section>
 
         <section className="stack home-list" aria-labelledby="h-todo">
@@ -267,7 +273,7 @@ export function Dashboard() {
                   <IReceipt />
                 </div>
                 <h3>{bills.length ? tr('本月都付清了') : tr('还没有账单')}</h3>
-                <p>{bills.length ? (unpaid.length ? tr('下一笔在 {0} 到期。', formatBR([...unpaid].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0].dueDate)) : tr('没有未付账单。')) : tr('拍一张订单照片，或手工录入第一笔账期。')}</p>
+                <p>{bills.length ? (unpaid.length ? tr('下一笔在 {0} 到期。', formatBR([...unpaid].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0].dueDate)) : tr('没有未付账单。')) : tr('点上方「商家账单」或「日常缴费」录入第一笔；已有表格可以用 Excel 批量导入。')}</p>
               </div>
             }
           />

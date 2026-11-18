@@ -22,6 +22,7 @@ const RemindSettingsPage = lazyPage(loadSettings, 'RemindSettingsPage');
 const AiSettingsPage = lazyPage(loadSettings, 'AiSettingsPage');
 const DevSettingsPage = lazyPage(loadSettings, 'DevSettingsPage');
 const DataPage = lazyPage(() => import('./pages/DataPage'), 'DataPage');
+const ImportPage = lazyPage(() => import('./pages/ImportTable'), 'ImportPage');
 const FlowPage = lazyPage(() => import('./pages/Flow'), 'FlowPage');
 const ReportPage = lazyPage(loadInsights, 'ReportPage');
 const CashflowPage = lazyPage(loadInsights, 'CashflowPage');
@@ -37,7 +38,7 @@ import { useReminders } from './reminders';
 import { IHome, IList, IPlus, IStore, ISettings, ICamera, IEdit, IImage, IBolt, ICloud } from './ui/icons';
 import { syncLabel } from './pages/SyncSettings';
 import { useTheme } from './theme';
-import { ISun, IMoon, IChart, ISearch } from './ui/icons';
+import { ISun, IMoon, IChart, ISearch, IUpload } from './ui/icons';
 import { Modal } from './ui/feedback';
 
 const TITLES: Record<Route['name'], string> = {
@@ -54,6 +55,7 @@ const TITLES: Record<Route['name'], string> = {
   'set-ai': tr('AI 识别与隐私'),
   'set-dev': tr('部署与识别服务'),
   data: tr('数据管理'),
+  import: tr('Excel 批量导入'),
   account: tr('账号与套餐'),
   help: tr('使用教程'),
   report: tr('报表'),
@@ -263,24 +265,30 @@ function Shell() {
       {addOpen && (
         <Modal title={tr('新增账单')} onClose={() => setAddOpen(false)}>
           <div className="stack" onClick={() => setTimeout(() => setAddOpen(false), 0)}>
-            <PickImageButton capture className="btn btn-primary btn-lg btn-block">
-              <ICamera />
-              {tr('拍照识别')}
-            </PickImageButton>
-            <PickImageButton className="btn btn-lg btn-block">
-              <IImage />
-              {tr('上传图片或 PDF')}
-            </PickImageButton>
             <div className="grid2">
-              <button className="btn btn-lg" onClick={() => go({ name: 'new' })}>
+              <button className="btn btn-primary btn-lg" onClick={() => go({ name: 'new' })}>
                 <IEdit />
                 {tr('商家账单')}
               </button>
-              <button className="btn btn-lg" onClick={() => go({ name: 'new', kind: 'expense' })}>
+              <button className="btn btn-primary btn-lg" onClick={() => go({ name: 'new', kind: 'expense' })}>
                 <IBolt />
                 {tr('日常缴费')}
               </button>
             </div>
+            <div className="grid2">
+              <PickImageButton capture className="btn">
+                <ICamera />
+                {tr('拍照识别')}
+              </PickImageButton>
+              <PickImageButton className="btn">
+                <IImage />
+                {tr('上传图片或 PDF')}
+              </PickImageButton>
+            </div>
+            <button className="btn btn-ghost" onClick={() => go({ name: 'import' })}>
+              <IUpload />
+              {tr('Excel 批量导入')}
+            </button>
           </div>
         </Modal>
       )}
@@ -299,7 +307,7 @@ function PageLoading() {
 function Page({ route, rem }: { route: Route; rem: ReturnType<typeof useReminders> }) {
   const { gate } = useStore();
   // 只读（试用结束未订阅）：新增、编辑、识别页面换成订阅说明
-  if (gate.readOnly && ['new', 'edit', 'copy', 'capture', 'review'].includes(route.name)) return <ReadOnlyPage />;
+  if (gate.readOnly && ['new', 'edit', 'copy', 'capture', 'review', 'import'].includes(route.name)) return <ReadOnlyPage />;
   switch (route.name) {
     case 'home':
       return <Dashboard />;
@@ -327,6 +335,8 @@ function Page({ route, rem }: { route: Route; rem: ReturnType<typeof useReminder
       return <DevSettingsPage />;
     case 'data':
       return <DataPage />;
+    case 'import':
+      return <ImportPage />;
     case 'account':
       return <AccountPage />;
     case 'help':

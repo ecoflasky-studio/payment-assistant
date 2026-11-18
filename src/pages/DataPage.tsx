@@ -1,6 +1,5 @@
 import { tr, tx } from '../i18n';
 import type { Settings } from '../lib/types';
-import { ImportTable } from './ImportTable';
 import { EvalSection } from './EvalSection';
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
@@ -9,14 +8,14 @@ import { makeBackup, validateBackup, previewImport, applyMerge, type BackupCheck
 import { saveFile, copyText } from '../lib/platform';
 import { storageInfo, requestPersist } from '../db/repo';
 import { formatBRL } from '../lib/money';
-import { billsCSV } from '../lib/flow';
+import { billsCSV, billsTable } from '../lib/flow';
 import { formatBR } from '../lib/dates';
 import { IDownload, IUpload, ITrash } from '../ui/icons';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 
 export function DataPage() {
-  const { repo, settings, reload, guard, today, storageError, sync, syncNow, saveSettings, gate, requireFeature, bills } = useStore();
+  const { repo, settings, reload, guard, today, storageError, sync, syncNow, saveSettings, gate, requireFeature, bills, go } = useStore();
   const fb = useFeedback();
   const [info, setInfo] = useState<Awaited<ReturnType<typeof storageInfo>>>(null);
   const [check, setCheck] = useState<BackupCheck | null>(null);
@@ -309,21 +308,46 @@ export function DataPage() {
         <h2 id="h-export" className="row">
           <IDownload width={20} height={20} /> {tr('导出记录')} {!gate.canExport && <span className="pill neutral">T2</span>}
         </h2>
-        <p className="small">{tr('把全部账单导出为表格（CSV，Excel / Planilhas Google 可直接打开），方便记账、报税和对账。每月流水也可以在「流水」页导出。')}</p>
-        <button
-          className="btn btn-primary"
-          style={{ alignSelf: 'flex-start' }}
-          onClick={async () => {
-            if (!requireFeature('export')) return;
-            const r = await saveFile(tr('账单记录-{0}.csv', today), billsCSV(bills, today), 'text/csv;charset=utf-8');
-            if (r.outcome === 'saved' || r.outcome === 'shared') fb.toast(tr('已导出账单记录'));
-          }}
-        >
-          <IDownload />
-          {tr('导出账单记录（CSV）')}
+        <p className="small">{tr('把全部账单导出为 Excel 表格（也可选 CSV），方便记账、报税和对账。每月流水也可以在「流水」页导出。')}</p>
+        <div className="row">
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              if (!requireFeature('export')) return;
+              const { writeXlsx } = await import('../lib/xlsx');
+              const { head, rows } = billsTable(bills, today);
+              const data = writeXlsx([{ name: tr('账单'), header: true, textCols: [3], widths: [26, 12, 12, 14, 12, 12, 14, 14, 14, 10, 12, 18, 30, 30], rows: [head, ...rows.map((r) => r.map((c) => (typeof c === 'string' ? c : c.cents / 100)))] }]);
+              const r = await saveFile(tr('账单记录-{0}.xlsx', today), data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+              if (r.outcome === 'saved' || r.outcome === 'shared') fb.toast(tr('已导出账单记录'));
+              else if (r.outcome === 'unsupported') fb.toast(r.message ?? tr('无法导出'), { bad: true });
+            }}
+          >
+            <IDownload />
+            {tr('导出 Excel')}
+          </button>
+          <button
+            className="btn"
+            onClick={async () => {
+              if (!requireFeature('export')) return;
+              const r = await saveFile(tr('账单记录-{0}.csv', today), billsCSV(bills, today), 'text/csv;charset=utf-8');
+              if (r.outcome === 'saved' || r.outcome === 'shared') fb.toast(tr('已导出账单记录'));
+            }}
+          >
+            <IDownload />
+            {tr('导出 CSV')}
+          </button>
+        </div>
+      </section>
+      <section className="card stack" aria-labelledby="h-imp-link">
+        <h2 id="h-imp-link" className="row">
+          <IUpload width={20} height={20} /> {tr('Excel 批量导入')}
+        </h2>
+        <p className="small" style={{ margin: 0 }}>{tr('下载 Excel 模板，每行填一笔账单（商家、到期日期、金额必填）')}</p>
+        <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => go({ name: 'import' })}>
+          <IUpload />
+          {tr('Excel 批量导入')}
         </button>
       </section>
-      <ImportTable />
       <EvalSection />
 
       <section className="card stack">

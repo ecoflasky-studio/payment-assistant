@@ -6,7 +6,7 @@ import { billStatus } from '../lib/status';
 import { formatBRL } from '../lib/money';
 import { addDays, formatBR, weekdayCN, monthLabel } from '../lib/dates';
 import { useActions } from '../actions';
-import { ICal, ISearch, IList, IPlus, ICheckSquare, ICheck, IX, IFilter } from '../ui/icons';
+import { ICal, ISearch, IList, IPlus, ICheckSquare, ICheck, IX, IFilter, IUpload } from '../ui/icons';
 import { MonthGrid, MonthNav } from '../ui/Calendar';
 import { dailyTotals, monthSummary } from '../lib/monthly';
 import { billSlot } from '../lib/colors';
@@ -236,6 +236,11 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
             </button>
           )}
           {!selecting && (
+            <button className="btn btn-sm iconbtn2" onClick={() => go({ name: 'import' })} title={tr('Excel 批量导入')} aria-label={tr('Excel 批量导入')}>
+              <IUpload />
+            </button>
+          )}
+          {!selecting && (
             <button className="btn btn-sm iconbtn2" onClick={() => exportICS(list, tr('账期-未付-{0}.ics', today))} disabled={!unpaidInList} title={tr('把列表里的未付账单导出到手机日历')} aria-label={tr('导出日历')}>
               <ICal />
             </button>
@@ -350,6 +355,10 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
                 <button className="btn" onClick={() => go({ name: 'new', kind: 'expense' })}>
                   <IPlus />
                   {tr('日常缴费')}
+                </button>
+                <button className="btn btn-ghost" onClick={() => go({ name: 'import' })}>
+                  <IUpload />
+                  {tr('Excel 批量导入')}
                 </button>
               </>
             )}

@@ -12,6 +12,12 @@ import { tr } from './i18n';
 import { isNative } from './native/platform';
 
 applyTheme();
+// 手机键盘弹起时（输入框获得焦点）隐藏浮动底栏，免得挡住下拉列表和输入框
+if (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches) {
+  const isField = (t: EventTarget | null) => t instanceof HTMLElement && (t.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea, select') || t.isContentEditable);
+  document.addEventListener('focusin', (e) => isField(e.target) && document.body.classList.add('kb-open'));
+  document.addEventListener('focusout', () => setTimeout(() => !isField(document.activeElement) && document.body.classList.remove('kb-open'), 120));
+}
 document.title = tr('账期助手');
 
 createRoot(document.getElementById('root')!).render(

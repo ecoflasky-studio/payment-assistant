@@ -52,3 +52,15 @@ describe('A01/A02 IndexedDB 持久化（刷新后仍存在）', () => {
     expect((await r.listBills()).map((b) => b.id)).toEqual(['z']);
   });
 });
+
+describe('iPhone 后台回来数据库连接被关掉', () => {
+  it('连接关闭后自动重新打开，读写照常，不报「浏览器禁止本地存储」', async () => {
+    const r = new IndexedDbRepository('zq-reconnect');
+    await r.putBill(bill('c1'));
+    // 模拟系统关掉连接
+    (await (r as any).dbp).close();
+    expect((await r.getBill('c1'))?.id).toBe('c1');
+    await r.putBill(bill('c2'));
+    expect((await r.listBills()).map((b) => b.id).sort()).toEqual(['c1', 'c2']);
+  });
+});

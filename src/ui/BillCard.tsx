@@ -67,6 +67,31 @@ export function BillCard({
       aria-label={`${title} ${formatBRL(bill.totalCents)} ${STATUS_LABEL[st]}`}
       onClick={selectable ? onToggle : undefined}
     >
+      {inSheet && (
+        <div className="sheet-top">
+          <button
+            className="btn btn-soft"
+            onClick={() => {
+              onDone?.();
+              go({ name: 'edit', id: bill.id });
+            }}
+          >
+            <IEdit />
+            {bill.estimated ? tr('确认金额') : tr('编辑')}
+          </button>
+          <button
+            className="btn btn-soft"
+            aria-label={tr('复制为新账单')}
+            onClick={() => {
+              onDone?.();
+              go({ name: 'copy', id: bill.id });
+            }}
+          >
+            <ICopy />
+            {tr('复制')}
+          </button>
+        </div>
+      )}
       {selectable && <input type="checkbox" className="selbox" checked={selected} onChange={onToggle} onClick={(e) => e.stopPropagation()} aria-label={tr('选择 {0}', title)} />}
       <div className="top">
         {expense && (
@@ -230,26 +255,6 @@ export function BillCard({
               </button>
             </>
           )}
-          <button
-            className="btn"
-            onClick={() => {
-              onDone?.();
-              go({ name: 'edit', id: bill.id });
-            }}
-          >
-            <IEdit />
-            {bill.estimated ? tr('确认金额') : tr('编辑')}
-          </button>
-          <button
-            className="btn"
-            onClick={() => {
-              onDone?.();
-              go({ name: 'copy', id: bill.id });
-            }}
-          >
-            <ICopy />
-            {tr('复制为新账单')}
-          </button>
           <button className="btn" onClick={() => copySummary(bill)}>
             {tr('复制账单文字')}
           </button>

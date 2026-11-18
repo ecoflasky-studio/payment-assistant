@@ -31,6 +31,25 @@ export function Combobox(props: {
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 手机上：键盘弹起后把输入框移到屏幕上方，列表高度只用键盘上面剩下的空间（不被键盘和底栏挡住）
+  const [listMax, setListMax] = useState<number | null>(null);
+  const fitToScreen = () => {
+    if (typeof window === 'undefined' || !matchMedia('(pointer: coarse)').matches) return;
+    const measure = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const vv = window.visualViewport;
+      const top = el.getBoundingClientRect().top - (vv?.offsetTop ?? 0);
+      if (top > 90 || top < 0) window.scrollBy({ top: top - 76, behavior: 'smooth' });
+      setTimeout(() => {
+        const r = el.getBoundingClientRect();
+        const viewH = vv ? vv.height + vv.offsetTop : window.innerHeight;
+        const bar = document.querySelector('.savebar')?.getBoundingClientRect().height ?? 0;
+      setListMax(Math.max(160, Math.min(320, Math.round(viewH - r.bottom - 16 - bar))));
+      }, 260);
+    };
+    setTimeout(measure, 320);
+  };
   const listId = useId();
   const selected = items.find((i) => i.id === value);
   const shown = selected ? selected.label : props.fallbackLabel ?? '';
@@ -96,6 +115,7 @@ export function Combobox(props: {
         onFocus={() => {
           setOpen(true);
           setQ('');
+          fitToScreen();
         }}
         onChange={(e) => {
           setQ(e.target.value);
@@ -134,7 +154,7 @@ export function Combobox(props: {
         </button>
       )}
       {open && (
-        <div className="list" role="listbox" id={listId}>
+        <div className="list" role="listbox" id={listId} style={listMax ? { maxHeight: listMax } : undefined}>
           {results.map((r, i) => (
             <div
               key={r.id}

@@ -185,9 +185,8 @@ export function forecast(bills: Bill[], today: string, weeks = 6): Forecast {
   return out;
 }
 
-/** 账单记录导出（T2）：每笔账单一行，Excel 可直接打开（分号分隔、带 BOM） */
-export function billsCSV(bills: Bill[], today: string): string {
-  const esc = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+/** 账单记录表（T2 导出用）：金额列是「分」的整数，由 CSV / Excel 各自格式化 */
+export function billsTable(bills: Bill[], today: string): { head: string[]; rows: (string | { cents: number })[][] } {
   const head = [tr('商家/缴费单位'), tr('类型'), tr('分类'), tr('单号'), tr('开单日期'), tr('到期日期'), tr('账单总额(R$)'), tr('已付(R$)'), tr('还差(R$)'), tr('状态'), tr('付清日期'), tr('付款账号'), tr('明细'), tr('备注')];
   const rows = bills
     .filter((b) => !b.deletedAt && !b.id.startsWith('sample'))
@@ -203,9 +202,9 @@ export function billsCSV(bills: Bill[], today: string): string {
         b.orderNumber || '',
         formatBR(b.billDate),
         formatBR(b.dueDate),
-        centsToInput(b.totalCents),
-        centsToInput(b.paidAt ? b.totalCents : paid),
-        centsToInput(open),
+        { cents: b.totalCents },
+        { cents: b.paidAt ? b.totalCents : paid },
+        { cents: open },
         status,
         b.paidAt ? formatBR(b.paidAt.slice(0, 10)) : '',
         b.accountLabelSnapshot || '',
@@ -213,5 +212,13 @@ export function billsCSV(bills: Bill[], today: string): string {
         b.notes || '',
       ];
     });
-  return '﻿' + [head, ...rows].map((r) => r.map((c) => esc(String(c))).join(';')).join('\r\n') + '\r\n';
+  return { head, rows };
+}
+
+/** 账单记录导出（T2）：每笔账单一行，Excel 可直接打开（分号分隔、带 BOM） */
+export function billsCSV(bills: Bill[], today: string): string {
+  const esc = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const { head, rows } = billsTable(bills, today);
+  const cell = (c: string | { cents: number }) => (typeof c === 'string' ? c : centsToInput(c.cents));
+  return '\ufeff' + [head, ...rows.map((r) => r.map(cell))].map((r) => r.map((c) => esc(String(c))).join(';')).join('\r\n') + '\r\n';
 }

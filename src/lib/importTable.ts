@@ -7,7 +7,7 @@ import { recompute } from './bill';
 import { TOTAL_ONLY_DESC } from './ocr/protocol';
 import { EXPENSE_CATEGORIES } from './expense';
 
-export type Field = 'merchant' | 'orderNumber' | 'billDate' | 'dueDate' | 'amount' | 'account' | 'category' | 'notes' | 'skip';
+export type Field = 'merchant' | 'orderNumber' | 'billDate' | 'dueDate' | 'amount' | 'account' | 'category' | 'paidDate' | 'notes' | 'skip';
 
 /** 表头别名（中文 / 葡文 / 英文） */
 const HEAD: [Field, string[]][] = [
@@ -18,6 +18,7 @@ const HEAD: [Field, string[]][] = [
   ['amount', ['金额', '总额', '应付', '价格', 'valor', 'total', 'amount', 'preco', 'preço']],
   ['account', ['账号', '付款账号', '账户', 'conta', 'conta de pagamento', 'account']],
   ['category', ['分类', '类型', 'categoria', 'tipo', 'category']],
+  ['paidDate', ['付款日期', '已付日期', '付清日期', '已付', '是否已付', 'pago', 'pago em', 'data pagamento', 'data de pagamento', 'data do pagamento', 'paid', 'paid on', 'paiddate', 'payment date', 'quitacao', 'quitação', 'data de quitacao', 'data de quitação', 'paid-off date', 'paid off']],
   ['notes', ['备注', '说明', 'obs', 'observacao', 'observação', 'nota interna', 'notes', 'memo']],
 ];
 
@@ -30,6 +31,12 @@ const norm = (s: string) =>
     .trim();
 
 export function guessField(header: string): Field {
+  const f = guessField0(header);
+  // 「已付(R$)」「Pago (R$)」这类是金额列，不是付款日期
+  return f === 'paidDate' && /r\$|\$|valor|amount|金额/i.test(header) ? 'skip' : f;
+}
+
+function guessField0(header: string): Field {
   const h = norm(header);
   if (!h) return 'skip';
   for (const [f, names] of HEAD) if (names.some((n) => h === norm(n))) return f;
@@ -150,8 +157,8 @@ export interface PlanOptions {
 }
 
 /** 生成导入计划（不写库） */
-export function planImport(text: string, o: PlanOptions, fieldsOverride?: Field[]): ImportPlan {
-  const rows = parseRows(text);
+export function planImport(input: string | string[][], o: PlanOptions, fieldsOverride?: Field[]): ImportPlan {
+  const rows = typeof input === 'string' ? parseRows(input) : input.map((r) => r.map((c) => (c ?? '').trim())).filter((r) => r.some((c) => c !== ''));
   if (!rows.length) return { fields: [], headers: [], rows: [], okCount: 0, dupCount: 0, badCount: 0, newMerchants: [] };
   const headers = rows[0];
   const guessed = headers.map(guessField);
@@ -199,8 +206,21 @@ export function planImport(text: string, o: PlanOptions, fieldsOverride?: Field[
     const acc = accountName ? o.accounts.find((a) => nameKey(a.label) === nameKey(accountName)) ?? null : o.accounts.find((a) => a.id === o.settings.defaultAccountId) ?? null;
     if (accountName && !acc) issues.push(`找不到付款账号「${accountName}」`);
     const catRaw = col(r, 'category');
-    const cat = catRaw ? EXPENSE_CATEGORIES.find((c) => nameKey(c.label) === nameKey(catRaw) || c.id === catRaw.toLowerCase()) ?? null : null;
+    const cat = catRaw ? EXPENSE_CATEGORIES.find((c) => [c.label, c.pt, c.id, ...c.pt.split('/')].some((n) => nameKey(n) === nameKey(catRaw))) ?? null : null;
     if (catRaw && !cat) issues.push(`未知分类「${catRaw}」`);
+
+    // 付款日期：填日期 = 那天付清；填「已付 / pago / sim / x」= 按到期日付清；空 = 未付
+    const paidRaw = col(r, 'paidDate');
+    let paidISO: string | null = null;
+    if (paidRaw && !/^(否|未付|não|nao|no|n|-|—)$/i.test(paidRaw)) {
+      if (/^(是|已付|已付款|pago|paga|sim|s|yes|y|x|✓|ok|paid|true)$/i.test(paidRaw)) paidISO = dueISO ?? billISO ?? null;
+      else {
+        const pd = parseBRDate(paidRaw);
+        paidISO = pd.iso ?? near(pd.candidate) ?? null;
+        if (!paidISO) issues.push(`付款日期：${pd.error ?? '格式不正确'}`);
+        else if (paidISO > o.today) issues.push('付款日期在今天之后');
+      }
+    }
 
     let bill: Bill | null = null;
     let dup: Bill | null = null;
@@ -215,7 +235,8 @@ export function planImport(text: string, o: PlanOptions, fieldsOverride?: Field[
         accountId: acc?.id ?? null,
         accountLabelSnapshot: acc?.label ?? '',
         reminderDays: o.settings.defaultReminderDays,
-        paidAt: null,
+        paidAt: paidISO ? new Date(`${paidISO}T15:00:00.000Z`).toISOString() : null,
+        payments: paidISO ? [{ id: o.uuid(), date: paidISO, cents: amount.cents }] : [],
         notes: col(r, 'notes'),
         items: [{ id: o.uuid(), quantity: 1, description: TOTAL_ONLY_DESC, unitPriceCents: amount.cents, subtotalCents: amount.cents }],
         totalCents: amount.cents,
@@ -245,7 +266,7 @@ export function planImport(text: string, o: PlanOptions, fieldsOverride?: Field[
 }
 
 /** 模板（给用户下载后填写） */
-export const IMPORT_TEMPLATE = '﻿商家;单号;开单日期;到期日期;金额;付款账号;备注\r\nLoja Exemplo;0042;01/09/2026;01/10/2026;1.234,56;PIX 公司主账户;示例行（可删除）\r\n';
+export const IMPORT_TEMPLATE = '﻿商家;单号;开单日期;到期日期;金额;付款账号;付款日期;备注\r\nLoja Exemplo;0042;01/09/2026;01/10/2026;1.234,56;PIX 公司主账户;;示例行（可删除）\r\n';
 
 export const FIELD_LABEL: Record<Field, string> = {
   merchant: '商家/缴费单位',
@@ -255,6 +276,7 @@ export const FIELD_LABEL: Record<Field, string> = {
   amount: '金额',
   account: '付款账号',
   category: '缴费分类',
+  paidDate: '付款日期（已付才填）',
   notes: '备注',
   skip: '忽略',
 };
