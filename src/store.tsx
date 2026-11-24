@@ -49,7 +49,8 @@ export interface SyncInfo {
 export type Route =
   | { name: 'home' }
   | { name: 'bills'; filter?: string }
-  | { name: 'new'; kind?: 'expense' }
+  | { name: 'new'; kind?: 'expense' | 'receivable' }
+  | { name: 'receivables'; filter?: string }
   | { name: 'edit'; id: string }
   | { name: 'copy'; id: string }
   | { name: 'capture' }
@@ -74,7 +75,9 @@ export function parseHash(h: string): Route {
     case 'bills':
       return { name: 'bills', filter: p[1] };
     case 'new':
-      return p[1] === 'expense' ? { name: 'new', kind: 'expense' } : { name: 'new' };
+      return p[1] === 'expense' || p[1] === 'receivable' ? { name: 'new', kind: p[1] } : { name: 'new' };
+    case 'receivables':
+      return { name: 'receivables', filter: p[1] };
     case 'edit':
       return p[1] ? { name: 'edit', id: decodeURIComponent(p[1]) } : { name: 'bills' };
     case 'copy':
@@ -118,6 +121,8 @@ export function routeHash(r: Route): string {
       return `#/bills${r.filter ? '/' + r.filter : ''}`;
     case 'flow':
       return `#/flow${r.month ? '/' + r.month : ''}`;
+    case 'receivables':
+      return `#/receivables${r.filter ? '/' + r.filter : ''}`;
     case 'report':
       return `#/report${r.period ? '/' + r.period : ''}`;
     case 'edit':
@@ -137,7 +142,10 @@ interface Store {
   ready: boolean;
   fatal: StorageError | null;
   repo: Repository;
+  /** 应付账单（商家货款 + 日常缴费），所有合计、提醒、报表都只算这些 */
   bills: Bill[];
+  /** 应收款（客户欠我的） */
+  receivables: Bill[];
   merchants: Merchant[];
   accounts: PaymentAccount[];
   settings: Settings;
@@ -192,6 +200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [fatal, setFatal] = useState<StorageError | null>(null);
   const [storageError, setStorageError] = useState<StorageError | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [receivables, setReceivables] = useState<Bill[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings());
@@ -221,7 +230,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     const [b, m, a, s] = await Promise.all([repo.listBills(), repo.listMerchants(), repo.listAccounts(), repo.getSettings()]);
-    setBills(b);
+    setBills(b.filter((x) => x.kind !== 'receivable'));
+    setReceivables(b.filter((x) => x.kind === 'receivable'));
     setMerchants(m);
     setAccounts(a);
     setSettings(s);
@@ -651,6 +661,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [sessionStore, adoptSession],
   );
 
-  const value: Store = { ready, fatal, repo, bills, merchants, accounts, settings, today, route, go, back, reload, saveSettings, guard, storageError, hasSample, clearSample, sync, syncNow, saveSyncConfig, publicConfig, cloud, auth, getToken, signIn, signOut, refreshAccount, setAccount, ent, gate, requireFeature, paywall, closePaywall, lock, setBiometric, lockNow, unlockApp, replaceSession };
+  const value: Store = { ready, fatal, repo, bills, receivables, merchants, accounts, settings, today, route, go, back, reload, saveSettings, guard, storageError, hasSample, clearSample, sync, syncNow, saveSyncConfig, publicConfig, cloud, auth, getToken, signIn, signOut, refreshAccount, setAccount, ent, gate, requireFeature, paywall, closePaywall, lock, setBiometric, lockNow, unlockApp, replaceSession };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

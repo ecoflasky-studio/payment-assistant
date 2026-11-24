@@ -9,7 +9,7 @@ import { formatBRL } from '../lib/money';
 import { IBell, ICloud, IShield, ICheck, IFace, ILock, IHelp } from '../ui/icons';
 import { Logo } from '../ui/Logo';
 import { HelpContent } from './Help';
-import { Pricing, PackCard, sourceLabel } from './Billing';
+import { Pricing, PackCard, sourceLabel, legalUrl } from './Billing';
 import { isNative, platform } from '../native/platform';
 import { manageSubscriptions } from '../native/iap';
 import { deleteAccountRemote } from '../cloud/api';
@@ -668,6 +668,9 @@ function PushSection() {
 }
 
 /** 公开部署时，未登录先看到这里（介绍 + 注册登录） */
+/** 运营公司（和 D-U-N-S、App Store 开发者名称一致） */
+export const COMPANY = 'HENRIQUE HUANG ECOFLASKY STUDIO COMERCIO';
+
 export function Welcome() {
   const [help, setHelp] = useState(false);
   const [prices, setPrices] = useState(false);
@@ -704,6 +707,16 @@ export function Welcome() {
             {tr('套餐与价格')}
           </button>
         </div>
+        <footer className="authfoot xs muted">
+          <span>© {new Date().getFullYear()} {COMPANY}</span>
+          <span>
+            <a href={legalUrl('privacy')} target="_blank" rel="noopener noreferrer">{tr('隐私政策')}</a>
+            {' · '}
+            <a href={legalUrl('terms')} target="_blank" rel="noopener noreferrer">{tr('使用条款')}</a>
+            {' · '}
+            <a href="mailto:ecoflasky.753@gmail.com">{tr('联系我们')}</a>
+          </span>
+        </footer>
       </div>
       {prices && (
         <Modal title={tr('套餐与价格')} onClose={() => setPrices(false)}>

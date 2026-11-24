@@ -392,7 +392,9 @@ export interface CashWeek {
   count: number;
   /** 期末余额（设置了可用资金时） */
   balance: number | null;
-  items: { title: string; due: string; cents: number; projected: boolean; billId: string | null; merchantId: string | null }[];
+  /** 这周到期、还没收的应收款（计入余额） */
+  incoming: number;
+  items: { title: string; due: string; cents: number; projected: boolean; billId: string | null; merchantId: string | null; incoming?: boolean }[];
 }
 
 export interface CashPlan {
@@ -404,6 +406,9 @@ export interface CashPlan {
   shortWeek: number | null;
   /** 最低余额 */
   lowest: number | null;
+  /** 预测期内预计收款合计；逾期未收的应收款（不计入余额） */
+  incomingCents: number;
+  overdueIncomingCents: number;
 }
 
 /**
@@ -412,8 +417,9 @@ export interface CashPlan {
  *  - 重复账单（每月水电、房租…）按周期推算后面几期（预估，标记出来）
  *  - 填了可用资金时，逐周扣减算出余额，提示哪一周不够
  */
-export function cashPlan(bills: Bill[], today: string, weeks = 12, startBalance: number | null = null): CashPlan {
+export function cashPlan(bills: Bill[], today: string, weeks = 12, startBalance: number | null = null, receivables: Bill[] = []): CashPlan {
   const all = live(bills);
+  const toGet = live(receivables).filter((b) => !b.paidAt && openCents(b) > 0);
   const unpaid = all.filter((b) => !b.paidAt && openCents(b) > 0);
   const overdue = unpaid.filter((b) => b.dueDate < today);
   const end = addDays(today, weeks * 7 - 1);
@@ -435,7 +441,7 @@ export function cashPlan(bills: Bill[], today: string, weeks = 12, startBalance:
       projected.push({ title: billTitle(b), due, cents: b.totalCents, projected: true, billId: null, merchantId: b.merchantId });
     }
   }
-  const out: CashPlan = { overdueCents: sum(overdue.map(openCents)), overdueCount: overdue.length, weeks: [], totalCents: 0, shortWeek: null, lowest: null };
+  const out: CashPlan = { overdueCents: sum(overdue.map(openCents)), overdueCount: overdue.length, weeks: [], totalCents: 0, shortWeek: null, lowest: null, incomingCents: 0, overdueIncomingCents: sum(toGet.filter((b) => b.dueDate < today).map(openCents)) };
   let bal = startBalance === null ? null : startBalance - out.overdueCents;
   if (bal !== null) out.lowest = bal;
   if (bal !== null && bal < 0) out.shortWeek = -1;
@@ -446,15 +452,20 @@ export function cashPlan(bills: Bill[], today: string, weeks = 12, startBalance:
       .filter((b) => b.dueDate >= from && b.dueDate <= to)
       .map((b) => ({ title: billTitle(b), due: b.dueDate, cents: openCents(b), projected: false, billId: b.id, merchantId: b.merchantId }));
     const proj = projected.filter((x) => x.due >= from && x.due <= to);
-    const items = [...real, ...proj].sort((a, b) => a.due.localeCompare(b.due) || b.cents - a.cents);
+    const inc = toGet
+      .filter((b) => b.dueDate >= from && b.dueDate <= to)
+      .map((b) => ({ title: billTitle(b), due: b.dueDate, cents: openCents(b), projected: false, billId: b.id, merchantId: b.merchantId, incoming: true }));
+    const items = [...real, ...proj, ...inc].sort((a, b) => a.due.localeCompare(b.due) || b.cents - a.cents);
     const cents = sum(real.map((x) => x.cents));
     const pc = sum(proj.map((x) => x.cents));
+    const ic = sum(inc.map((x) => x.cents));
+    out.incomingCents += ic;
     if (bal !== null) {
-      bal -= cents + pc;
+      bal -= cents + pc - ic;
       if (out.lowest === null || bal < out.lowest) out.lowest = bal;
       if (bal < 0 && out.shortWeek === null) out.shortWeek = i;
     }
-    out.weeks.push({ from, to, cents, projected: pc, count: items.length, balance: bal, items });
+    out.weeks.push({ from, to, cents, projected: pc, incoming: ic, count: items.length, balance: bal, items });
     out.totalCents += cents + pc;
   }
   return out;

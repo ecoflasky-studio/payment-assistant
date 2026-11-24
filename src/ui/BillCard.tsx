@@ -1,14 +1,14 @@
 import { tr } from '../i18n';
 import { useRef, useState } from 'react';
 import type { Bill } from '../lib/types';
-import { billStatus, STATUS_ICON, STATUS_LABEL } from '../lib/status';
+import { billStatus, STATUS_ICON, statusLabel } from '../lib/status';
 import { formatBR, relativeDue, addDays, todayISO } from '../lib/dates';
 import { formatBRL, formatQuantity } from '../lib/money';
 import { useStore } from '../store';
 import { useActions } from '../actions';
 import { ICal, ICheck, IEdit, IUndo, IWallet, IReceipt, ICopy, IRepeat } from './icons';
 import { googleCalendarUrl } from '../lib/platform';
-import { billTitle, categoryOf, describePaymentCode, isExpense } from '../lib/expense';
+import { billTitle, categoryOf, describePaymentCode, isExpense, isReceivable } from '../lib/expense';
 import { TOTAL_ONLY_DESC } from '../lib/ocr/protocol';
 import { describeRepeat } from '../lib/recurrence';
 import { isPartial, openCents, paymentsOf } from '../lib/payments';
@@ -22,7 +22,7 @@ export function StatusPill({ bill, today, days }: { bill: Bill; today: string; d
   return (
     <span className={`pill ${s}`}>
       <i aria-hidden="true">{STATUS_ICON[s]}</i>
-      {STATUS_LABEL[s]}
+      {statusLabel(s, bill)}
     </span>
   );
 }
@@ -61,10 +61,11 @@ export function BillCard({
   const totalOnly = bill.amountMode === 'total' && !bill.installment;
   const shownItems = bill.items.slice(0, 3);
   const pix = accounts.find((a) => a.id === bill.accountId)?.optionalPixHint;
+  const recv = isReceivable(bill);
   return (
     <article
       className={`bill${inSheet ? ' in-sheet' : ''}${st === 'paid' ? ' is-paid' : ''}${selectable ? ' selectable' : ''}${selected ? ' selected' : ''}`}
-      aria-label={`${title} ${formatBRL(bill.totalCents)} ${STATUS_LABEL[st]}`}
+      aria-label={`${title} ${formatBRL(bill.totalCents)} ${statusLabel(st, bill)}`}
       onClick={selectable ? onToggle : undefined}
     >
       {inSheet && (
@@ -114,7 +115,7 @@ export function BillCard({
                 {describeRepeat(bill.recurrence)}
               </span>
             )}
-            {partial && <span className="pill dueSoon">{tr('已付')} {Math.round(((bill.totalCents - left) / bill.totalCents) * 100)}%</span>}
+            {partial && <span className="pill dueSoon">{recv ? tr('已收') : tr('已付')} {Math.round(((bill.totalCents - left) / bill.totalCents) * 100)}%</span>}
             {bill.estimated && <span className="pill dueSoon">{tr('金额待确认')}</span>}
             {bill.ocrReview && (
               <span title={tr('来自票据识别')}>
@@ -143,7 +144,7 @@ export function BillCard({
           {bill.accountLabelSnapshot || tr('未指定账号')}
         </span>
         <span className="num">{tr('开单')} {formatBR(bill.billDate)}</span>
-        {bill.paidAt ? <span className="num">{tr('付款')} {formatBR(todayISO(new Date(bill.paidAt)))}</span> : <span>{tr('提前')} {bill.reminderDays} {tr('天提醒')}</span>}
+        {bill.paidAt ? <span className="num">{recv ? tr('收款') : tr('付款')} {formatBR(todayISO(new Date(bill.paidAt)))}</span> : <span>{tr('提前')} {bill.reminderDays} {tr('天提醒')}</span>}
       </div>
       {!!bill.tags?.length && (
         <div className="tagline" aria-label={tr('标签')}>
@@ -155,7 +156,7 @@ export function BillCard({
         </div>
       )}
       {!compact && inSheet && bill.notes && <p className="small muted" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{tr('备注：')}{bill.notes}</p>}
-      {!compact && !selectable && !bill.paidAt && (bill.paymentCode || pix) && (
+      {!compact && !selectable && !bill.paidAt && !recv && (bill.paymentCode || pix) && (
         <div className="stack" style={{ gap: 4 }}>
           {bill.paymentCode && (
             <div className="codebox">
@@ -204,10 +205,10 @@ export function BillCard({
       {inSheet && pays.length > 0 && (
         <div className="paylist">
           <div className="row between">
-            <span className="xs muted" style={{ fontWeight: 700 }}>{tr('付款记录')}</span>
+            <span className="xs muted" style={{ fontWeight: 700 }}>{recv ? tr('收款记录') : tr('付款记录')}</span>
             {partial && (
               <span className="xs" style={{ fontWeight: 800, color: 'var(--soon)' }}>
-                {tr('已付')} {formatBRL(bill.totalCents - left)} {tr('· 还差')} {formatBRL(left)}
+                {recv ? tr('已收') : tr('已付')} {formatBRL(bill.totalCents - left)} {tr('· 还差')} {formatBRL(left)}
               </span>
             )}
           </div>
@@ -235,7 +236,7 @@ export function BillCard({
           {bill.paidAt ? (
             <button className="btn" onClick={() => markUnpaid(bill)}>
               <IUndo />
-              {tr('恢复未付')}
+              {recv ? tr('恢复未收') : tr('恢复未付')}
             </button>
           ) : (
             <>
@@ -247,11 +248,11 @@ export function BillCard({
                 }}
               >
                 <ICheck />
-                {partial ? tr('付清尾款 {0}', formatBRL(left)) : tr('标记已付')}
+                {recv ? (partial ? tr('收齐尾款 {0}', formatBRL(left)) : tr('标记已收')) : partial ? tr('付清尾款 {0}', formatBRL(left)) : tr('标记已付')}
               </button>
               <button className="btn" onClick={() => setPayOpen(true)}>
                 <IWallet />
-                {tr('记一笔付款')}
+                {recv ? tr('记一笔收款') : tr('记一笔付款')}
               </button>
             </>
           )}
@@ -303,7 +304,7 @@ export function BillCard({
           ) : (
             <button className="btn btn-sm btn-primary" onClick={() => markPaid(bill)}>
               <ICheck />
-              {tr('标记已付')}
+              {recv ? tr('标记已收') : tr('标记已付')}
             </button>
           )}
           <button className="btn btn-sm btn-ghost" onClick={() => go({ name: 'edit', id: bill.id })}>

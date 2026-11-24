@@ -44,6 +44,10 @@ jobs:
           MP_ACCESS_TOKEN: ${{ secrets.MP_ACCESS_TOKEN }}
           MP_WEBHOOK_SECRET: ${{ secrets.MP_WEBHOOK_SECRET }}
           OWNER_EMAILS: ${{ secrets.OWNER_EMAILS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ vars.MAIL_FROM || secrets.MAIL_FROM }}
+          REVIEW_EMAIL: ${{ secrets.REVIEW_EMAIL }}
+          REVIEW_PASSWORD: ${{ secrets.REVIEW_PASSWORD }}
           APP_ID: ${{ vars.APP_ID }}
           SITE_URL: ${{ vars.SITE_URL }}
           APPLE_ISSUER_ID: ${{ secrets.APPLE_ISSUER_ID }}

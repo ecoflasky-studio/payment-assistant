@@ -118,3 +118,17 @@ describe('大量账单的性能', () => {
     expect(todayISO(new Date('2026-10-28T02:59:01Z'))).toBe('2026-10-27');
   });
 });
+
+describe('现金流：应收款计入余额', () => {
+  it('到期的应收款加回余额，逾期未收的单独列出、不计入', async () => {
+    const { cashPlan } = await import('../src/lib/insights');
+    const mk = (id: string, due: string, cents: number, kind?: 'receivable') => ({ id, merchantId: null, merchantNameSnapshot: id, orderNumber: '', billDate: '2026-09-01', dueDate: due, accountId: null, accountLabelSnapshot: '', reminderDays: 3, paidAt: null, notes: '', items: [], totalCents: cents, ocrReview: null, createdAt: '', updatedAt: '', schemaVersion: 1, ...(kind ? { kind } : {}) }) as any;
+    const plan = cashPlan([mk('pay', '2026-09-22', 50000)], '2026-09-20', 2, 10000, [mk('get', '2026-09-23', 60000, 'receivable'), mk('late', '2026-09-10', 7000, 'receivable')]);
+    expect(plan.weeks[0].incoming).toBe(60000);
+    expect(plan.weeks[0].balance).toBe(10000 - 50000 + 60000);
+    expect(plan.shortWeek).toBeNull();
+    expect(plan.incomingCents).toBe(60000);
+    expect(plan.overdueIncomingCents).toBe(7000);
+    expect(plan.weeks[0].items.find((i) => i.incoming)?.title).toBe('get');
+  });
+});

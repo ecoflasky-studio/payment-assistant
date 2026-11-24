@@ -58,7 +58,7 @@ async function fakeFetch(input: string | URL | Request, init: RequestInit = {}):
     if (headers.get('authorization') !== 'Bearer TEST-mp-token') return json(401, { message: 'invalid token' });
     if (path === '/preapproval' && init.method === 'POST') {
       const id = `pa${mpStore.size + 1}`;
-      mpStore.set(id, { id, status: 'pending', external_reference: b.external_reference, next_payment_date: '2026-11-20T10:00:00.000-03:00' });
+      mpStore.set(id, { id, status: 'pending', external_reference: b.external_reference, next_payment_date: '2099-11-20T10:00:00.000-03:00' });
       return json(201, { id, status: 'pending', init_point: `https://mp.test/checkout/${id}`, external_reference: b.external_reference });
     }
     const m = path.match(/^\/preapproval\/(\w+)$/);
@@ -196,7 +196,7 @@ describe('订阅（Mercado Pago）：T1 / T2，月付或年付', () => {
     const me = await (await call('/me', { token: 'jwt-u1', env: ENV(MP) })).json();
     expect(me).toMatchObject({ plan: 't1', period: 'year', features: { edit: true, push: true, export: false }, usage: { limit: 20 } });
     expect(me.usage.period).toMatch(/^\d{4}-\d{2}$/);
-    expect(me.planUntil.slice(0, 10)).toBe('2026-11-23');
+    expect(me.planUntil.slice(0, 10)).toBe('2099-11-23');
     // 订阅有效 → 可以上传
     const push = await rest({ method: 'POST', path: '/rest/v1/rpc/zq_me_push', body: JSON.stringify({ p_rows: [] }), role: 'user', sub: U1 });
     expect(push.status).toBe(200);

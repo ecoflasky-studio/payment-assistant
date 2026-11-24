@@ -5,7 +5,8 @@ import { PlanBanner } from './Account';
 import { useStore } from '../store';
 import { formatBRL } from '../lib/money';
 import { endOfMonth, formatBR, monthLabel, shiftMonth, weekdayCN } from '../lib/dates';
-import { ICamera, IEdit, IReceipt, IBolt, IChevron, IUpload } from '../ui/icons';
+import { ICamera, IEdit, IReceipt, IBolt, IChevron, IUpload, IWallet } from '../ui/icons';
+import { openCents } from '../lib/payments';
 import { monthSummary } from '../lib/monthly';
 import { cameraSupported } from '../ui/Camera';
 import { billTitle } from '../lib/expense';
@@ -103,7 +104,9 @@ function SegBar({ segs, total, label }: { segs: Seg[]; total: number; label: str
 }
 
 export function Dashboard() {
-  const { bills, merchants, today, settings, go, hasSample, clearSample, repo } = useStore();
+  const { bills, receivables, merchants, today, settings, go, hasSample, clearSample, repo } = useStore();
+  const recvOpen = receivables.filter((b) => !b.paidAt && !b.deletedAt);
+  const recvOverdue = recvOpen.filter((b) => b.dueDate < today);
   const [draft, setDraft] = useState<Draft | undefined>();
   const [mode, setMode] = useGroupMode();
   const month = today.slice(0, 7);
@@ -289,6 +292,19 @@ export function Dashboard() {
           <span className="au-total num">{formatBRL(allCents)}</span>
           {allCents > 0 && <SegBar segs={allSegs} total={allCents} label={tr('全部待付按时间')} />}
         </section>
+        {recvOpen.length > 0 && (
+          <section className="card" aria-label={tr('应收款')}>
+            <button type="button" className="home-recv" onClick={() => go({ name: 'receivables' })}>
+              <IWallet width={22} height={22} />
+              <span className="grow">
+                <span className="ov-label">{tr('待收 · {0} 笔', recvOpen.length)}</span>
+                <span className="au-total num">{formatBRL(recvOpen.reduce((a, b) => a + openCents(b), 0))}</span>
+                {recvOverdue.length > 0 && <span className="xs bad">{tr('逾期 {0} 笔，{1}，记得催款', recvOverdue.length, formatBRL(recvOverdue.reduce((a, b) => a + openCents(b), 0)))}</span>}
+              </span>
+              <IChevron width={16} height={16} />
+            </button>
+          </section>
+        )}
       </div>
     </>
   );

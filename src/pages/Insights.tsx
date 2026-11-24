@@ -309,12 +309,12 @@ export function ReportPage({ period: initial }: { period?: string }) {
 /* ------------------------------------------------------------------ 现金流 */
 
 export function CashflowPage() {
-  const { bills, today, settings, saveSettings, merchants } = useStore();
+  const { bills, receivables, today, settings, saveSettings, merchants } = useStore();
   const fb = useFeedback();
   const [weeks, setWeeks] = useState(12);
   const cash = settings.cashOnHandCents ?? null;
   const [cashText, setCashText] = useState(cash !== null ? centsToInput(cash) : '');
-  const plan = useMemo(() => cashPlan(bills, today, weeks, cash), [bills, today, weeks, cash]);
+  const plan = useMemo(() => cashPlan(bills, today, weeks, cash, receivables), [bills, today, weeks, cash, receivables]);
   const [openWeek, setOpenWeek] = useState<number | null>(0);
   const [bill, setBill] = useState<Bill | null>(null);
   const max = Math.max(1, ...plan.weeks.map((w) => w.cents + w.projected));
@@ -324,6 +324,7 @@ export function CashflowPage() {
     const m = new Map<string, number>();
     for (const w of plan.weeks.slice(0, 4))
       for (const it of w.items) {
+        if (it.incoming) continue;
         const b = it.billId ? bills.find((x) => x.id === it.billId) : null;
         const k = b?.accountLabelSnapshot || tr('未指定账号');
         m.set(k, (m.get(k) ?? 0) + it.cents);
@@ -361,6 +362,12 @@ export function CashflowPage() {
             <b className={`num ${plan.overdueCents ? 'err' : ''}`}>{formatBRL(plan.overdueCents)}</b>
           </div>
         </div>
+        {(plan.incomingCents > 0 || plan.overdueIncomingCents > 0) && (
+          <p className="small" style={{ margin: 0 }}>
+            {tr('同期预计收款')} <b className="num" style={{ color: 'var(--paid)' }}>+{formatBRL(plan.incomingCents)}</b>
+            {plan.overdueIncomingCents > 0 ? <span className="muted">{tr('（另有逾期未收 {0}，不计入余额）', formatBRL(plan.overdueIncomingCents))}</span> : null}
+          </p>
+        )}
         <div className="field">
           <label htmlFor="cash">{tr('可用资金（选填，用来算每周余额）')}</label>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
@@ -403,14 +410,17 @@ export function CashflowPage() {
               <button type="button" className="cweek-h" aria-expanded={openWeek === i} onClick={() => setOpenWeek(openWeek === i ? null : i)} disabled={!w.count}>
                 <span className="cw-l">
                   <b>{i === 0 ? tr('本周') : `${formatBR(w.from).slice(0, 5)} – ${formatBR(w.to).slice(0, 5)}`}</b>
-                  <small>{w.count ? tr('{0} 笔', w.count) : tr('没有')}</small>
+                  <small>
+                    {w.count ? tr('{0} 笔', w.count) : tr('没有')}
+                    {w.incoming > 0 && <span className="cw-in num"> +{compactBRL(w.incoming)}</span>}
+                  </small>
                 </span>
                 <span className="cw-bar" aria-hidden="true">
                   <i className="real" style={{ width: `${(w.cents / max) * 100}%` }} />
                   <i className="proj" style={{ width: `${(w.projected / max) * 100}%` }} />
                 </span>
                 <span className="cw-v num">
-                  {w.count ? formatBRL(w.cents + w.projected, false) : '—'}
+                  {w.cents + w.projected > 0 ? formatBRL(w.cents + w.projected, false) : '—'}
                   {w.balance !== null && <small className={w.balance < 0 ? 'err' : ''}>{tr('余')} {compactBRL(w.balance)}</small>}
                 </span>
               </button>
@@ -420,16 +430,17 @@ export function CashflowPage() {
                     const m = it.merchantId ? merchants.find((x) => x.id === it.merchantId) ?? null : null;
                     return (
                       <li key={k}>
-                        <button type="button" disabled={!it.billId} onClick={() => it.billId && setBill(bills.find((b) => b.id === it.billId) ?? null)}>
+                        <button type="button" disabled={!it.billId} onClick={() => it.billId && setBill([...bills, ...receivables].find((b) => b.id === it.billId) ?? null)}>
                           <span className={`mdot mc-${colorSlot(m, m?.id ?? it.title)}`} aria-hidden="true" />
                           <span className="grow">
                             {it.title}
                             {it.projected && <span className="tag warn">{tr('预估')}</span>}
+                            {it.incoming && <span className="tag">{tr('应收')}</span>}
                           </span>
                           <span className="xs muted num">
                             {formatBR(it.due).slice(0, 5)} {weekdayCN(it.due)}
                           </span>
-                          <b className="num">{formatBRL(it.cents, false)}</b>
+                          <b className={`num${it.incoming ? ' cw-in' : ''}`}>{it.incoming ? '+' : ''}{formatBRL(it.cents, false)}</b>
                         </button>
                       </li>
                     );

@@ -39,19 +39,20 @@ export function PayModal({ bill, onClose, onSave }: { bill: Bill; onClose: () =>
   const [shrinking, setShrinking] = useState(false);
   const parsed = parseBRL(amount);
   const iso = parseBRDate(date).iso;
-  const err = !parsed.cents || parsed.cents <= 0 ? tr('请填写付款金额') : parsed.cents > left ? tr('不能超过还差的 {0}', formatBRL(left)) : !iso ? tr('付款日期不正确') : null;
+  const recv = bill.kind === 'receivable';
+  const err = !parsed.cents || parsed.cents <= 0 ? (recv ? tr('请填写收款金额') : tr('请填写付款金额')) : parsed.cents > left ? tr('不能超过还差的 {0}', formatBRL(left)) : !iso ? (recv ? tr('收款日期不正确') : tr('付款日期不正确')) : null;
   const quick = [
     { label: tr('全部'), cents: left },
     { label: tr('一半'), cents: Math.round(left / 2) },
     { label: '30%', cents: Math.round(left * 0.3) },
   ];
   return (
-    <Modal title={tr('记一笔付款 · {0}', billTitle(bill))} onClose={onClose}>
+    <Modal title={recv ? tr('记一笔收款 · {0}', billTitle(bill)) : tr('记一笔付款 · {0}', billTitle(bill))} onClose={onClose}>
       <p className="small muted" style={{ margin: 0 }}>
         {tr('账单')} {formatBRL(bill.totalCents)}{tr('，还差')} <b style={{ color: 'var(--ink)' }}>{formatBRL(left)}</b>
       </p>
       <div className="field">
-        <label htmlFor="pay-amount">{tr('本次付款金额 R$')}</label>
+        <label htmlFor="pay-amount">{recv ? tr('本次收款金额 R$') : tr('本次付款金额 R$')}</label>
         <input id="pay-amount" className="input num big-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         <div className="row" style={{ gap: 6 }}>
           {quick.map((q) => (
@@ -62,7 +63,7 @@ export function PayModal({ bill, onClose, onSave }: { bill: Bill; onClose: () =>
         </div>
       </div>
       <div className="field">
-        <label htmlFor="pay-date">{tr('付款日期')}</label>
+        <label htmlFor="pay-date">{recv ? tr('收款日期') : tr('付款日期')}</label>
         <DateField id="pay-date" title={tr('选择付款日期')} value={date} today={today} onChange={setDate} />
       </div>
       <div className="field">
@@ -109,7 +110,7 @@ export function PayModal({ bill, onClose, onSave }: { bill: Bill; onClose: () =>
           {tr('取消')}
         </button>
         <button className="btn btn-primary" disabled={!!err} onClick={() => !err && onSave(parsed.cents!, iso!, note.trim() || undefined, receipt?.blob ?? null)}>
-          {tr('保存付款')}
+          {recv ? tr('保存收款') : tr('保存付款')}
         </button>
       </div>
     </Modal>

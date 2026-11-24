@@ -611,6 +611,58 @@ try {
   assert.equal(await page.inputValue('#f-merchant'), '');
   ok('B30', '连续录入：存并记下一笔（保留日期和账号、清空金额商家单号）；金额自动整理成 1.234,50；选商家后显示最近金额');
 
+  // 选商家时显示还没付清的账单
+  await page.goto(BASE + '#/new');
+  await page.click('#f-merchant');
+  await page.fill('#f-merchant', 'Nova Loja');
+  await page.getByRole('option', { name: /Nova Loja SP/ }).click();
+  assert.match(await page.locator('#f-merchant-open').innerText(), /这个商家还有 2 笔未付，共 R\$ 2\.034,50/);
+
+  // 应收款：新建客户、记一笔应收；不进入应付；首页显示待收；左滑标记已收
+  await page.goto(BASE + '#/new/receivable');
+  await page.fill('#f-totalOnly', '3.000,00');
+  await page.click('#f-merchant');
+  await page.fill('#f-merchant', 'Empresa ABC');
+  await page.getByText('＋ 新增客户并保存「Empresa ABC」').click();
+  await page.getByText('已保存客户「Empresa ABC」').waitFor();
+  await page.fill('#f-orderNumber', 'PJ-1');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.getByText('已保存 R$ 3.000,00').first().waitFor();
+  await page.waitForURL(/#\/receivables/);
+  await page.locator('.recv-sum', { hasText: 'R$ 3.000,00' }).waitFor();
+  const rrow = page.locator('.brow', { hasText: 'Empresa ABC' });
+  await rrow.waitFor();
+  await page.goto(BASE + '#/');
+  await page.getByText('待收 · 1 笔').waitFor();
+  await page.goto(BASE + '#/bills/all');
+  await page.fill('#q', 'Empresa ABC');
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('.brow').count(), 0, '应收款不应出现在应付账单里');
+  await page.goto(BASE + '#/receivables');
+  await rrow.waitFor();
+  // 模拟手指左滑
+  await rrow.evaluate((el) => {
+    const main = el.querySelector('.brow-main');
+    const r = main.getBoundingClientRect();
+    const y = r.top + r.height / 2;
+    const fire = (type, x) => {
+      const t = new Touch({ identifier: 1, target: main, clientX: x, clientY: y });
+      main.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t] }));
+    };
+    fire('touchstart', r.right - 20);
+    for (let k = 1; k <= 8; k++) fire('touchmove', r.right - 20 - k * 30);
+    fire('touchend', r.right - 260);
+  });
+  const tray = rrow.getByRole('group', { name: '快捷操作' });
+  await tray.waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'shot-swipe-360.png' });
+  await tray.getByRole('button', { name: '已收' }).click();
+  await page.getByText('已标记收款 R$ 3.000,00').waitFor();
+  await page.getByRole('button', { name: /^已收/ }).first().click();
+  await page.locator('.brow', { hasText: 'Empresa ABC' }).waitFor();
+  ok('B31', '应收款：新建客户、记应收（不计入应付）、首页显示待收、左滑「已收 / 复制 / 删除」；选商家时提示还有几笔未付');
+
   // 手工录入时的重复提醒
   await page.goto(BASE + '#/new');
   await page.click('#f-merchant');

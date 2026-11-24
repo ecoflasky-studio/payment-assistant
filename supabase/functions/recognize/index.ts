@@ -1619,7 +1619,7 @@ function createSaas({ fetchImpl = (...a) => fetch(...a), log: log2 = () => {
   }
   function digest(bills, today, lang2 = "zh") {
     const L = PUSH[langOf(lang2)];
-    const due = bills.filter((b) => !b.deletedAt && !String(b.id).startsWith("sample") && inReminderWindow(b, today));
+    const due = bills.filter((b) => !b.deletedAt && b.kind !== "receivable" && !String(b.id).startsWith("sample") && inReminderWindow(b, today));
     if (!due.length) return null;
     const overdue = due.filter((b) => billStatus(b, today) === "overdue");
     due.sort((a, b) => a.dueDate.localeCompare(b.dueDate));

@@ -104,12 +104,14 @@ interface DraftPayload {
   meta: ReviewMeta;
 }
 
-export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 'edit' | 'review'; id?: string; copyFrom?: string; initialKind?: 'supplier' | 'expense' }) {
+export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 'edit' | 'review'; id?: string; copyFrom?: string; initialKind?: 'supplier' | 'expense' | 'receivable' }) {
   const store = useStore();
-  const { repo, settings, merchants, accounts, go, back, reload, guard, bills } = store;
+  const { repo, settings, merchants, accounts, go, back, reload, guard, bills: payBills } = store;
   const fb = useFeedback();
   const actions = useActions();
   const [state, setState] = useState<EditorState | null>(null);
+  // 应收款和应付账单分开查重、算每日合计、找最近金额
+  const bills = (state?.kind ?? initialKind) === 'receivable' ? store.receivables : payBills;
   const [existing, setExisting] = useState<Bill | null>(null);
   const [acks, setAcks] = useState<Set<string>>(new Set());
   const [confirmed, setConfirmed] = useState(false);
@@ -186,9 +188,33 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         });
         return;
       }
+      if (mode === 'new' && initialKind === 'receivable') {
+        const t = todayISO();
+        setState({
+          merchantId: null,
+          merchantName: '',
+          accountId: null,
+          accountLabel: '',
+          orderNumber: '',
+          billDateText: isoToBR(t),
+          dueDateText: isoToBR(addDays(t, 30)),
+          reminderDays: String(settings.defaultReminderDays),
+          notes: '',
+          rows: [blankRow()],
+          dueBeforeConfirmed: false,
+          amountMode: 'total',
+          totalText: '',
+          totalDesc: '',
+          paidDateText: '',
+          kind: 'receivable',
+          category: null,
+          paymentCode: '',
+        });
+        return;
+      }
       if (mode === 'new') {
         const t = todayISO();
-        const m = merchants.find((x) => x.id === settings.defaultMerchantId && x.active && x.type !== 'payee');
+        const m = merchants.find((x) => x.id === settings.defaultMerchantId && x.active && (x.type ?? 'supplier') === 'supplier');
         const accId = (m?.defaultAccountId && accounts.find((a) => a.id === m.defaultAccountId && a.active)?.id) || (accounts.find((a) => a.id === settings.defaultAccountId && a.active)?.id ?? null);
         setState({
           merchantId: m?.id ?? null,
@@ -286,11 +312,11 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
   const set = useCallback((patch: Partial<EditorState>) => setState((s) => (s ? { ...s, ...patch } : s)), []);
   const setRow = (key: string, patch: Partial<RowState>) => setState((s) => (s ? { ...s, rows: s.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)) } : s));
 
-  const isExpenseMode = state?.kind === 'expense';
+  const partyType: 'supplier' | 'payee' | 'customer' = state?.kind === 'expense' ? 'payee' : state?.kind === 'receivable' ? 'customer' : 'supplier';
   const merchantItems: ComboItem[] = useMemo(
     () =>
       merchants
-        .filter((m) => m.active && (isExpenseMode ? m.type === 'payee' : m.type !== 'payee'))
+        .filter((m) => m.active && (m.type ?? 'supplier') === partyType)
         .map((m) => ({
           id: m.id,
           label: m.name,
@@ -306,7 +332,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
               .filter(Boolean)
               .join(' · ') || undefined,
         })),
-    [merchants, accounts, settings.defaultMerchantId, isExpenseMode],
+    [merchants, accounts, settings.defaultMerchantId, partyType],
   );
   const accountItems: ComboItem[] = useMemo(
     () =>
@@ -370,6 +396,11 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
   const curMerchant = merchants.find((m) => m.id === state.merchantId) ?? null;
   const rule = curMerchant?.term ?? null;
   const expenseMode = state.kind === 'expense';
+  // 这个商家（客户）还没结清的账单：录单时顺便看到欠款
+  const merchantOpen = (() => {
+    const list = state.merchantId ? bills.filter((b) => b.merchantId === state.merchantId && !b.paidAt && !b.deletedAt && b.id !== existing?.id) : [];
+    return { n: list.length, cents: list.reduce((s, b) => s + openCents(b), 0), overdue: list.filter((b) => b.dueDate < store.today).length };
+  })();
   // 这个商家最近几次的金额（去重），方便固定金额的账单一点就填
   const recentAmounts = (() => {
     if (!state.merchantId) return [] as number[];
@@ -380,7 +411,8 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
     }
     return [...seen];
   })();
-  const partyWord = expenseMode ? tr('缴费单位') : tr('商家');
+  const recvMode = state.kind === 'receivable';
+  const partyWord = expenseMode ? tr('缴费单位') : recvMode ? tr('客户') : tr('商家');
   const installmentDues = (() => {
     if (existing || rule?.kind !== 'installments' || !state.splitInstallments) return [];
     const b = parseBRDate(state.billDateText).iso;
@@ -401,16 +433,17 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
     set(patch);
   };
 
-  const switchKind = (k: 'supplier' | 'expense') => {
+  const switchKind = (k: 'supplier' | 'expense' | 'receivable') => {
     if ((state.kind ?? 'supplier') === k) return;
-    const keepMerchant = curMerchant && (k === 'expense' ? curMerchant.type === 'payee' : curMerchant.type !== 'payee');
+    const keepMerchant = curMerchant && (curMerchant.type ?? 'supplier') === (k === 'expense' ? 'payee' : k === 'receivable' ? 'customer' : 'supplier');
     const hasRows = state.rows.some((r) => !isBlankRow(r));
     set({
       kind: k,
       ...(keepMerchant ? {} : { merchantId: null, merchantName: '' }),
       ...(!hasRows ? { amountMode: 'total' as const } : {}),
       ...(k === 'expense' && (state.repeatKey ?? 'none') === 'none' ? repeatFields({ unit: 'month', every: 1 }) : {}),
-      ...(k === 'supplier' ? { category: null } : {}),
+      ...(k !== 'expense' ? { category: null } : {}),
+      ...(k === 'receivable' ? { paymentCode: '' } : {}),
       splitInstallments: false,
     });
   };
@@ -568,7 +601,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         tags: state.tags ?? [],
         items,
         amountMode: totalMode ? 'total' : 'items',
-        kind: expenseMode ? 'expense' : 'supplier',
+        kind: expenseMode ? 'expense' : recvMode ? 'receivable' : 'supplier',
         category: expenseMode ? state.category ?? null : null,
         paymentCode: (state.paymentCode ?? '').trim(),
         recurrence: makeRecurrence(repeatRuleOf(state), existing?.recurrence?.seriesId ?? uuid(), state.repeatUntil?.trim() ? parseBRDate(state.repeatUntil).iso : null, dISO, mode === 'new' ? null : existing),
@@ -582,7 +615,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         schemaVersion: 1,
       });
       // 防止重复录入：同商家 + 同单号，或同商家 + 同到期日 + 同金额
-      const dup = installmentDues.length >= 2 ? null : findDuplicate(store.bills, bill, bill.id);
+      const dup = installmentDues.length >= 2 ? null : findDuplicate(bills, bill, bill.id);
       if (dup) {
         const go2 = await fb.confirm({
           title: tr('可能重复录入'),
@@ -615,7 +648,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
       await reload();
       if (toSave.length > 1) {
         fb.toast(tr('已按分期保存 {0} 笔，共 {1}', toSave.length, formatBRL(bill.totalCents)));
-        go({ name: 'bills', filter: 'unpaid' }, true);
+        go(recvMode ? { name: 'receivables' } : { name: 'bills', filter: 'unpaid' }, true);
         return;
       }
       if (next && !existing) {
@@ -650,7 +683,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
           action: { label: tr('再复制一笔'), run: () => go({ name: 'copy', id: bill.id }) },
         });
       if (existing) back();
-      else go({ name: 'bills', filter: 'unpaid' }, true);
+      else go(recvMode ? { name: 'receivables' } : { name: 'bills', filter: 'unpaid' }, true);
     } finally {
       setSaving(false);
     }
@@ -739,11 +772,14 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
       <section className="card stack" aria-label={tr('金额')}>
         {(
           <div className="seg" role="group" aria-label={tr('账单类型')} style={{ alignSelf: 'flex-start' }}>
-            <button type="button" aria-pressed={!expenseMode} onClick={() => switchKind('supplier')}>
+            <button type="button" aria-pressed={!expenseMode && !recvMode} onClick={() => switchKind('supplier')}>
               {tr('商家货款')}
             </button>
             <button type="button" aria-pressed={expenseMode} onClick={() => switchKind('expense')}>
               {tr('日常缴费')}
+            </button>
+            <button type="button" aria-pressed={recvMode} onClick={() => switchKind('receivable')}>
+              {tr('应收款')}
             </button>
           </div>
         )}
@@ -1052,7 +1088,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
                 }}
               />
               <span>
-                <b>{tr('已付款')}</b>
+                <b>{recvMode ? tr('已收款') : tr('已付款')}</b>
               </span>
             </label>
             {!paidToggle && existing && isPartial(existing) && (
@@ -1062,7 +1098,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
             )}
             {paidToggle && (
               <div className="field" style={{ maxWidth: 320 }}>
-                <label htmlFor="f-paidDate">{tr('付款日期')}</label>
+                <label htmlFor="f-paidDate">{recvMode ? tr('收款日期') : tr('付款日期')}</label>
                 <DateField id="f-paidDate" title={tr('选择付款日期')} className={cls('paidDate')} value={state.paidDateText ?? ''} today={store.today} onChange={(v) => set({ paidDateText: v })} />
               </div>
             )}
@@ -1070,8 +1106,8 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         )}
       </section>
 
-      <section className="card stack" aria-label={expenseMode ? tr('缴费单位与付款') : tr('商家与付款')}>
-        <h3 className="editor-sec-title">{expenseMode ? tr('缴费单位与付款') : tr('商家与付款')}</h3>
+      <section className="card stack" aria-label={expenseMode ? tr('缴费单位与付款') : recvMode ? tr('客户与收款') : tr('商家与付款')}>
+        <h3 className="editor-sec-title">{expenseMode ? tr('缴费单位与付款') : recvMode ? tr('客户与收款') : tr('商家与付款')}</h3>
         {expenseMode && (
           <div className="field" id="f-category" tabIndex={-1}>
             <span className="label">{tr('缴费类型')}</span>
@@ -1104,7 +1140,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         )}
         <div className="grid2 stack-sm">
           <div className="field">
-            <label htmlFor="f-merchant">{expenseMode ? tr('缴费单位（可空）') : tr('商家')}</label>
+            <label htmlFor="f-merchant">{expenseMode ? tr('缴费单位（可空）') : recvMode ? tr('客户') : tr('商家')}</label>
             <Combobox
               id="f-merchant"
               className={cls('merchant')}
@@ -1113,12 +1149,12 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
               fallbackLabel={state.merchantId ? state.merchantName : ''}
               onChange={(mid) => chooseMerchant(mid)}
               onCreate={async (name) => {
-                const nid = await actions.createMerchant(name, state.ocr?.merchantRaw, expenseMode ? { type: 'payee', defaultCategory: state.category ?? null, recurring: true } : undefined);
+                const nid = await actions.createMerchant(name, state.ocr?.merchantRaw, expenseMode ? { type: 'payee', defaultCategory: state.category ?? null, recurring: true } : recvMode ? { type: 'customer' } : undefined);
                 if (nid) chooseMerchant(nid, await repo.listMerchants());
                 return nid;
               }}
               createLabel={tr('新增{0}并保存', partyWord)}
-              placeholder={expenseMode ? tr('如 Sabesp、Enel、DAS') : tr('搜索或输入新商家')}
+              placeholder={expenseMode ? tr('如 Sabesp、Enel、DAS') : recvMode ? tr('搜索或输入新客户') : tr('搜索或输入新商家')}
             />
             {expenseMode && !state.merchantId && (categoryOf(state.category)?.suggestions.length ?? 0) > 0 && (
               <div className="qchips">
@@ -1140,6 +1176,12 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
                   );
                 })}
               </div>
+            )}
+            {merchantOpen.n > 0 && (
+              <span className={`hint${merchantOpen.overdue ? ' warn-hint' : ''}`} id="f-merchant-open">
+                {recvMode ? tr('这个客户还有 {0} 笔未收，共 {1}', merchantOpen.n, formatBRL(merchantOpen.cents)) : tr('这个{0}还有 {1} 笔未付，共 {2}', partyWord, merchantOpen.n, formatBRL(merchantOpen.cents))}
+                {merchantOpen.overdue ? tr('，其中逾期 {0} 笔', merchantOpen.overdue) : ''}
+              </span>
             )}
             {!state.merchantId && state.merchantName && <span className="hint">{mode === 'review' ? tr('识别名称') : tr('历史名称')}{tr('：')}{state.merchantName}</span>}
             {state.ocr?.merchantRaw && (
@@ -1165,7 +1207,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
                 })}
               </div>
             )}
-            {state.merchantId && !expenseMode && state.merchantId !== settings.defaultMerchantId && (
+            {state.merchantId && !expenseMode && !recvMode && state.merchantId !== settings.defaultMerchantId && (
               <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', paddingLeft: 0 }} onClick={() => store.saveSettings({ defaultMerchantId: state.merchantId })}>
                 {tr('设为默认商家')}
               </button>
@@ -1186,7 +1228,7 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
             )}
           </div>
           <div className="field">
-            <label htmlFor="f-account">{tr('付款账号')}</label>
+            <label htmlFor="f-account">{recvMode ? tr('收款账号') : tr('付款账号')}</label>
             <Combobox
               id="f-account"
               items={accountItems}
@@ -1237,49 +1279,51 @@ export function EditorPage({ mode, id, copyFrom, initialKind }: { mode: 'new' | 
         </div>
 
         <div className="field">
-          <label htmlFor="f-orderNumber">{expenseMode ? tr('单号 / 参考号') : tr('订单号')}</label>
+          <label htmlFor="f-orderNumber">{expenseMode ? tr('单号 / 参考号') : recvMode ? tr('订单号 / NF') : tr('订单号')}</label>
           <input id="f-orderNumber" className={`input mono${cls('orderNumber')}`} inputMode="text" autoComplete="off" value={state.orderNumber} onChange={(e) => set({ orderNumber: e.target.value })} placeholder={tr('可空，保留前导零')} />
           {dupOrder && <span className="err">{tr('同商家已有订单号')} {state.orderNumber} {tr('的账单（到期')} {formatBR(dupOrder.dueDate)}{tr('），请确认不是重复录入')}</span>}
         </div>
 
-        <div className="field">
-          <label htmlFor="f-paymentCode">{tr('Boleto 条码 / PIX 复制码（可空）')}</label>
-          <div className="datefield">
-            <input id="f-paymentCode" className={`input mono${cls('paymentCode')}`} autoComplete="off" spellCheck={false} value={state.paymentCode ?? ''} onChange={(e) => set({ paymentCode: e.target.value })} placeholder={tr('粘贴后付款时一键复制')} />
-            <button
-              type="button"
-              className="btn datebtn"
-              aria-label={tr('从剪贴板粘贴')}
-              title={tr('粘贴')}
-              onClick={async () => {
-                try {
-                  const t = await navigator.clipboard.readText();
-                  if (t) set({ paymentCode: t.trim() });
-                } catch {
-                  fb.toast(tr('无法读取剪贴板，请长按输入框粘贴'), { bad: true });
-                }
-              }}
-            >
-              <ICopy />
-            </button>
-            {scanSupported() && (
-              <button type="button" className="btn datebtn" aria-label={tr('扫码填写付款码')} title={tr('扫 Boleto 条码或 PIX 二维码')} onClick={() => setScanOpen(true)}>
-                <IScan />
+        {!recvMode && (
+          <div className="field">
+            <label htmlFor="f-paymentCode">{tr('Boleto 条码 / PIX 复制码（可空）')}</label>
+            <div className="datefield">
+              <input id="f-paymentCode" className={`input mono${cls('paymentCode')}`} autoComplete="off" spellCheck={false} value={state.paymentCode ?? ''} onChange={(e) => set({ paymentCode: e.target.value })} placeholder={tr('粘贴后付款时一键复制')} />
+              <button
+                type="button"
+                className="btn datebtn"
+                aria-label={tr('从剪贴板粘贴')}
+                title={tr('粘贴')}
+                onClick={async () => {
+                  try {
+                    const t = await navigator.clipboard.readText();
+                    if (t) set({ paymentCode: t.trim() });
+                  } catch {
+                    fb.toast(tr('无法读取剪贴板，请长按输入框粘贴'), { bad: true });
+                  }
+                }}
+              >
+                <ICopy />
               </button>
+              {scanSupported() && (
+                <button type="button" className="btn datebtn" aria-label={tr('扫码填写付款码')} title={tr('扫 Boleto 条码或 PIX 二维码')} onClick={() => setScanOpen(true)}>
+                  <IScan />
+                </button>
+              )}
+            </div>
+            {scanOpen && (
+              <ScannerSheet
+                onClose={() => setScanOpen(false)}
+                onResult={(code, kind) => {
+                  set({ paymentCode: code });
+                  setScanOpen(false);
+                  fb.toast(kind === 'pix' ? tr('已填入 PIX 复制码') : kind === 'other' ? tr('已填入扫描结果，请核对') : tr('已把条码转换为可输入的数字线'));
+                }}
+              />
             )}
+            {state.paymentCode?.trim() && <span className="hint">{describePaymentCode(state.paymentCode)} · {state.paymentCode.replace(/\D/g, '').length} {tr('位数字')}</span>}
           </div>
-          {scanOpen && (
-            <ScannerSheet
-              onClose={() => setScanOpen(false)}
-              onResult={(code, kind) => {
-                set({ paymentCode: code });
-                setScanOpen(false);
-                fb.toast(kind === 'pix' ? tr('已填入 PIX 复制码') : kind === 'other' ? tr('已填入扫描结果，请核对') : tr('已把条码转换为可输入的数字线'));
-              }}
-            />
-          )}
-          {state.paymentCode?.trim() && <span className="hint">{describePaymentCode(state.paymentCode)} · {state.paymentCode.replace(/\D/g, '').length} {tr('位数字')}</span>}
-        </div>
+        )}
       </section>
 
       <section className="card stack">

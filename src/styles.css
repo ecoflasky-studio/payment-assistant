@@ -1476,3 +1476,35 @@ html:not([lang^='zh']) .quick3 .qa-more .btn { min-height: 38px; border-radius: 
 .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .grid2 > .btn, .sheet-top > .btn { min-width: 0; white-space: normal; text-align: center; line-height: 1.2; }
 .sheet-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+/* ---------- 第十八轮：账单行左滑操作 ---------- */
+.brow { overflow: hidden; touch-action: pan-y; }
+.brow > .brow-main, .brow > .brow-pay, .brow > .brow-done { transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.brow.swiping > .brow-main, .brow.swiping > .brow-pay, .brow.swiping > .brow-done { transform: translateX(var(--sx, 0)); }
+.brow.dragging > .brow-main, .brow.dragging > .brow-pay, .brow.dragging > .brow-done, .brow.dragging > .brow-tray { transition: none; }
+.brow-tray { position: absolute; top: 0; bottom: 0; right: 0; width: 204px; display: flex; transform: translateX(calc(204px + var(--sx, 0px))); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.brow-tray button { flex: 1; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-weight: 800; font-size: 0.78rem; color: #fff; cursor: pointer; padding: 0 4px; }
+.brow-tray button svg { width: 18px; height: 18px; }
+.tray-pay { background: var(--paid); }
+.tray-undo { background: #64748b; }
+.tray-copy { background: #2a78d6; }
+.tray-del { background: var(--overdue); }
+/* 应收款 */
+.recv-sum { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.recv-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.recv-kpis > div { display: flex; flex-direction: column; gap: 1px; background: var(--card-2); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+.recv-kpis b { font-size: 0.88rem; overflow-wrap: anywhere; line-height: 1.2; }
+.recv-kpis .bad b { color: var(--overdue); }
+.recv-kpis .good b { color: var(--paid); }
+.home-recv { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; width: 100%; border: 0; cursor: pointer; font: inherit; color: inherit; }
+.home-recv .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.home-recv svg { color: var(--paid); flex-shrink: 0; }
+.home-recv .bad { color: var(--overdue); font-weight: 700; }
+.cw-in { color: var(--paid); font-weight: 800; }
+/* 选项太多时横向滚动，不撑宽页面 */
+.seg-scroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg-scroll::-webkit-scrollbar { display: none; }
+.seg-scroll button { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 480px) { .li-def { white-space: normal; max-width: 76px; line-height: 1.15; font-size: 0.76rem; padding: 4px 6px; text-align: center; } .li { gap: 8px; } }
+.authfoot { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 12px 0 4px; }
+.authfoot a { color: inherit; }

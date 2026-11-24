@@ -16,7 +16,9 @@ const norm = (s: string) => s.toLowerCase().normalize('NFKC').replace(/\s+/g, ' 
 
 export function useActions() {
   const store = useStore();
-  const { repo, guard, reload, merchants, accounts, bills, today } = store;
+  const { repo, guard, reload, merchants, accounts, today } = store;
+  // 生成下一期时要看同一系列的全部账单（应收款也有按月重复的）
+  const bills = [...store.bills, ...store.receivables];
   const fb = useFeedback();
 
   /** 撤销一笔付款：只去掉这笔付款，期间做的其他修改保留；自动生成的下一期若没改过才删除 */
@@ -47,7 +49,8 @@ export function useActions() {
       await guard(() => repo.upsertMany({ bills: next ? [updated, next] : [updated] }));
       await reload();
       const left = openCents(updated);
-      fb.toast(updated.paidAt ? (next ? tr('已付清 {0}，已生成下一期（{1} 到期）', formatBRL(b.totalCents), formatBR(next.dueDate)) : tr('已付清 {0}', formatBRL(b.totalCents))) : tr('已记 {0}，还差 {1}', formatBRL(cents), formatBRL(left)), {
+      const recv = b.kind === 'receivable';
+      fb.toast(updated.paidAt ? (next ? tr('已付清 {0}，已生成下一期（{1} 到期）', formatBRL(b.totalCents), formatBR(next.dueDate)) : recv ? tr('已收齐 {0}', formatBRL(b.totalCents)) : tr('已付清 {0}', formatBRL(b.totalCents))) : tr('已记 {0}，还差 {1}', formatBRL(cents), formatBRL(left)), {
         action: {
           label: tr('撤销'),
           run: () => undoPayment(b.id, pid, next, receiptImageId),
@@ -65,7 +68,8 @@ export function useActions() {
       const next = needsNextRecurring(paid, bills) ? nextRecurring(paid, uuid(), nowISO()) : null;
       await guard(() => repo.upsertMany({ bills: next ? [paid, next] : [paid] }));
       await reload();
-      fb.toast(next ? tr('已付款 {0}，已生成下一期（{1} 到期）', formatBRL(rest), formatBR(next.dueDate)) : tr('已标记付款 {0}', formatBRL(rest)), {
+      const recv = b.kind === 'receivable';
+      fb.toast(next ? (recv ? tr('已收款 {0}，已生成下一期（{1} 到期）', formatBRL(rest), formatBR(next.dueDate)) : tr('已付款 {0}，已生成下一期（{1} 到期）', formatBRL(rest), formatBR(next.dueDate))) : recv ? tr('已标记收款 {0}', formatBRL(rest)) : tr('已标记付款 {0}', formatBRL(rest)), {
         action: {
           label: tr('撤销'),
           run: () => undoPayment(b.id, pid, next),
@@ -180,7 +184,7 @@ export function useActions() {
         for (const p of b.payments ?? []) if (p.receiptImageId) await repo.deleteImage(p.receiptImageId);
       });
       await reload();
-      fb.toast(tr('已恢复为未付（付款记录已清空）'));
+      fb.toast(b.kind === 'receivable' ? tr('已恢复为未收（收款记录已清空）') : tr('已恢复为未付（付款记录已清空）'));
     },
     [repo, guard, reload, fb],
   );
@@ -310,7 +314,7 @@ export function useActions() {
       });
       if (!ok) return null;
       await reload();
-      fb.toast(tr('已保存{0}「{1}」', type === 'payee' ? tr('缴费单位') : tr('商家'), m.name));
+      fb.toast(tr('已保存{0}「{1}」', type === 'payee' ? tr('缴费单位') : type === 'customer' ? tr('客户') : tr('商家'), m.name));
       return m.id;
     },
     [merchants, repo, guard, reload, fb],

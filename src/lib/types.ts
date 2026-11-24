@@ -34,7 +34,8 @@ export type TermRule =
   | { kind: 'monthDay'; day: number; monthOffset: number; cutoffDay?: number | null }
   | { kind: 'installments'; days: number[] };
 
-export type BillKind = 'supplier' | 'expense';
+/** supplier = 商家货款（默认），expense = 日常缴费，receivable = 应收款（客户欠我） */
+export type BillKind = 'supplier' | 'expense' | 'receivable';
 
 export interface InstallmentInfo {
   groupId: string;
@@ -93,7 +94,7 @@ export interface Merchant {
   defaultAccountId: string | null;
   active: boolean;
   /** supplier = 商家（默认），payee = 缴费单位（水电公司、税务等） */
-  type?: 'supplier' | 'payee';
+  type?: 'supplier' | 'payee' | 'customer';
   /** 固定账期 */
   term?: TermRule | null;
   /** 缴费单位的默认分类 */

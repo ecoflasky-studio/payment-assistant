@@ -18,6 +18,9 @@ export const STATUS_LABEL: Record<BillStatus, string> = {
   paid: tr('已付款'),
 };
 
+/** 状态文字；应收款的「已付款」写成「已收款」 */
+export const statusLabel = (s: BillStatus, b?: Pick<Bill, 'kind'> | null) => (s === 'paid' && b?.kind === 'receivable' ? tr('已收款') : STATUS_LABEL[s]);
+
 export const STATUS_ICON: Record<BillStatus, string> = {
   open: '○',
   dueSoon: '◔',

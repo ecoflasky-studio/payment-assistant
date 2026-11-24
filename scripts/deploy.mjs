@@ -13,6 +13,8 @@
  *
  * 需要的环境变量：SUPABASE_ACCESS_TOKEN、SUPABASE_PROJECT_REF（或 Project URL）、GEMINI_API_KEY
  * 可选：MP_ACCESS_TOKEN、MP_WEBHOOK_SECRET、OWNER_EMAILS、SITE_URL、FUNCTION_NAME
+ *       RESEND_API_KEY（+ MAIL_FROM）：用 Resend 发验证码邮件（自定义 SMTP）
+ *       REVIEW_EMAIL + REVIEW_PASSWORD：建立 / 更新商店审核用的测试账号（试用期延长到一年）
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -96,6 +98,9 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   const codeMail = await readFile(path.join(root, 'supabase/email/code.html'), 'utf8').catch(() => null);
   const subject = '账期助手验证码 · Código · Code: {{ .Token }}';
   const auth = { mailer_autoconfirm: true, external_email_enabled: true, password_min_length: 8, mailer_otp_exp: 600 };
+  // 用 Resend 发信：配好后验证码邮件从自己的域名发出，也才能改成三语模板
+  const smtp = smtpConfig(env, site);
+  if (smtp) Object.assign(auth, smtp);
   if (codeMail) Object.assign(auth, { mailer_subjects_magic_link: subject, mailer_templates_magic_link_content: codeMail, mailer_subjects_confirmation: subject, mailer_templates_confirmation_content: codeMail });
   if (site) Object.assign(auth, { site_url: site, uri_allow_list: site });
   const MAIL_KEYS = ['mailer_subjects_magic_link', 'mailer_templates_magic_link_content', 'mailer_subjects_confirmation', 'mailer_templates_confirmation_content'];
@@ -113,7 +118,13 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
       log(`  ! ${note}`);
       warnings.push(note);
     }
-    ok(`邮箱 + 密码注册即登录（不发确认邮件）${mailOk ? '；验证码邮件改为中葡英三语' : ''}${site ? `；网站地址 ${site}` : ''}`);
+    ok(`邮箱 + 密码注册即登录（不发确认邮件）${smtp ? `；验证码邮件由 Resend 发送（发件人 ${smtp.smtp_admin_email}）` : ''}${mailOk ? '；验证码邮件改为中葡英三语' : ''}${site ? `；网站地址 ${site}` : ''}`);
+    if (smtp) {
+      // 自定义 SMTP 默认每小时只能发 30 封，调高一些（失败不影响其他设置）
+      try {
+        await api('PATCH', `/projects/${ref}/config/auth`, { rate_limit_email_sent: 200 });
+      } catch {}
+    }
   } catch (e) {
     // 这一步只是改两个开关，令牌权限不够时可以在控制台手动做，不中断整个部署
     if (!e.permission) throw e;
@@ -125,6 +136,18 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
     ].filter(Boolean).join('\n');
     log(`  ! ${manual.replace(/\n/g, '\n  ')}`);
     warnings.push(manual);
+  }
+
+  if (env.REVIEW_EMAIL || env.REVIEW_PASSWORD) {
+    step('3b', '商店审核测试账号');
+    try {
+      const r = await ensureReviewAccount({ env, api, sql, projectUrl, ref, fetchImpl });
+      ok(`${r.email}（${r.created ? '新建' : '已更新密码'}，试用期到 ${r.until}）`);
+    } catch (e) {
+      const note = `审核测试账号没建好：${e.message}。可以先在网站上用这个邮箱注册，再重新运行一次部署。`;
+      log(`  ! ${note}`);
+      warnings.push(note);
+    }
   }
 
   step(4, `部署识别函数「${fn}」`);
@@ -182,6 +205,54 @@ export async function main({ env = process.env, fetchImpl = fetch, run, root, lo
   if (env.APPLE_ISSUER_ID) log(`   App Store 服务器通知网址（App Store Connect → App 信息 → App Store 服务器通知，版本 2，正式和沙盒都填）：\n   ${fnUrl}/iap/apple`);
   if (env.GOOGLE_SERVICE_ACCOUNT) log(`   Google Play 实时通知（Pub/Sub 推送订阅的端点网址）：\n   ${fnUrl}/iap/google?token=${env.GOOGLE_RTDN_TOKEN ? '<GOOGLE_RTDN_TOKEN>' : '（先设置 GOOGLE_RTDN_TOKEN）'}`);
   return { ref, fnUrl, site, config: cfg, warnings };
+}
+
+/** Resend 的 SMTP 设置（没有 RESEND_API_KEY 时返回 null） */
+export function smtpConfig(env, site) {
+  const key = (env.RESEND_API_KEY || '').trim();
+  if (!key) return null;
+  if (!/^re_[A-Za-z0-9_]{8,}$/.test(key)) throw new DeployError('RESEND_API_KEY 格式不对：应该以 re_ 开头（Resend → API Keys 里复制）');
+  const host = site ? new URL(site).hostname.replace(/^www\./, '') : null;
+  const raw = (env.MAIL_FROM || (host && !/github\.io$/.test(host) ? `noreply@${host}` : '')).trim();
+  // 支持「名字 <邮箱>」或只写邮箱
+  const m = raw.match(/^(.*?)\s*<([^>]+)>$/);
+  const email = (m ? m[2] : raw).trim();
+  const name = (m ? m[1] : '').trim().replace(/^"|"$/g, '') || 'ZhangQi 账期助手';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new DeployError('用 Resend 发信需要发件邮箱：请加仓库变量或密钥 MAIL_FROM，例如 noreply@zqzh.com.br（域名要先在 Resend 验证）');
+  return { smtp_admin_email: email, smtp_sender_name: name, smtp_host: 'smtp.resend.com', smtp_port: '465', smtp_user: 'resend', smtp_pass: key };
+}
+
+/** 建立（或更新密码）审核账号，并把试用期延长到一年后 */
+export async function ensureReviewAccount({ env, api, sql, projectUrl, ref, fetchImpl = fetch }) {
+  const email = String(env.REVIEW_EMAIL || '').trim().toLowerCase();
+  const password = String(env.REVIEW_PASSWORD || '');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new DeployError('REVIEW_EMAIL 不是有效邮箱');
+  if (password.length < 8) throw new DeployError('REVIEW_PASSWORD 至少 8 位');
+  const keys = (await api('GET', `/projects/${ref}/api-keys?reveal=true`)) ?? [];
+  const secret = keys.find((k) => k.type === 'secret')?.api_key ?? keys.find((k) => k.name === 'service_role')?.api_key;
+  if (!secret) throw new DeployError('没找到 secret key（Project Settings → API Keys）');
+  const headers = { apikey: secret, 'content-type': 'application/json', ...(secret.startsWith('eyJ') ? { authorization: `Bearer ${secret}` } : {}) };
+  const q = (s) => `'${s.replace(/'/g, "''")}'`;
+  const found = await sql(`select id from auth.users where lower(email) = ${q(email)} limit 1;`);
+  let id = Array.isArray(found) && found[0]?.id;
+  let created = false;
+  if (!id) {
+    const r = await fetchImpl(`${projectUrl}/auth/v1/admin/users`, { method: 'POST', headers, body: JSON.stringify({ email, password, email_confirm: true }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new DeployError(`新建失败（${r.status}）：${j.msg || j.message || j.error_description || ''}`);
+    id = j.id ?? j.user?.id;
+    created = true;
+  } else {
+    const r = await fetchImpl(`${projectUrl}/auth/v1/admin/users/${id}`, { method: 'PUT', headers, body: JSON.stringify({ password, email_confirm: true }) });
+    if (!r.ok) throw new DeployError(`更新密码失败（${r.status}）`);
+  }
+  if (!id) throw new DeployError('没拿到用户 ID');
+  const rows = await sql(
+    `insert into public.zq_profiles(user_id, email, trial_until) values (${q(id)}, ${q(email)}, now() + interval '365 days')
+       on conflict (user_id) do update set trial_until = greatest(public.zq_profiles.trial_until, now() + interval '365 days'), updated_at = now()
+     returning to_char(trial_until at time zone 'America/Sao_Paulo', 'DD/MM/YYYY') as until;`,
+  );
+  return { email, created, until: (Array.isArray(rows) && rows[0]?.until) || '' };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

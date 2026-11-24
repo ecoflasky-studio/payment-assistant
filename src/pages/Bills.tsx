@@ -6,7 +6,7 @@ import { billStatus } from '../lib/status';
 import { formatBRL } from '../lib/money';
 import { addDays, formatBR, weekdayCN, monthLabel } from '../lib/dates';
 import { useActions } from '../actions';
-import { ICal, ISearch, IList, IPlus, ICheckSquare, ICheck, IX, IFilter, IUpload } from '../ui/icons';
+import { ICal, ISearch, IList, IPlus, ICheckSquare, ICheck, IX, IFilter, IUpload, IWallet } from '../ui/icons';
 import { MonthGrid, MonthNav } from '../ui/Calendar';
 import { dailyTotals, monthSummary } from '../lib/monthly';
 import { billSlot } from '../lib/colors';
@@ -233,6 +233,12 @@ export function Bills({ initialFilter }: { initialFilter?: string }) {
             <button className={`btn btn-sm iconbtn2${selecting ? ' btn-soft' : ''}`} onClick={() => (selecting ? endSelect() : setSelecting(true))} aria-pressed={selecting} title={tr('多选')} aria-label={selecting ? tr('取消多选') : tr('多选')}>
               <ICheckSquare />
               <span className="only-wide">{selecting ? tr('取消') : tr('多选')}</span>
+            </button>
+          )}
+          {!selecting && (
+            <button className="btn btn-sm iconbtn2" onClick={() => go({ name: 'receivables' })} title={tr('应收款')} aria-label={tr('应收款')}>
+              <IWallet />
+              <span className="only-wide">{tr('应收')}</span>
             </button>
           )}
           {!selecting && (

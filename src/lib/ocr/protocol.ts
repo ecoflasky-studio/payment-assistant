@@ -251,7 +251,7 @@ export interface EditorState {
   /** 复制来源 */
   copiedFrom?: { id: string; label: string } | null;
   /** 账单类型 */
-  kind?: 'supplier' | 'expense';
+  kind?: 'supplier' | 'expense' | 'receivable';
   category?: string | null;
   paymentCode?: string;
   recurring?: boolean;

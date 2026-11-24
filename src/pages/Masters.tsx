@@ -20,28 +20,35 @@ import { copyText } from '../lib/platform';
 const norm = (s: string) => s.toLowerCase().normalize('NFKC').replace(/\s+/g, ' ').trim();
 
 export function Masters() {
-  const [tab, setTab] = useState<'m' | 'p' | 'a'>('m');
+  const [tab, setTab] = useState<'m' | 'p' | 'c' | 'a'>('m');
   return (
     <>
-      <div className="seg" role="tablist" aria-label={tr('固定资料')} style={{ alignSelf: 'flex-start' }}>
+      <div className="seg seg-scroll" role="tablist" aria-label={tr('固定资料')} style={{ alignSelf: 'flex-start' }}>
         <button role="tab" aria-selected={tab === 'm'} onClick={() => setTab('m')}>
           {tr('商家')}
         </button>
         <button role="tab" aria-selected={tab === 'p'} onClick={() => setTab('p')}>
           {tr('缴费单位')}
         </button>
+        <button role="tab" aria-selected={tab === 'c'} onClick={() => setTab('c')}>
+          {tr('客户')}
+        </button>
         <button role="tab" aria-selected={tab === 'a'} onClick={() => setTab('a')}>
           {tr('付款账号')}
         </button>
       </div>
-      {tab === 'a' ? <AccountList /> : <MerchantList key={tab} type={tab === 'p' ? 'payee' : 'supplier'} />}
+      {tab === 'a' ? <AccountList /> : <MerchantList key={tab} type={tab === 'p' ? 'payee' : tab === 'c' ? 'customer' : 'supplier'} />}
     </>
   );
 }
 
-function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
-  const word = type === 'payee' ? tr('缴费单位') : tr('商家');
-  const { merchants, accounts, bills, settings, saveSettings } = useStore();
+type PartyType = 'supplier' | 'payee' | 'customer';
+const partyWordOf = (t: PartyType) => (t === 'payee' ? tr('缴费单位') : t === 'customer' ? tr('客户') : tr('商家'));
+
+function MerchantList({ type }: { type: PartyType }) {
+  const word = partyWordOf(type);
+  const { merchants, accounts, bills: payBills, receivables, settings, saveSettings } = useStore();
+  const bills = type === 'customer' ? receivables : payBills;
   const [edit, setEdit] = useState<Merchant | 'new' | null>(null);
   const [stats, setStats] = useState<Merchant | null>(null);
   const [q, setQ] = useState('');
@@ -91,7 +98,7 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
           <div className="art">
             <IStore />
           </div>
-          <p>{mine.length ? tr('没有匹配的{0}', word) : type === 'payee' ? tr('还没有缴费单位。例如 Sabesp（水费）、Enel（电费）、DAS（税费），可设置每月固定缴费日。') : tr('还没有商家。新增后，录账时即可直接选择，并可设置固定账期。')}</p>
+          <p>{mine.length ? tr('没有匹配的{0}', word) : type === 'customer' ? tr('还没有客户。新增后，记应收款时可以直接选择，并可设置客户的付款账期。') : type === 'payee' ? tr('还没有缴费单位。例如 Sabesp（水费）、Enel（电费）、DAS（税费），可设置每月固定缴费日。') : tr('还没有商家。新增后，录账时即可直接选择，并可设置固定账期。')}</p>
         </div>
       ) : (
         <div className="list">
@@ -106,13 +113,13 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
                 <span className="xs muted">
                   {m.defaultCategory ? `${categoryLabel(m.defaultCategory)} · ` : ''}
                   {m.repeat ? tr('{0}重复 · ', describeRepeat(m.repeat)) : m.recurring ? tr('每月重复 · ') : ''}
-                  {count(m.id)} {tr('笔账单')}{unpaid(m.id) ? tr(' · 未付 R$ {0}', (unpaid(m.id) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })) : ''}
+                  {count(m.id)} {tr('笔账单')}{unpaid(m.id) ? (type === 'customer' ? tr(' · 未收 {0}', formatBRL(unpaid(m.id))) : tr(' · 未付 R$ {0}', (unpaid(m.id) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }))) : ''}
                   {m.defaultAccountId ? tr(' · 默认账号：{0}', accounts.find((a) => a.id === m.defaultAccountId)?.label ?? tr('（已删除）')) : ''}
                   {m.aliases.length ? tr(' · 别名：{0}', m.aliases.join(tr('、'))) : ''}
                 </span>
               </button>
               {m.active && type === 'supplier' && settings.defaultMerchantId !== m.id && (
-                <button className="btn btn-ghost btn-sm" onClick={() => saveSettings({ defaultMerchantId: m.id })}>
+                <button className="btn btn-ghost btn-sm li-def" onClick={() => saveSettings({ defaultMerchantId: m.id })}>
                   {tr('设默认')}
                 </button>
               )}
@@ -131,8 +138,8 @@ function MerchantList({ type }: { type: 'supplier' | 'payee' }) {
 
 type TermKind = 'none' | 'days' | 'monthDay' | 'installments';
 
-function MerchantForm({ type, initial, onClose }: { type: 'supplier' | 'payee'; initial: Merchant | null; onClose: () => void }) {
-  const word = type === 'payee' ? tr('缴费单位') : tr('商家');
+function MerchantForm({ type, initial, onClose }: { type: PartyType; initial: Merchant | null; onClose: () => void }) {
+  const word = partyWordOf(type);
   const t0 = initial?.term ?? null;
   const [termKind, setTermKind] = useState<TermKind>(t0?.kind ?? 'none');
   const [days, setDays] = useState(t0?.kind === 'days' ? String(t0.days) : '30');
@@ -572,7 +579,9 @@ function AccountForm({ initial, onClose }: { initial: PaymentAccount | null; onC
 
 /** 商家对账：金额、账期表现、最近账单 */
 function MerchantSheet({ merchant, onClose, onEdit }: { merchant: Merchant; onClose: () => void; onEdit: () => void }) {
-  const { bills, today, go } = useStore();
+  const { bills: payBills, receivables, today, go } = useStore();
+  const cust = merchant.type === 'customer';
+  const bills = cust ? receivables : payBills;
   const fb = useFeedback();
   const s = merchantStats(bills, merchant.id, today);
   const [open, setOpen] = useState<string | null>(null);
@@ -594,12 +603,12 @@ function MerchantSheet({ merchant, onClose, onEdit }: { merchant: Merchant; onCl
   return (
     <Modal title={merchant.name} onClose={onClose}>
       <div className="mstats">
-        {kv(tr('还要付'), formatBRL(s.openCents), tr('{0} 笔{1}', s.openCount, s.overdueCount ? tr(' · 逾期 {0}', s.overdueCount) : ''))}
-        {kv(tr('累计已付'), formatBRL(s.paidCents), tr('近 12 个月 {0}', formatBRL(s.last12Cents)))}
+        {kv(cust ? tr('还要收') : tr('还要付'), formatBRL(s.openCents), tr('{0} 笔{1}', s.openCount, s.overdueCount ? tr(' · 逾期 {0}', s.overdueCount) : ''))}
+        {kv(cust ? tr('累计已收') : tr('累计已付'), formatBRL(s.paidCents), tr('近 12 个月 {0}', formatBRL(s.last12Cents)))}
         {kv(tr('账单数'), String(s.count), s.lastBill ? tr('最近 {0}', formatBR(s.lastBill.billDate)) : undefined)}
         {kv(tr('平均账期'), s.avgTermDays === null ? '—' : tr('{0} 天', s.avgTermDays), merchant.term ? tr('设置：{0}', describeTerm(merchant.term)) : tr('未设置固定账期'))}
-        {kv(tr('按时付清'), s.onTimePct === null ? '—' : `${s.onTimePct}%`, s.avgPayDays === null ? undefined : tr('平均开单后 {0} 天付清', s.avgPayDays))}
-        {kv(tr('下一笔到期'), s.nextDue ? formatBR(s.nextDue.dueDate) : '—', s.nextDue ? formatBRL(s.nextDue.totalCents) : tr('没有未付账单'))}
+        {kv(cust ? tr('按时收回') : tr('按时付清'), s.onTimePct === null ? '—' : `${s.onTimePct}%`, s.avgPayDays === null ? undefined : tr('平均开单后 {0} 天付清', s.avgPayDays))}
+        {kv(tr('下一笔到期'), s.nextDue ? formatBR(s.nextDue.dueDate) : '—', s.nextDue ? formatBRL(s.nextDue.totalCents) : cust ? tr('没有未收款') : tr('没有未付账单'))}
       </div>
       {s.bills.length > 0 && (
         <div className="gcard" style={{ boxShadow: 'none', border: '1px solid var(--line)' }}>
@@ -611,7 +620,7 @@ function MerchantSheet({ merchant, onClose, onEdit }: { merchant: Merchant; onCl
         </div>
       )}
       <div className="row">
-        <button className="btn btn-primary" onClick={() => go({ name: 'bills', filter: `q=${encodeURIComponent(merchant.name)}` })}>
+        <button className="btn btn-primary" onClick={() => go(cust ? { name: 'receivables', filter: `q=${encodeURIComponent(merchant.name)}` } : { name: 'bills', filter: `q=${encodeURIComponent(merchant.name)}` })}>
           {tr('查看全部账单')}
         </button>
         <button

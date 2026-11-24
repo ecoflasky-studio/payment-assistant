@@ -1,7 +1,7 @@
 import { SAMPLE_PREFIX } from '../sample';
 import { tr } from '../i18n';
 import { tap } from '../native/platform';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type GroupMode = 'date' | 'merchant';
 const GM_KEY = 'zq.groupMode';
@@ -39,16 +39,16 @@ export function GroupModeSeg({ mode, onChange }: { mode: GroupMode; onChange: (m
 }
 import type { Bill } from '../lib/types';
 import type { BillGroup } from '../lib/groups';
-import { billStatus, STATUS_LABEL } from '../lib/status';
+import { billStatus, statusLabel } from '../lib/status';
 import { formatBR, relativeDue, todayISO } from '../lib/dates';
 import { formatBRL } from '../lib/money';
-import { billTitle, categoryOf, isExpense } from '../lib/expense';
+import { billTitle, categoryOf, isExpense, isReceivable } from '../lib/expense';
 import { describeRepeat } from '../lib/recurrence';
 import { useStore } from '../store';
 import { useActions } from '../actions';
 import { Modal } from './feedback';
 import { BillCard } from './BillCard';
-import { ICheck, IRepeat, IChevron } from './icons';
+import { ICheck, IRepeat, IChevron, ICopy, ITrash, IUndo } from './icons';
 import { colorSlot } from '../lib/colors';
 import { isPartial, openCents, paidPct } from '../lib/payments';
 import { amountOf } from '../lib/groups';
@@ -76,32 +76,107 @@ function useMerchantOf() {
   return (b: Bill) => (b.merchantId ? merchants.find((m) => m.id === b.merchantId) ?? null : null);
 }
 
-/** 卡片里的一行账单：点开看详情，右侧一键标记已付 */
+const SWIPE_W = 204; // 左滑露出的操作区宽度（3 个按钮）
+const SWIPE_EVT = 'zq-swipe-open';
+
+/** 卡片里的一行账单：点开看详情，右侧一键标记已付；手机上左滑露出「已付 / 复制 / 删除」 */
 export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitle, amount, sub: subOverride, readOnly }: { bill: Bill; onOpen: (b: Bill) => void; selectable?: boolean; selected?: boolean; onToggle?: () => void; sameTitle?: boolean; amount?: number; sub?: string; readOnly?: boolean }) {
-  const { today, settings } = useStore();
-  const { markPaid } = useActions();
+  const { today, settings, go } = useStore();
+  const { markPaid, markUnpaid, removeBill } = useActions();
   const merchantOf = useMerchantOf();
   const st = billStatus(bill, today, settings.dueSoonDays);
   const title = billTitle(bill);
+  const recv = isReceivable(bill);
   const [leaving, setLeaving] = useState(false);
+  // 左滑：dx 为当前位移（0 ~ -SWIPE_W）
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const touch = useRef<{ x: number; y: number; base: number; dir: 'h' | 'v' | null } | null>(null);
+  const swiped = useRef(false);
+  const cur = useRef(0);
+  const canSwipe = !selectable && !readOnly;
+  const open = dx < 0;
+  useEffect(() => {
+    // 同一时间只开一行
+    const close = (e: Event) => (e as CustomEvent<string>).detail !== bill.id && setDx(0);
+    window.addEventListener(SWIPE_EVT, close);
+    return () => window.removeEventListener(SWIPE_EVT, close);
+  }, [bill.id]);
   const pay = () => {
     void tap();
+    setDx(0);
     setLeaving(true);
     setTimeout(() => {
       void markPaid(bill).finally(() => setLeaving(false));
     }, 160);
   };
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (!canSwipe || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY, base: dx, dir: null };
+    cur.current = dx;
+    swiped.current = false;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const s = touch.current;
+    if (!s) return;
+    const t = e.touches[0];
+    const mx = t.clientX - s.x;
+    const my = t.clientY - s.y;
+    if (!s.dir) {
+      if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.2) {
+        s.dir = 'h';
+        setDragging(true);
+        window.dispatchEvent(new CustomEvent(SWIPE_EVT, { detail: bill.id }));
+      } else if (Math.abs(my) > 10) s.dir = 'v';
+    }
+    if (s.dir === 'h') {
+      swiped.current = true;
+      cur.current = Math.max(-SWIPE_W - 24, Math.min(0, s.base + mx));
+      setDx(cur.current);
+    }
+  };
+  const onTouchEnd = () => {
+    const s = touch.current;
+    touch.current = null;
+    setDragging(false);
+    if (s?.dir !== 'h') return;
+    const x = cur.current;
+    const opened = x < -SWIPE_W / 3 && !(s.base < 0 && x > s.base + 40);
+    cur.current = opened ? -SWIPE_W : 0;
+    setDx(cur.current);
+    if (opened && s.base === 0) void tap();
+  };
   const shortDate = (iso: string) => (iso.slice(0, 4) === today.slice(0, 4) ? formatBR(iso).slice(0, 5) : formatBR(iso));
-  const paidText = bill.paidAt ? tr('{0} 已付', formatBR(todayISO(new Date(bill.paidAt))).slice(0, 5)) : '';
+  const paidText = bill.paidAt ? (recv ? tr('{0} 已收', formatBR(todayISO(new Date(bill.paidAt))).slice(0, 5)) : tr('{0} 已付', formatBR(todayISO(new Date(bill.paidAt))).slice(0, 5))) : '';
   const when = bill.paidAt ? paidText : relativeDue(bill.dueDate, today);
   const order = bill.orderNumber ? `#${bill.orderNumber}` : null;
   // 商家卡片：左边日期块就是到期日；标题写距离到期多久，下面写开单日（不再重复商家名和到期日）
   const main = sameTitle ? when : title;
   const sub = (sameTitle ? [tr('开单 {0}', shortDate(bill.billDate)), order] : [bill.paidAt ? paidText : `${shortDate(bill.dueDate)} · ${when}`, order]).filter(Boolean);
+  const doneLabel = recv ? tr('已收款') : tr('已付款');
+  const markLabel = recv ? tr('标记已收') : tr('标记已付');
   return (
-    <div className={`brow st-${st} mc-${colorSlot(merchantOf(bill), merchantOf(bill)?.id ?? bill.merchantId ?? title)}${selected ? ' selected' : ''}${leaving ? ' leaving' : ''}`}>
+    <div
+      className={`brow st-${st} mc-${colorSlot(merchantOf(bill), merchantOf(bill)?.id ?? bill.merchantId ?? title)}${selected ? ' selected' : ''}${leaving ? ' leaving' : ''}${open ? ' swiping' : ''}${dragging ? ' dragging' : ''}`}
+      style={open ? ({ '--sx': `${dx}px` } as React.CSSProperties) : undefined}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+    >
       {selectable && <input type="checkbox" className="brow-check" checked={!!selected} onChange={onToggle} aria-label={tr('选择 {0}', title)} />}
-      <button type="button" className="brow-main" onClick={() => (selectable ? onToggle?.() : onOpen(bill))} aria-label={tr('{0}，{1}{2}，{3}，到期 {4}', title, formatBRL(amount ?? amountOf(bill)), isPartial(bill) ? tr('（还差，账单共 {0}）', formatBRL(bill.totalCents)) : '', STATUS_LABEL[st], formatBR(bill.dueDate))}>
+      <button
+        type="button"
+        className="brow-main"
+        onClick={() => {
+          if (swiped.current) return void (swiped.current = false);
+          if (open) return setDx(0);
+          if (selectable) onToggle?.();
+          else onOpen(bill);
+        }}
+        aria-label={tr('{0}，{1}{2}，{3}，到期 {4}', title, formatBRL(amount ?? amountOf(bill)), isPartial(bill) ? tr('（还差，账单共 {0}）', formatBRL(bill.totalCents)) : '', statusLabel(st, bill), formatBR(bill.dueDate))}
+      >
         {sameTitle ? (
           <span className={`brow-day st-${st}`} aria-hidden="true">
             <b>{bill.dueDate.slice(8, 10)}</b>
@@ -121,7 +196,7 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
               </span>
             )}
             {bill.estimated && !bill.paidAt && <span className="tag warn">{tr('待确认')}</span>}
-            {isPartial(bill) && <span className="tag warn">{tr('已付')} {paidPct(bill)}%</span>}
+            {isPartial(bill) && <span className="tag warn">{recv ? tr('已收') : tr('已付')} {paidPct(bill)}%</span>}
           </span>
           <span className={`brow-sub${!sameTitle && st === 'overdue' ? ' err' : ''}`}>{subOverride ?? sub.join(' · ')}</span>
         </span>
@@ -131,14 +206,37 @@ export function BillRow({ bill, onOpen, selectable, selected, onToggle, sameTitl
       </button>
       {!selectable && !readOnly &&
         (bill.paidAt ? (
-          <span className="brow-done" aria-label={tr('已付款')}>
+          <span className="brow-done" aria-label={doneLabel}>
             <ICheck />
           </span>
         ) : (
-          <button type="button" className="brow-pay" aria-label={tr('标记已付：{0}', title)} title={tr('标记已付')} disabled={leaving} onClick={pay}>
+          <button type="button" className="brow-pay" aria-label={tr('{0}：{1}', markLabel, title)} title={markLabel} disabled={leaving} onClick={pay}>
             <ICheck />
           </button>
         ))}
+      {open && (
+        <div className="brow-tray" role="group" aria-label={tr('快捷操作')}>
+          {bill.paidAt ? (
+            <button type="button" className="tray-undo" onClick={() => { setDx(0); void markUnpaid(bill); }}>
+              <IUndo />
+              {recv ? tr('未收') : tr('未付')}
+            </button>
+          ) : (
+            <button type="button" className="tray-pay" onClick={pay}>
+              <ICheck />
+              {recv ? tr('已收') : tr('已付')}
+            </button>
+          )}
+          <button type="button" className="tray-copy" onClick={() => { setDx(0); go({ name: 'copy', id: bill.id }); }}>
+            <ICopy />
+            {tr('复制')}
+          </button>
+          <button type="button" className="tray-del" onClick={() => { setDx(0); void removeBill(bill); }}>
+            <ITrash />
+            {tr('删除')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -196,8 +294,8 @@ function GroupCard({ g, rowLimit, onOpen, selectable, selected, onToggle, onHead
 /** 卡片网格：每张卡片是一组（日期段或商家），卡片内是账单列表 */
 export function GroupedBills({ groups, maxCards, rowLimit = 4, selectable, selected, onToggle, emptyNode, onHead }: { groups: BillGroup[]; maxCards?: number; rowLimit?: number; selectable?: boolean; selected?: Set<string>; onToggle?: (id: string) => void; emptyNode?: React.ReactNode; onHead?: (g: BillGroup) => void }) {
   const [open, setOpen] = useState<string | null>(null);
-  const { bills } = useStore();
-  const current = open ? bills.find((b) => b.id === open) ?? null : null;
+  const { bills, receivables } = useStore();
+  const current = open ? bills.find((b) => b.id === open) ?? receivables.find((b) => b.id === open) ?? null : null;
   if (!groups.length) return <>{emptyNode ?? null}</>;
   const shown = maxCards ? groups.slice(0, maxCards) : groups;
   return (

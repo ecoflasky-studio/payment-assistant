@@ -32,6 +32,10 @@ export const categoryOf = (id: string | null | undefined) => (id ? BY_ID.get(id)
 export const categoryLabel = (id: string | null | undefined) => categoryOf(id)?.label ?? tr('缴费');
 
 export const isExpense = (b: Pick<Bill, 'kind'>) => b.kind === 'expense';
+/** 应收款：客户欠我的钱（不计入应付合计） */
+export const isReceivable = (b: Pick<Bill, 'kind'>) => b.kind === 'receivable';
+/** 「已付」/「已收」 */
+export const doneWord = (b: Pick<Bill, 'kind'>) => (isReceivable(b) ? tr('已收') : tr('已付'));
 
 /** 列表/日历里显示的名称 */
 export function billTitle(b: Pick<Bill, 'kind' | 'category' | 'merchantNameSnapshot'>): string {

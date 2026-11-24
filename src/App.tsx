@@ -23,6 +23,7 @@ const AiSettingsPage = lazyPage(loadSettings, 'AiSettingsPage');
 const DevSettingsPage = lazyPage(loadSettings, 'DevSettingsPage');
 const DataPage = lazyPage(() => import('./pages/DataPage'), 'DataPage');
 const ImportPage = lazyPage(() => import('./pages/ImportTable'), 'ImportPage');
+const ReceivablesPage = lazyPage(() => import('./pages/Receivables'), 'ReceivablesPage');
 const FlowPage = lazyPage(() => import('./pages/Flow'), 'FlowPage');
 const ReportPage = lazyPage(loadInsights, 'ReportPage');
 const CashflowPage = lazyPage(loadInsights, 'CashflowPage');
@@ -38,7 +39,7 @@ import { useReminders } from './reminders';
 import { IHome, IList, IPlus, IStore, ISettings, ICamera, IEdit, IImage, IBolt, ICloud } from './ui/icons';
 import { syncLabel } from './pages/SyncSettings';
 import { useTheme } from './theme';
-import { ISun, IMoon, IChart, ISearch, IUpload } from './ui/icons';
+import { ISun, IMoon, IChart, ISearch, IUpload, IWallet } from './ui/icons';
 import { Modal } from './ui/feedback';
 
 const TITLES: Record<Route['name'], string> = {
@@ -56,6 +57,7 @@ const TITLES: Record<Route['name'], string> = {
   'set-dev': tr('部署与识别服务'),
   data: tr('数据管理'),
   import: tr('Excel 批量导入'),
+  receivables: tr('应收款'),
   account: tr('账号与套餐'),
   help: tr('使用教程'),
   report: tr('报表'),
@@ -154,7 +156,7 @@ function Shell() {
   ];
   // 电脑侧栏多一个「资料」；手机上从「设置」进入
   const sideNav: typeof nav = [...nav.slice(0, 3), { r: { name: 'masters' }, label: tr('资料'), icon: <IStore /> }, nav[3]];
-  const isCur = (r: Route) => r.name === route.name || (r.name === 'flow' && ['report', 'cashflow', 'reconcile'].includes(route.name)) || (r.name === 'settings' && ['data', 'account', 'help', 'set-remind', 'set-ai', 'set-dev'].includes(route.name));
+  const isCur = (r: Route) => r.name === route.name || (r.name === 'flow' && ['report', 'cashflow', 'reconcile'].includes(route.name)) || (r.name === 'bills' && route.name === 'receivables') || (r.name === 'settings' && ['data', 'account', 'help', 'set-remind', 'set-ai', 'set-dev'].includes(route.name));
   const isCurTab = (r: Route) => isCur(r) || (r.name === 'settings' && route.name === 'masters');
 
   return (
@@ -285,10 +287,16 @@ function Shell() {
                 {tr('上传图片或 PDF')}
               </PickImageButton>
             </div>
-            <button className="btn btn-ghost" onClick={() => go({ name: 'import' })}>
-              <IUpload />
-              {tr('Excel 批量导入')}
-            </button>
+            <div className="grid2">
+              <button className="btn" onClick={() => go({ name: 'new', kind: 'receivable' })}>
+                <IWallet />
+                {tr('应收款（客户欠我）')}
+              </button>
+              <button className="btn" onClick={() => go({ name: 'import' })}>
+                <IUpload />
+                {tr('Excel 批量导入')}
+              </button>
+            </div>
           </div>
         </Modal>
       )}
@@ -337,6 +345,8 @@ function Page({ route, rem }: { route: Route; rem: ReturnType<typeof useReminder
       return <DataPage />;
     case 'import':
       return <ImportPage />;
+    case 'receivables':
+      return <ReceivablesPage key={route.filter ?? ''} initialFilter={route.filter} />;
     case 'account':
       return <AccountPage />;
     case 'help':

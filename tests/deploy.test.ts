@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 // @ts-ignore
-import { main, parseRef, pagesUrl, DeployError } from '../scripts/deploy.mjs';
+import { main, parseRef, pagesUrl, DeployError, smtpConfig, ensureReviewAccount } from '../scripts/deploy.mjs';
 
 describe('一键部署脚本', () => {
   it('解析项目 ref 与 GitHub Pages 网址', () => {
@@ -145,5 +145,40 @@ describe('一键部署脚本', () => {
     const e = await main({ env, fetchImpl: async () => new Response('{}', { status: 401 }), run: async () => '', root: '.', log: () => {} }).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(DeployError);
     expect((e as Error).message).toMatch(/重新生成/);
+  });
+  it('Resend 发信：从网站域名推出发件人，密钥格式不对时报错', () => {
+    expect(smtpConfig({}, 'https://zqzh.com.br/')).toBeNull();
+    expect(smtpConfig({ RESEND_API_KEY: 're_123456789abc' }, 'https://zqzh.com.br/')).toMatchObject({ smtp_host: 'smtp.resend.com', smtp_port: '465', smtp_user: 'resend', smtp_pass: 're_123456789abc', smtp_admin_email: 'noreply@zqzh.com.br' });
+    expect(smtpConfig({ RESEND_API_KEY: 're_123456789abc', MAIL_FROM: '账期助手 <oi@zqzh.com.br>' }, null)).toMatchObject({ smtp_admin_email: 'oi@zqzh.com.br', smtp_sender_name: '账期助手' });
+    expect(() => smtpConfig({ RESEND_API_KEY: 'abc' }, 'https://zqzh.com.br/')).toThrow(/re_/);
+    expect(() => smtpConfig({ RESEND_API_KEY: 're_123456789abc' }, 'https://x.github.io/app/')).toThrow(/MAIL_FROM/);
+  });
+  it('审核账号：不存在就新建，已存在就改密码；试用期延长到一年', async () => {
+    const pg = new PGlite();
+    await pg.exec(readFileSync('tests/support/pg-auth.sql', 'utf8'));
+    await pg.exec(readFileSync('supabase/setup.sql', 'utf8').replace(/create extension[^;]*;/g, ''));
+    const sql = async (q: string) => (await pg.query(q)).rows;
+    const api = async () => [{ type: 'secret', api_key: 'sb_secret_x' }];
+    const hits: { method: string; url: string; headers: any; body: any }[] = [];
+    const fetchImpl = async (url: string, init: any) => {
+      const body = JSON.parse(init.body);
+      hits.push({ method: init.method, url, headers: init.headers, body });
+      if (init.method === 'POST') {
+        await pg.query(`insert into auth.users(id, email) values ('22222222-2222-4222-8222-222222222222', $1)`, [body.email]);
+        return new Response(JSON.stringify({ id: '22222222-2222-4222-8222-222222222222' }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    };
+    const env = { REVIEW_EMAIL: 'Review@zqzh.com.br', REVIEW_PASSWORD: 'Senha12345' };
+    const a = await ensureReviewAccount({ env, api, sql, projectUrl: 'https://p.supabase.co', ref: 'p', fetchImpl });
+    expect(a).toMatchObject({ email: 'review@zqzh.com.br', created: true });
+    expect(hits[0]).toMatchObject({ method: 'POST', url: 'https://p.supabase.co/auth/v1/admin/users', body: { email: 'review@zqzh.com.br', password: 'Senha12345', email_confirm: true } });
+    expect(hits[0].headers.apikey).toBe('sb_secret_x');
+    const b = await ensureReviewAccount({ env, api, sql, projectUrl: 'https://p.supabase.co', ref: 'p', fetchImpl });
+    expect(b.created).toBe(false);
+    expect(hits[1]).toMatchObject({ method: 'PUT', url: 'https://p.supabase.co/auth/v1/admin/users/22222222-2222-4222-8222-222222222222' });
+    const days = (await pg.query<{ d: number }>(`select extract(day from trial_until - now())::int as d from zq_profiles`)).rows[0].d;
+    expect(days).toBeGreaterThanOrEqual(363);
+    await expect(ensureReviewAccount({ env: { REVIEW_EMAIL: 'x@y.z', REVIEW_PASSWORD: '123' }, api, sql, projectUrl: '', ref: 'p', fetchImpl })).rejects.toThrow(/8/);
   });
 });
